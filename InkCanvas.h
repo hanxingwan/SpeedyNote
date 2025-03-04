@@ -8,10 +8,9 @@
 #include <QElapsedTimer>
 #include <deque>
 #include <QColor>
-#include <QInputDevice>
 #include "ToolType.h"
 #include <QImage>
-#include <poppler-qt6.h>
+#include <poppler-qt5.h>
 #include <QCache>
 
 
@@ -33,6 +32,7 @@ public:
     void setTool(ToolType tool);
     void setSaveFolder(const QString &folderPath); // Function to set save folder
     void saveToFile(int pageNumber); // Function to save canvas to file
+    void saveCurrentPage();  // ✅ New function (see below)
     void loadPage(int pageNumber);
     void deletePage(int pageNumber);
     void setBackground(const QString &filePath, int pageNumber);
@@ -71,6 +71,7 @@ public:
 
     void setLastPanY(int pan) { lastPanY = pan; }
     int getLastPanY() const { return lastPanY; }
+
     
 
 protected:

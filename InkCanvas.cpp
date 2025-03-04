@@ -8,7 +8,7 @@
 #ifdef Q_OS_WIN
 #include <windows.h>
 #endif
-#include <QInputDevice>
+// #include <QInputDevice>
 #include <QFileDialog>
 #include <QDateTime>
 #include <QDir>
@@ -16,8 +16,9 @@
 #include <QImageReader>
 #include <QCache>
 #include "MainWindow.h"
+#include <QTabletEvent>
 
-#include <poppler-qt6.h>
+#include <poppler-qt5.h>
 
 
 
@@ -54,7 +55,7 @@ void InkCanvas::initializeBuffer() {
 }
 
 void InkCanvas::loadPdf(const QString &pdfPath) {
-    pdfDocument = Poppler::Document::load(pdfPath);
+    pdfDocument.reset(Poppler::Document::load(pdfPath));
     if (pdfDocument && !pdfDocument->isLocked()) {
         totalPdfPages = pdfDocument->numPages();
         isPdfLoaded = true;
@@ -178,7 +179,7 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
 void InkCanvas::tabletEvent(QTabletEvent *event) {
 
 
-    if (event->pointerType() == QPointingDevice::PointerType::Eraser){
+    if (event->pointerType() == QTabletEvent::Eraser) {
         if (event->type() == QEvent::TabletPress) {
             previousTool = currentTool;
             currentTool = ToolType::Eraser;
@@ -189,14 +190,14 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
 
     if (event->type() == QEvent::TabletPress) {
         drawing = true;
-        lastPoint = event->position();
+        lastPoint = event->posF();
     } else if (event->type() == QEvent::TabletMove && drawing) {
         if (currentTool == ToolType::Eraser) {
-            eraseStroke(lastPoint, event->position(), event->pressure());
+            eraseStroke(lastPoint, event->posF(), event->pressure());
         } else {
-            drawStroke(lastPoint, event->position(), event->pressure());
+            drawStroke(lastPoint, event->posF(), event->pressure());
         }
-        lastPoint = event->position();
+        lastPoint = event->posF();
         processedTimestamps.push_back(benchmarkTimer.elapsed());
     } else if (event->type() == QEvent::TabletRelease) {
         drawing = false;
@@ -570,4 +571,12 @@ int InkCanvas::getTotalPdfPages() const {
 
 QString InkCanvas::getSaveFolder() const {
     return saveFolder;
+}
+
+void InkCanvas::saveCurrentPage() {
+    MainWindow *mainWin = qobject_cast<MainWindow*>(parentWidget());  // ✅ Get main window
+    if (!mainWin) return;
+    
+    int currentPage = mainWin->getCurrentPageForCanvas(this);  // ✅ Get correct page
+    saveToFile(currentPage);
 }
