@@ -1,0 +1,1 @@
+  -LC:/msys64/mingw64/lib  C:/Qt/6.8.2/mingw_64/lib/libQt6Widgets.a "C:/msys64/mingw64/lib/libpoppler-qt6.dll.a" C:/msys64/mingw64/lib/libpoppler.dll.a C:/Qt/6.8.2/mingw_64/lib/libQt6Gui.a C:/Qt/6.8.2/mingw_64/lib/libQt6Core.a -lmpr -luserenv -ld3d11 -ldxgi -ldxguid -ld3d12 -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32 

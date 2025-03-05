@@ -20,6 +20,7 @@ class MainWindow : public QMainWindow {
 public:
     explicit MainWindow(QWidget *parent = nullptr);
     virtual ~MainWindow();
+    int getCurrentPageForCanvas(InkCanvas *canvas); 
     
 
 private slots:
@@ -54,6 +55,14 @@ private slots:
     void addNewTab();
     void removeTabAt(int index);
     void updateTabLabel();
+    void toggleZoomSlider();
+    void toggleThicknessSlider(); // Added function to toggle thickness slider
+    void toggleFullscreen();
+
+
+    
+
+    
 
 private:
     InkCanvas *canvas;
@@ -65,26 +74,36 @@ private:
     QPushButton *redButton;
     QPushButton *blueButton;
     QPushButton *yellowButton;
+    QPushButton *greenButton;
     QPushButton *blackButton;
     QPushButton *whiteButton;
     QLineEdit *customColorInput;
+    QPushButton *thicknessButton; // Added thickness button
     QSlider *thicknessSlider; // Added thickness slider
+    QFrame *thicknessFrame; // Added thickness frame
     QComboBox *toolSelector;
     QPushButton *deletePageButton;
     QPushButton *selectFolderButton; // Button to select folder
     QPushButton *saveButton; // Button to save file
     QPushButton *saveAnnotatedButton;
+    QPushButton *fullscreenButton;
 
     QPushButton *loadPdfButton;
     QPushButton *clearPdfButton;
-    int currentPage;
+
+    QMap<InkCanvas*, int> pageMap;
+    
+
     QSpinBox *pageInput;
     QPushButton *backgroundButton; // New button to set background
 
     QSlider *zoomSlider;
+    QPushButton *zoomButton;
+    QFrame *zoomFrame;
     QPushButton *dezoomButton;
     QPushButton *zoom50Button;
     QPushButton *zoom200Button;
+    QWidget *zoomContainer;
     QLineEdit *zoomInput;
     QSlider *panXSlider;
     QSlider *panYSlider;

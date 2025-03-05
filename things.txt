@@ -1,0 +1,50 @@
+This somewhat works... 
+
+OK, I guess this is the end of this port. I've somehow managed to port the python note taking app to c++ without knowing anything about c++. Huge thanks!
+
+
+
+So let me conclude what my program currently has. 
+
+1. Basic Notebook
+1.1 Touch Sensitive Ink
+1.2 Anti-Aliasing
+1.3 Adjust thickness based on zoom level
+
+2. Tools
+2.1 Pen, Marker, Eraser
+2.2 Adjustable thickness
+2.3 Color presets and customizable colors
+
+3. Pages
+3.1 One picture per page 
+3.2 Save notes and save annotated
+3.3 Adjustable canvas size to fit the background
+3.4 Adjustable zoom level
+3.5 Correct range of x and y dimension sliders
+3.6 Delete Page
+
+4. PDF features
+4.1 Loads PDF
+4.2 Map every page to the PDF
+4.3 PDF Cache of a reasonable size
+4.4 Stores PDF directory persistently
+
+5. MISC
+5.1 Sample rate benchmarking
+
+For future, what are you recommendations if I need to finish it in 4 days (maybe slightly longer), (with a few hours per day, because I take 7 courses per semester)?
+
+The things I can come up with are... 
+
+1. Tabs, like the ones on a browser. It's like opening a few canvases like opening several instances of the program, for quick switching between documents
+2. A rope tool. This lets the user select an arbitrary shape and range of stuff on the canvas and move/scale it all around the canvas.
+3. A pencil. Pressure of the pencil not only adjusts the thickness, it also adjusts the texture/opacity. I may even consider using the tilt sensor of wacom emr 2.0 on 2017+ devices. 
+4. Text boxes (to annotate a pdf). Just in case the user wants to type in text instead of writing them by hand. My program probably needs another layer for text. 
+5. An icon and a nice name for my app. 
+
+The things I don't think make much sense are :
+1. Cloud syncing. If I position the notebook folder inside the onedrive directory of windows file manager, onedrive automatically does the job. 
+I don't need to modify my app at all to support cloud syncing. 
+
+Which one do you think is the most practical while doesn't need any major reconstruction of my program? 

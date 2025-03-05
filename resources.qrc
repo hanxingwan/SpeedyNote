@@ -1,0 +1,29 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+<qresource prefix="/">
+    <file>resources/icons/yellow.png</file>
+    <file>resources/icons/blue.png</file>
+    <file>resources/icons/red.png</file>
+    <file>resources/icons/background.png</file>
+    <file>resources/icons/benchmark.png</file>
+    <file>resources/icons/black.png</file>
+    <file>resources/icons/white.png</file>
+    <file>resources/icons/green.png</file>
+    <file>resources/icons/pen.png</file>
+    <file>resources/icons/marker.png</file>
+    <file>resources/icons/eraser.png</file>
+    <file>resources/icons/save.png</file>
+    <file>resources/icons/saveannotated.png</file>
+    <file>resources/icons/pdf.png</file>
+    <file>resources/icons/pdfdelete.png</file>
+    <file>resources/icons/folder.png</file>
+    <file>resources/icons/trash.png</file>
+    <file>resources/icons/addtab.png</file>
+    <file>resources/icons/cross.png</file>
+    <file>resources/icons/up_arrow.png</file>
+    <file>resources/icons/down_arrow.png</file>
+    <file>resources/icons/zoom.png</file>
+    <file>resources/icons/thickness.png</file>
+    <file>resources/icons/fullscreen.png</file>
+</qresource>
+</RCC>
