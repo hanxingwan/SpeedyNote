@@ -13,6 +13,20 @@
 #include <QFileDialog>
 #include <QListWidget>
 #include <QStackedWidget>
+#include <QDial>
+#include <QSoundEffect>
+#include <QFont>
+#include <QQueue>
+// #include "HandwritingLineEdit.h"
+
+enum DialMode {
+    PageSwitching,
+    ZoomControl,
+    ThicknessControl,
+    ColorAdjustment,
+    ToolSwitching,
+    PresetSelection
+};
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -58,7 +72,38 @@ private slots:
     void toggleZoomSlider();
     void toggleThicknessSlider(); // Added function to toggle thickness slider
     void toggleFullscreen();
+    void showJumpToPageDialog();
 
+    void toggleDial();  // ✅ Show/Hide dial
+    void handleDialInput(int angle);  // ✅ Handle touch input
+    void onDialReleased();
+    // void processPageSwitch();
+    bool eventFilter(QObject *watched, QEvent *event) override;
+    void initializeDialSound();
+
+    void changeDialMode(DialMode mode);
+    void handleDialZoom(int angle);
+    void handleDialThickness(int angle); // Added function to handle thickness control
+    void onZoomReleased();
+    void onThicknessReleased(); // Added function to handle thickness control
+    void handleDialColor(int angle); // Added function to handle color adjustment
+    void onColorReleased(); // Added function to handle color adjustment
+    // void updateCustomColor();
+    void updateSelectedChannel(int index);
+    void updateDialDisplay();
+    // void handleModeSelection(int angle);
+
+    void handleToolSelection(int angle);
+    void onToolReleased();
+    void cycleColorChannel();
+
+    void handlePresetSelection(int angle);
+    void onPresetReleased();
+    void addColorPreset();
+    
+
+
+    
 
     
 
@@ -112,6 +157,62 @@ private:
     QListWidget *tabList;          // Sidebar for tabs
     QStackedWidget *canvasStack;   // Holds multiple InkCanvas instances
     QPushButton *addTabButton;     // Button to add tabs
+    QPushButton *jumpToPageButton; // Button to jump to a specific page
+
+    QWidget *dialContainer = nullptr;  // ✅ Floating dial container
+    QDial *pageDial = nullptr;  // ✅ The dial itself
+    QDial *modeDial = nullptr;  // ✅ Mode dial
+    QPushButton *dialToggleButton;  // ✅ Toggle button
+    bool fastForwardMode = false;  // ✅ Toggle fast forward
+    QPushButton *fastForwardButton;  // ✅ Fast forward button    
+    int lastAngle = 0;
+    int startAngle = 0;
+    bool tracking = false;
+    int accumulatedRotation = 0;
+    QSoundEffect *dialClickSound = nullptr;
+
+    /*
+    enum DialMode {
+        PageSwitching,
+        ZoomControl,
+        PenThickness,
+        ColorAdjustment
+    };
+
+    DialMode currentDialMode = PageSwitching;  // ✅ Default mode
+
+    QComboBox *dialModeSelector;  // ✅ Mode selector
+    QComboBox *channelSelector;  // ✅ Channel selector
+    int selectedChannel = 0;  // ✅ Default channel
+    */
+    
+    DialMode currentDialMode = PageSwitching;  // ✅ Default mode
+    QComboBox *dialModeSelector;  // ✅ Mode selector
+    QComboBox *channelSelector;  // ✅ Channel selector
+    int selectedChannel = 0;  // ✅ Default channel
+    QPushButton *colorPreview;  // ✅ Color preview
+
+    QLabel *dialDisplay = nullptr;  // ✅ Display for dial mode
+
+    QFrame *dialColorPreview;
+    QLabel *dialIconView;
+    QFont pixelFont;  // ✅ Font for pixel effect
+    // QLabel *modeIndicator;  // ✅ Indicator for mode selection
+    // QLabel *dialNeedle;
+
+    QPushButton *btnPageSwitch;
+    QPushButton *btnZoom;
+    QPushButton *btnThickness;
+    QPushButton *btnColor;
+    QPushButton *btnTool;
+    QPushButton *btnPresets;
+    int tempClicks = 0;
+
+    QPushButton *dialHiddenButton;  // ✅ Invisible tap button over OLED display
+
+    QQueue<QColor> colorPresets;  // ✅ FIFO queue for color presets
+    QPushButton *addPresetButton;  // ✅ Button to add current color to queue
+    int currentPresetIndex = 0;  // ✅ Track selected preset
     
 
     void setupUi();

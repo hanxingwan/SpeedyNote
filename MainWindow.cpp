@@ -14,15 +14,20 @@
 #include <QImage>
 #include <QSpinBox>
 #include <QTextStream>
+#include <QInputDialog>
+#include <QDial>
+#include <QSoundEffect>
+#include <QFontDatabase>
+// #include "HandwritingLineEdit.h"
 
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false) {
 
-    setWindowTitle("SpeedyNote Alpha 0.2");
+    setWindowTitle("SpeedyNote Alpha 0.3.0");
     
 
-    QString iconPath = QCoreApplication::applicationDirPath() + "/icon.png"; 
-    setWindowIcon(QIcon(iconPath));
+    // QString iconPath = QCoreApplication::applicationDirPath() + "/icon.ico"; 
+    setWindowIcon(QIcon(":/resources/icons/mainicon.png"));
     
 
     // ✅ Get screen size & adjust window size
@@ -36,12 +41,14 @@ MainWindow::MainWindow(QWidget *parent)
     setCentralWidget(canvasStack);
 
     // ✅ Create the first tab (default canvas)
-    addNewTab();
+    // addNewTab();
     setupUi();    // ✅ Move all UI setup here
 
     
     updateZoom(); // ✅ Keep this for initial zoom adjustment
     updatePanRange(); // Set initial slider range  HERE IS THE PROBLEM!!
+    // toggleFullscreen(); // ✅ Toggle fullscreen to adjust layout
+    // toggleDial(); // ✅ Toggle dial to adjust layout
 
 }
 
@@ -124,21 +131,21 @@ void MainWindow::setupUi() {
     QIcon redIcon(":/resources/icons/red.png");  // Path to your icon in resources
     redButton->setIcon(redIcon);
     redButton->setStyleSheet(buttonStyle);
-    connect(redButton, &QPushButton::clicked, [this]() { currentCanvas()->setPenColor(QColor("#EE0000")); });
+    connect(redButton, &QPushButton::clicked, [this]() { currentCanvas()->setPenColor(QColor("#EE0000")); updateDialDisplay(); });
     
     blueButton = new QPushButton(this);
     blueButton->setFixedSize(30, 30);
     QIcon blueIcon(":/resources/icons/blue.png");  // Path to your icon in resources
     blueButton->setIcon(blueIcon);
     blueButton->setStyleSheet(buttonStyle);
-    connect(blueButton, &QPushButton::clicked, [this]() { currentCanvas()->setPenColor(QColor("#1122FF")); });
+    connect(blueButton, &QPushButton::clicked, [this]() { currentCanvas()->setPenColor(QColor("#1122FF")); updateDialDisplay(); });
 
     yellowButton = new QPushButton(this);
     yellowButton->setFixedSize(30, 30);
     QIcon yellowIcon(":/resources/icons/yellow.png");  // Path to your icon in resources
     yellowButton->setIcon(yellowIcon);
     yellowButton->setStyleSheet(buttonStyle);
-    connect(yellowButton, &QPushButton::clicked, [this]() { currentCanvas()->setPenColor(QColor("#EEDD00")); });
+    connect(yellowButton, &QPushButton::clicked, [this]() { currentCanvas()->setPenColor(QColor("#EEDD00")); updateDialDisplay(); });
 
 
     greenButton = new QPushButton(this);
@@ -146,7 +153,7 @@ void MainWindow::setupUi() {
     QIcon greenIcon(":/resources/icons/green.png");  // Path to your icon in resources
     greenButton->setIcon(greenIcon);
     greenButton->setStyleSheet(buttonStyle);
-    connect(greenButton, &QPushButton::clicked, [this]() { currentCanvas()->setPenColor(QColor("#00CC00")); });
+    connect(greenButton, &QPushButton::clicked, [this]() { currentCanvas()->setPenColor(QColor("#00CC00")); updateDialDisplay(); });
     
 
     blackButton = new QPushButton(this);
@@ -154,14 +161,14 @@ void MainWindow::setupUi() {
     QIcon blackIcon(":/resources/icons/black.png");  // Path to your icon in resources
     blackButton->setIcon(blackIcon);
     blackButton->setStyleSheet(buttonStyle);
-    connect(blackButton, &QPushButton::clicked, [this]() { currentCanvas()->setPenColor(QColor("#000000")); });
+    connect(blackButton, &QPushButton::clicked, [this]() { currentCanvas()->setPenColor(QColor("#000000")); updateDialDisplay(); });
 
     whiteButton = new QPushButton(this);
     whiteButton->setFixedSize(30, 30);
     QIcon whiteIcon(":/resources/icons/white.png");  // Path to your icon in resources
     whiteButton->setIcon(whiteIcon);
     whiteButton->setStyleSheet(buttonStyle);
-    connect(whiteButton, &QPushButton::clicked, [this]() { currentCanvas()->setPenColor(QColor("#FFFFFF")); });
+    connect(whiteButton, &QPushButton::clicked, [this]() { currentCanvas()->setPenColor(QColor("#FFFFFF")); updateDialDisplay(); });
     
     customColorInput = new QLineEdit(this);
     customColorInput->setPlaceholderText("Custom HEX");
@@ -202,7 +209,7 @@ void MainWindow::setupUi() {
     toolSelector->addItem(QIcon(":/resources/icons/pen.png"), "");
     toolSelector->addItem(QIcon(":/resources/icons/marker.png"), "");
     toolSelector->addItem(QIcon(":/resources/icons/eraser.png"), "");
-    toolSelector->setFixedWidth(50);
+    toolSelector->setFixedWidth(43);
     toolSelector->setFixedHeight(30);
     connect(toolSelector, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::changeTool);
 
@@ -213,14 +220,7 @@ void MainWindow::setupUi() {
     backgroundButton->setStyleSheet(buttonStyle);
     connect(backgroundButton, &QPushButton::clicked, this, &MainWindow::selectBackground);
 
-    pageInput = new QSpinBox(this);
-    pageInput->setMinimum(1);
-    pageInput->setMaximum(9999);
-    pageInput->setValue(1);
-    pageInput->setMaximumWidth(150);
-    pageInput->setStyleSheet("");
-    connect(pageInput, QOverload<int>::of(&QSpinBox::valueChanged), this, &MainWindow::switchPage);
-
+    
     
     deletePageButton = new QPushButton(this);
     deletePageButton->setFixedSize(30, 30);
@@ -244,12 +244,12 @@ void MainWindow::setupUi() {
         padding: 5px;
     )");
     zoomFrame->setVisible(false);
-    zoomFrame->setFixedSize(550, 40); // Adjust width/height as needed
+    zoomFrame->setFixedSize(440, 40); // Adjust width/height as needed
 
     zoomSlider = new QSlider(Qt::Horizontal, this);
     zoomSlider->setRange(20, 250);
     zoomSlider->setValue(100);
-    zoomSlider->setMaximumWidth(500);
+    zoomSlider->setMaximumWidth(405);
 
     connect(zoomSlider, &QSlider::valueChanged, this, &MainWindow::updateZoom);
 
@@ -262,17 +262,17 @@ void MainWindow::setupUi() {
     zoom50Button = new QPushButton("0.5x", this);
     zoom50Button->setFixedSize(40, 30);
     zoom50Button->setStyleSheet(buttonStyle);
-    connect(zoom50Button, &QPushButton::clicked, [this]() { zoomSlider->setValue(50); });
+    connect(zoom50Button, &QPushButton::clicked, [this]() { zoomSlider->setValue(50); updateDialDisplay(); });
 
     dezoomButton = new QPushButton("1x", this);
     dezoomButton->setFixedSize(40, 30);
     dezoomButton->setStyleSheet(buttonStyle);
-    connect(dezoomButton, &QPushButton::clicked, [this]() { zoomSlider->setValue(100); });
+    connect(dezoomButton, &QPushButton::clicked, [this]() { zoomSlider->setValue(100); updateDialDisplay();});
 
     zoom200Button = new QPushButton("2x", this);
     zoom200Button->setFixedSize(40, 30);
     zoom200Button->setStyleSheet(buttonStyle);
-    connect(zoom200Button, &QPushButton::clicked, [this]() { zoomSlider->setValue(200); });
+    connect(zoom200Button, &QPushButton::clicked, [this]() { zoomSlider->setValue(200); updateDialDisplay();});
 
     panXSlider = new QSlider(Qt::Horizontal, this);
     panYSlider = new QSlider(Qt::Vertical, this);
@@ -306,9 +306,101 @@ void MainWindow::setupUi() {
 
 
     QVBoxLayout *tabLayout = new QVBoxLayout();
+    tabLayout->setContentsMargins(0, 0, 5, 0); 
     tabLayout->addWidget(tabList);
     tabLayout->addWidget(addTabButton);
 
+    
+
+
+    pageInput = new QSpinBox(this);
+    pageInput->setMinimum(1);
+    pageInput->setMaximum(9999);
+    pageInput->setValue(1);
+    pageInput->setMaximumWidth(120);
+    connect(pageInput, QOverload<int>::of(&QSpinBox::valueChanged), this, &MainWindow::switchPage);
+
+    jumpToPageButton = new QPushButton(this);
+    QIcon jumpIcon(":/resources/icons/bookpage.png");  // Path to your icon in resources
+    jumpToPageButton->setFixedSize(30, 30);
+    jumpToPageButton->setStyleSheet(buttonStyle);
+    jumpToPageButton->setIcon(jumpIcon);
+    connect(jumpToPageButton, &QPushButton::clicked, this, &MainWindow::showJumpToPageDialog);
+
+    // ✅ Dial Toggle Button
+    dialToggleButton = new QPushButton(this);
+    dialToggleButton->setIcon(QIcon(":/resources/icons/dial.png"));  // Icon for dial
+    dialToggleButton->setFixedSize(30, 30);
+    dialToggleButton->setToolTip("Toggle Page Dial");
+    dialToggleButton->setStyleSheet(buttonStyle);
+
+    // ✅ Connect to toggle function
+    connect(dialToggleButton, &QPushButton::clicked, this, &MainWindow::toggleDial);
+
+
+    fastForwardButton = new QPushButton(this);
+    fastForwardButton->setFixedSize(30, 30);
+    QIcon ffIcon(":/resources/icons/fastforward.png");  // Path to your icon in resources
+    fastForwardButton->setIcon(ffIcon);
+    fastForwardButton->setToolTip("Toggle Fast Forward");
+    fastForwardButton->setStyleSheet(buttonStyle);
+
+    // ✅ Toggle fast-forward mode
+    connect(fastForwardButton, &QPushButton::clicked, [this]() {
+        fastForwardMode = !fastForwardMode;
+    });
+
+    QComboBox *dialModeSelector = new QComboBox(this);
+    dialModeSelector->addItem("Page Switch", PageSwitching);
+    dialModeSelector->addItem("Zoom", ZoomControl);
+    dialModeSelector->addItem("Thickness", ThicknessControl);
+    dialModeSelector->addItem("Color Adjust", ColorAdjustment);
+    dialModeSelector->addItem("Tool Switch", ToolSwitching);
+    dialModeSelector->setFixedWidth(120);
+
+    connect(dialModeSelector, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+        [this](int index) { changeDialMode(static_cast<DialMode>(index)); });
+
+    channelSelector = new QComboBox(this);
+    channelSelector->addItem("Red");
+    channelSelector->addItem("Green");
+    channelSelector->addItem("Blue");
+    channelSelector->setFixedWidth(90);
+
+    connect(channelSelector, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::updateSelectedChannel);
+
+    colorPreview = new QPushButton(this);
+    colorPreview->setFixedSize(30, 30);
+    colorPreview->setStyleSheet("border-radius: 15px; border: 1px solid gray;");
+    colorPreview->setEnabled(false);  // ✅ Prevents it from being clicked
+
+    btnPageSwitch = new QPushButton(QIcon(":/resources/icons/bookpage.png"), "", this);
+    btnPageSwitch->setStyleSheet(buttonStyle);
+    btnZoom = new QPushButton(QIcon(":/resources/icons/zoom.png"), "", this);
+    btnZoom->setStyleSheet(buttonStyle);
+    btnThickness = new QPushButton(QIcon(":/resources/icons/thickness.png"), "", this);
+    btnThickness->setStyleSheet(buttonStyle);
+    btnColor = new QPushButton(QIcon(":/resources/icons/color.png"), "", this);
+    btnColor->setStyleSheet(buttonStyle);
+    btnTool = new QPushButton(QIcon(":/resources/icons/pen.png"), "", this);
+    btnTool->setStyleSheet(buttonStyle);
+    btnPresets = new QPushButton(QIcon(":/resources/icons/preset.png"), "", this);
+    btnPresets->setStyleSheet(buttonStyle);
+
+    connect(btnPageSwitch, &QPushButton::clicked, this, [this]() { changeDialMode(PageSwitching); });
+    connect(btnZoom, &QPushButton::clicked, this, [this]() { changeDialMode(ZoomControl); });
+    connect(btnThickness, &QPushButton::clicked, this, [this]() { changeDialMode(ThicknessControl); });
+    connect(btnColor, &QPushButton::clicked, this, [this]() { changeDialMode(ColorAdjustment); });
+    connect(btnTool, &QPushButton::clicked, this, [this]() { changeDialMode(ToolSwitching); });
+    connect(btnPresets, &QPushButton::clicked, this, [this]() { changeDialMode(PresetSelection); }); 
+
+    // ✅ Ensure at least one preset exists (black placeholder)
+    colorPresets.enqueue(QColor("#000000"));
+
+    // ✅ Button to add current color to presets
+    addPresetButton = new QPushButton(QIcon(":/resources/icons/savepreset.png"), "", this);
+    addPresetButton->setStyleSheet(buttonStyle);
+    connect(addPresetButton, &QPushButton::clicked, this, &MainWindow::addColorPreset);
 
 
     QHBoxLayout *controlLayout = new QHBoxLayout;
@@ -326,12 +418,25 @@ void MainWindow::setupUi() {
     controlLayout->addWidget(blackButton);
     controlLayout->addWidget(whiteButton);
     controlLayout->addWidget(customColorInput);
-    controlLayout->addWidget(thicknessButton);
+    // controlLayout->addWidget(colorPreview);
+    // controlLayout->addWidget(thicknessButton);
+    // controlLayout->addWidget(jumpToPageButton);
+    controlLayout->addWidget(dialToggleButton);
+    controlLayout->addWidget(fastForwardButton);
+    // controlLayout->addWidget(channelSelector);
+    controlLayout->addWidget(btnPageSwitch);
+    controlLayout->addWidget(btnZoom);
+    controlLayout->addWidget(btnThickness);
+    controlLayout->addWidget(btnColor);
+    controlLayout->addWidget(btnTool);
+    controlLayout->addWidget(btnPresets);
+    controlLayout->addWidget(addPresetButton);
+    // controlLayout->addWidget(dialModeSelector);
     // controlLayout->addStretch();
     
-    controlLayout->addWidget(toolSelector);
+    // controlLayout->addWidget(toolSelector);
     controlLayout->addWidget(fullscreenButton);
-    controlLayout->addWidget(zoomButton);
+    // controlLayout->addWidget(zoomButton);
     controlLayout->addWidget(zoom50Button);
     controlLayout->addWidget(dezoomButton);
     controlLayout->addWidget(zoom200Button);
@@ -341,9 +446,12 @@ void MainWindow::setupUi() {
     controlLayout->addWidget(benchmarkLabel);
     controlLayout->addWidget(deletePageButton);
     
+    
 
     QWidget *controlBar = new QWidget;
     controlBar->setLayout(controlLayout);
+    controlBar->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+
     QPalette palette = QGuiApplication::palette();
     QColor highlightColor = palette.highlight().color();  // System highlight color
     controlBar->setStyleSheet(QString(R"(
@@ -362,14 +470,19 @@ void MainWindow::setupUi() {
 
 
     QHBoxLayout *content_layout = new QHBoxLayout;
+    content_layout->setContentsMargins(5, 5, 5, 5); 
     content_layout->addLayout(tabLayout); 
     content_layout->addWidget(panYSlider);
     content_layout->addLayout(canvasLayout);
+
+    
 
 
 
     QWidget *container = new QWidget;
     QVBoxLayout *mainLayout = new QVBoxLayout(container);
+    mainLayout->setContentsMargins(0, 0, 0, 0);  // ✅ Remove extra margins
+    // mainLayout->setSpacing(0); // ✅ Remove spacing between toolbar and content
     mainLayout->addWidget(controlBar);
     mainLayout->addLayout(content_layout);
 
@@ -410,6 +523,7 @@ void MainWindow::applyCustomColor() {
         colorCode.prepend("#");
     }
     currentCanvas()->setPenColor(QColor(colorCode));
+    updateDialDisplay(); 
 }
 
 void MainWindow::updateThickness(int value) {
@@ -462,6 +576,7 @@ void MainWindow::switchPage(int pageNumber) {
     updateZoom();
     canvas->setLastPanX(panXSlider->maximum());
     canvas->setLastPanY(panYSlider->maximum());
+    updateDialDisplay();
 }
 
 void MainWindow::deleteCurrentPage() {
@@ -491,6 +606,7 @@ void MainWindow::updateZoom() {
         canvas->setLastZoomLevel(zoomSlider->value());  // ✅ Store zoom level per tab
         updatePanRange();
         updateThickness(thicknessSlider->value());
+        // updateDialDisplay();
     }
 }
 
@@ -510,8 +626,8 @@ void MainWindow::updatePanRange() {
     int maxPanY = qMax(0, static_cast<int>(canvasSize.height() * zoom * dps / 100 - viewportSize.height()));
  
 
-    int maxPanX_scaled = maxPanX * 100 / dps / zoom;
-    int maxPanY_scaled = maxPanY * 100 / dps / zoom;
+    int maxPanX_scaled = maxPanX * 110 / dps / zoom;
+    int maxPanY_scaled = maxPanY * 110 / dps / zoom;  // Here I intentionally changed 100 to 110. 
 
     panXSlider->setRange(0, maxPanX_scaled);
     panYSlider->setRange(0, maxPanY_scaled);
@@ -561,44 +677,48 @@ void MainWindow::clearPdf() {
 
 
 void MainWindow::switchTab(int index) {
+    if (!canvasStack || !tabList || !pageInput || !zoomSlider || !panXSlider || !panYSlider) {
+        qDebug() << "Error: switchTab() called before UI was fully initialized!";
+        return;
+    }
+
     if (index >= 0 && index < canvasStack->count()) {
         canvasStack->setCurrentIndex(index);
         
-        // ✅ Get current canvas and its last active page
         InkCanvas *canvas = currentCanvas();
         if (canvas) {
             int savedPage = canvas->getLastActivePage();
-
             
+            // ✅ Only call blockSignals if pageInput is valid
+            if (pageInput) {  
+                pageInput->blockSignals(true);
+                pageInput->setValue(savedPage + 1);
+                pageInput->blockSignals(false);
+            }
 
-            pageInput->blockSignals(true);  // Prevent triggering unwanted switchPage calls
-            pageInput->setValue(savedPage + 1);
-            pageInput->blockSignals(false);
+            // ✅ Ensure zoomSlider exists before calling methods
+            if (zoomSlider) {
+                zoomSlider->blockSignals(true);
+                zoomSlider->setValue(canvas->getLastZoomLevel());
+                zoomSlider->blockSignals(false);
+                canvas->setZoom(canvas->getLastZoomLevel());
+            }
 
-            // ✅ Restore zoom
-            zoomSlider->blockSignals(true);
-            zoomSlider->setValue(canvas->getLastZoomLevel());
-            zoomSlider->blockSignals(false);
-            canvas->setZoom(canvas->getLastZoomLevel());
-
-            // ✅ Restore pan
-            panXSlider->blockSignals(true);
-            panYSlider->blockSignals(true);
-            panXSlider->setValue(canvas->getLastPanX());
-            panYSlider->setValue(canvas->getLastPanY());
-            panXSlider->blockSignals(false);
-            panYSlider->blockSignals(false);
-            updatePanRange();  // ✅ Update pan range after switching tabs
-
-            if (panXSlider->maximum() > 0) {
+            // ✅ Ensure pan sliders exist before modifying values
+            if (panXSlider && panYSlider) {
+                panXSlider->blockSignals(true);
+                panYSlider->blockSignals(true);
                 panXSlider->setValue(canvas->getLastPanX());
-            }
-            if (panYSlider->maximum() > 0) {
                 panYSlider->setValue(canvas->getLastPanY());
+                panXSlider->blockSignals(false);
+                panYSlider->blockSignals(false);
+                updatePanRange();
             }
+            updateDialDisplay();
         }
     }
 }
+
 
 void MainWindow::addNewTab() {
     if (!tabList || !canvasStack) return;  // Ensure tabList and canvasStack exist
@@ -772,3 +892,567 @@ void MainWindow::toggleFullscreen() {
     }
 }
 
+void MainWindow::showJumpToPageDialog() {
+    bool ok;
+    int currentPage = getCurrentPageForCanvas(currentCanvas()) + 1;  // ✅ Convert zero-based to one-based
+    int newPage = QInputDialog::getInt(this, "Jump to Page", "Enter Page Number:", 
+                                       currentPage, 1, 9999, 1, &ok);
+    if (ok) {
+        switchPage(newPage);
+        pageInput->setValue(newPage);
+    }
+}
+
+void MainWindow::toggleDial() {
+    if (!dialContainer) {  
+        // ✅ Create floating container for the dial
+        dialContainer = new QWidget(this);
+        dialContainer->setFixedSize(140, 140);
+        dialContainer->setAttribute(Qt::WA_TranslucentBackground);
+        dialContainer->setAttribute(Qt::WA_NoSystemBackground);
+        dialContainer->setAttribute(Qt::WA_OpaquePaintEvent);
+        dialContainer->setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
+        dialContainer->setStyleSheet("background: transparent; border-radius: 100px;");  // ✅ More transparent
+
+        // ✅ Create dial
+        pageDial = new QDial(dialContainer);
+        pageDial->setFixedSize(140, 140);
+        pageDial->setMinimum(0);
+        pageDial->setMaximum(360);
+        pageDial->setWrapping(true);  // ✅ Allow full-circle rotation
+        pageDial->setStyleSheet("background:rgba(85, 3, 144, 0);");
+
+        /*
+
+        modeDial = new QDial(dialContainer);
+        modeDial->setFixedSize(150, 150);
+        modeDial->setMinimum(0);
+        modeDial->setMaximum(300);  // 6 modes, 60° each
+        modeDial->setSingleStep(60);
+        modeDial->setWrapping(true);
+        modeDial->setStyleSheet("background:rgb(0, 76, 147);");
+        modeDial->move(25, 25);
+        
+        */
+        
+
+        dialColorPreview = new QFrame(dialContainer);
+        dialColorPreview->setFixedSize(30, 30);
+        dialColorPreview->setStyleSheet("border-radius: 15px; border: 1px solid black;");
+        dialColorPreview->move(55, 35); // Center of dial
+
+        dialIconView = new QLabel(dialContainer);
+        dialIconView->setFixedSize(30, 30);
+        dialIconView->setStyleSheet("border-radius: 1px; border: 1px solid black;");
+        dialIconView->move(55, 35); // Center of dial
+
+        // ✅ Move dial to center of canvas
+        dialContainer->move(width() / 2 + 100, height() / 2 - 200);
+
+        dialDisplay = new QLabel(dialContainer);
+        dialDisplay->setAlignment(Qt::AlignCenter);
+        dialDisplay->setFixedSize(80, 80);
+        dialDisplay->move(30, 30);  // Center position inside the dial
+        
+
+        int fontId = QFontDatabase::addApplicationFont(":/resources/fonts/Jersey20-Regular.ttf");
+        QStringList fontFamilies = QFontDatabase::applicationFontFamilies(fontId);
+
+        if (!fontFamilies.isEmpty()) {
+            QFont pixelFont(fontFamilies.at(0), 11);
+            dialDisplay->setFont(pixelFont);
+        }
+
+        dialDisplay->setStyleSheet("background-color: black; color: white; font-size: 14px; border-radius: 4px;");
+
+        dialHiddenButton = new QPushButton(dialContainer);
+        dialHiddenButton->setFixedSize(80, 80);
+        dialHiddenButton->move(30, 30); // Same position as dialDisplay
+        dialHiddenButton->setStyleSheet("background: transparent; border: none;"); // ✅ Fully invisible
+        dialHiddenButton->setFocusPolicy(Qt::NoFocus); // ✅ Prevents accidental focus issues
+        dialHiddenButton->setEnabled(false);  // ✅ Disabled by default
+
+        // ✅ Connect to channel switching function
+        connect(dialHiddenButton, &QPushButton::clicked, this, &MainWindow::cycleColorChannel);
+
+
+
+        dialColorPreview->raise();  // ✅ Ensure it's on top
+        dialIconView->raise();
+        // ✅ Connect dial input and release
+        // connect(pageDial, &QDial::valueChanged, this, &MainWindow::handleDialInput);
+        // connect(pageDial, &QDial::sliderReleased, this, &MainWindow::onDialReleased);
+
+        // connect(modeDial, &QDial::valueChanged, this, &MainWindow::handleModeSelection);
+        changeDialMode(currentDialMode);  // ✅ Set initial mode
+
+        // ✅ Enable drag detection
+        dialContainer->installEventFilter(this);
+    }
+
+    // ✅ Ensure that `dialContainer` is always initialized before setting visibility
+    if (dialContainer) {
+        dialContainer->setVisible(!dialContainer->isVisible());
+    }
+
+    initializeDialSound();  // ✅ Ensure sound is loaded
+
+    // Inside toggleDial():
+    
+    if (!dialDisplay) {
+        dialDisplay = new QLabel(dialContainer);
+    }
+    updateDialDisplay(); // ✅ Ensure it's updated before showing
+}
+
+void MainWindow::updateDialDisplay() {
+    if (!dialDisplay) return;
+    if (!dialColorPreview) return;
+    if (!dialIconView) return;
+    dialIconView->show();
+    QColor currentColor = currentCanvas()->getPenColor();
+    switch (currentDialMode) {
+        case DialMode::PageSwitching:
+            if (fastForwardMode){
+                dialDisplay->setText(QString("\n\nPage\n%1").arg(getCurrentPageForCanvas(currentCanvas()) + 1 + tempClicks * 8));
+            }
+            else {
+                dialDisplay->setText(QString("\n\nPage\n%1").arg(getCurrentPageForCanvas(currentCanvas()) + 1 + tempClicks));
+            }
+            dialIconView->setPixmap(QPixmap(":/resources/reversed_icons/bookpage_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+            break;
+        case DialMode::ThicknessControl:
+            dialDisplay->setText(QString("\n\nThickness\n%1").arg(currentCanvas()->getPenThickness()));
+            dialIconView->setPixmap(QPixmap(":/resources/reversed_icons/thickness_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+            break;
+        case DialMode::ZoomControl:
+            dialDisplay->setText(QString("\n\nZoom\n%1%").arg(zoomSlider->value()));
+            dialIconView->setPixmap(QPixmap(":/resources/reversed_icons/zoom_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+            break;
+        case DialMode::ColorAdjustment:
+            dialIconView->hide();
+            switch (selectedChannel) {
+                case 0:
+                    dialDisplay->setText(QString("\n\nAdjust Red\n#%1").arg(currentCanvas()->getPenColor().name().remove("#")));
+                    break;
+                case 1:
+                    dialDisplay->setText(QString("\n\nAdjust Green\n#%1").arg(currentCanvas()->getPenColor().name().remove("#")));
+                    break;
+                case 2:
+                    dialDisplay->setText(QString("\n\nAdjust Blue\n#%1").arg(currentCanvas()->getPenColor().name().remove("#")));
+                    break;
+            }
+            // dialDisplay->setText(QString("\n\nPen Color\n#%1").arg(currentCanvas()->getPenColor().name().remove("#")));
+            dialColorPreview->setStyleSheet(QString("border-radius: 15px; border: 1px solid black; background-color: %1;").arg(currentColor.name()));
+            break;  
+        case DialMode::ToolSwitching:
+            // ✅ Convert ToolType to QString for display
+            switch (currentCanvas()->getCurrentTool()) {
+                case ToolType::Pen:
+                    dialDisplay->setText("\n\n\nPen");
+                    dialIconView->setPixmap(QPixmap(":/resources/reversed_icons/pen_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+                    break;
+                case ToolType::Marker:
+                    dialDisplay->setText("\n\n\nMarker");
+                    dialIconView->setPixmap(QPixmap(":/resources/reversed_icons/marker_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+                    break;
+                case ToolType::Eraser:
+                    dialDisplay->setText("\n\n\nEraser");
+                    dialIconView->setPixmap(QPixmap(":/resources/reversed_icons/eraser_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+                    break;
+            }
+            break;
+        case PresetSelection:
+            dialColorPreview->show();
+            dialIconView->hide();
+            dialColorPreview->setStyleSheet(QString("background-color: %1; border-radius: 15px; border: 1px solid black;")
+                                            .arg(colorPresets[currentPresetIndex].name()));
+            dialDisplay->setText(QString("\n\nPreset %1\n#%2")
+                                            .arg(currentPresetIndex + 1)  // ✅ Display preset index (1-based)
+                                            .arg(colorPresets[currentPresetIndex].name().remove("#"))); // ✅ Display hex color
+            // dialIconView->setPixmap(QPixmap(":/resources/reversed_icons/preset_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+            break;
+        
+    }
+}
+
+/*
+
+void MainWindow::handleModeSelection(int angle) {
+    static int lastModeIndex = -1;  // ✅ Store last mode index
+
+    // ✅ Snap to closest fixed 60° step
+    int snappedAngle = (angle + 30) / 60 * 60;  // Round to nearest 60°
+    int modeIndex = snappedAngle / 60;  // Convert to mode index
+
+    if (modeIndex >= 6) modeIndex = 0;  // ✅ Wrap around (if 360°, reset to 0° mode)
+
+    if (modeIndex != lastModeIndex) {  // ✅ Only switch mode if it's different
+        changeDialMode(static_cast<DialMode>(modeIndex));
+
+        // ✅ Play click sound when snapping to new mode
+        if (dialClickSound) {
+            dialClickSound->play();
+        }
+
+        lastModeIndex = modeIndex;  // ✅ Update last mode
+    }
+}
+
+*/
+
+
+
+void MainWindow::handleDialInput(int angle) {
+    if (!tracking) {
+        startAngle = angle;  // ✅ Set initial position
+        accumulatedRotation = 0;  // ✅ Reset tracking
+        tracking = true;
+        lastAngle = angle;
+        return;
+    }
+
+    int delta = angle - lastAngle;
+
+    // ✅ Handle 360-degree wrapping
+    if (delta > 180) delta -= 360;  // Example: 350° → 10° should be -20° instead of +340°
+    if (delta < -180) delta += 360; // Example: 10° → 350° should be +20° instead of -340°
+
+    accumulatedRotation += delta;  // ✅ Accumulate movement
+
+    // ✅ Detect crossing a 45-degree boundary
+    int currentClicks = accumulatedRotation / 45; // Total number of "clicks" crossed
+    int previousClicks = (accumulatedRotation - delta) / 45; // Previous click count
+
+    if (currentClicks != previousClicks) {  // ✅ Play sound if a new boundary is crossed
+        
+        if (dialClickSound) {
+            dialClickSound->play();
+            tempClicks = currentClicks;
+            updateDialDisplay();
+            
+        }
+        
+    }
+
+    lastAngle = angle;  // ✅ Store last position
+}
+
+
+
+void MainWindow::onDialReleased() {
+    if (!tracking) return;  // ✅ Ignore if no tracking
+
+    int pagesToAdvance = fastForwardMode ? 8 : 1;
+    int totalClicks = accumulatedRotation / 45;  // ✅ Convert degrees to pages
+
+    /*
+    int leftOver = accumulatedRotation % 45;  // ✅ Track remaining rotation
+    if (leftOver > 22 && totalClicks >= 0) {
+        totalClicks += 1;  // ✅ Round up if more than halfway
+    } 
+    else if (leftOver <= -22 && totalClicks >= 0) {
+        totalClicks -= 1;  // ✅ Round down if more than halfway
+    }
+    */
+    
+
+    if (totalClicks != 0) {  // ✅ Only switch pages if movement happened
+        int currentPage = getCurrentPageForCanvas(currentCanvas()) + 1;
+        int newPage = qBound(1, currentPage + totalClicks * pagesToAdvance, 99999);
+        switchPage(newPage);
+        pageInput->setValue(newPage);
+        tempClicks = 0;
+        updateDialDisplay(); 
+        /*
+        if (dialClickSound) {
+            dialClickSound->play();
+        }
+        */
+        
+    }
+    
+    accumulatedRotation = 0;  // ✅ Reset tracking
+    tracking = false;
+}
+
+
+void MainWindow::handleToolSelection(int angle) {
+    static int lastToolIndex = -1;  // ✅ Track last tool index
+
+    // ✅ Snap to closest fixed 120° step
+    int snappedAngle = (angle + 60) / 120 * 120;  // Round to nearest 120°
+    int toolIndex = snappedAngle / 120;  // Convert to tool index (0, 1, 2)
+
+    if (toolIndex >= 3) toolIndex = 0;  // ✅ Wrap around at 360° → Back to Pen (0)
+
+    if (toolIndex != lastToolIndex) {  // ✅ Only switch if tool actually changes
+        toolSelector->setCurrentIndex(toolIndex);  // ✅ Change tool
+        lastToolIndex = toolIndex;  // ✅ Update last selected tool
+
+        // ✅ Play click sound when tool changes
+        if (dialClickSound) {
+            dialClickSound->play();
+        }
+        updateDialDisplay();  // ✅ Update dial display]
+    }
+}
+
+void MainWindow::onToolReleased() {
+    
+}
+
+
+
+
+bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
+    static bool dragging = false;
+    static QPoint lastMousePos;
+    static QTimer *longPressTimer = nullptr;
+
+    if (obj == dialContainer) {
+        if (event->type() == QEvent::MouseButtonPress) {
+            QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+            lastMousePos = mouseEvent->globalPos();
+            dragging = false;
+
+            if (!longPressTimer) {
+                longPressTimer = new QTimer(this);
+                longPressTimer->setSingleShot(true);
+                connect(longPressTimer, &QTimer::timeout, [this]() {
+                    dragging = true;  // ✅ Allow movement after long press
+                });
+            }
+            longPressTimer->start(1500);  // ✅ Start long press timer (500ms)
+            return true;
+        }
+
+        if (event->type() == QEvent::MouseMove && dragging) {
+            QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+            QPoint delta = mouseEvent->globalPos() - lastMousePos;
+            dialContainer->move(dialContainer->pos() + delta);
+            lastMousePos = mouseEvent->globalPos();
+            return true;
+        }
+
+        if (event->type() == QEvent::MouseButtonRelease) {
+            if (longPressTimer) longPressTimer->stop();
+            dragging = false;  // ✅ Stop dragging on release
+            return true;
+        }
+    }
+
+    return QObject::eventFilter(obj, event);
+}
+
+
+void MainWindow::initializeDialSound() {
+    if (!dialClickSound) {
+        dialClickSound = new QSoundEffect(this);
+        dialClickSound->setSource(QUrl::fromLocalFile(":/resources/sounds/dial_click.wav")); // ✅ Path to the sound file
+        dialClickSound->setVolume(0.8);  // ✅ Set volume (0.0 - 1.0)
+    }
+}
+
+void MainWindow::changeDialMode(DialMode mode) {
+
+    if (!dialContainer) return;  // ✅ Ensure dial container exists
+    currentDialMode = mode; // ✅ Set new mode
+    updateDialDisplay();
+
+    dialHiddenButton->setEnabled(currentDialMode == ColorAdjustment);
+
+    // ✅ Disconnect previous slots
+    disconnect(pageDial, &QDial::valueChanged, nullptr, nullptr);
+    disconnect(pageDial, &QDial::sliderReleased, nullptr, nullptr);
+
+    dialColorPreview->hide();
+    dialDisplay->setStyleSheet("background-color: black; color: white; font-size: 14px; border-radius: 40px;");
+
+    // ✅ Connect the correct function set for the current mode
+    switch (currentDialMode) {
+        case PageSwitching:
+            connect(pageDial, &QDial::valueChanged, this, &MainWindow::handleDialInput);
+            connect(pageDial, &QDial::sliderReleased, this, &MainWindow::onDialReleased);
+            break;
+        case ZoomControl:
+            connect(pageDial, &QDial::valueChanged, this, &MainWindow::handleDialZoom);
+            connect(pageDial, &QDial::sliderReleased, this, &MainWindow::onZoomReleased);
+            break;
+        case ThicknessControl:
+            connect(pageDial, &QDial::valueChanged, this, &MainWindow::handleDialThickness);
+            connect(pageDial, &QDial::sliderReleased, this, &MainWindow::onThicknessReleased);
+            break;
+        case ColorAdjustment:
+            connect(pageDial, &QDial::valueChanged, this, &MainWindow::handleDialColor);
+            connect(pageDial, &QDial::sliderReleased, this, &MainWindow::onColorReleased);
+            dialColorPreview->show();  // ✅ Ensure it's visible in Color mode
+            dialDisplay->setStyleSheet("background-color: black; color: white; font-size: 14px; border-radius: 40px;");
+            break;
+        case ToolSwitching:
+            connect(pageDial, &QDial::valueChanged, this, &MainWindow::handleToolSelection);
+            connect(pageDial, &QDial::sliderReleased, this, &MainWindow::onToolReleased);
+            break;
+        case PresetSelection:
+            connect(pageDial, &QDial::valueChanged, this, &MainWindow::handlePresetSelection);
+            connect(pageDial, &QDial::sliderReleased, this, &MainWindow::onPresetReleased);
+            break;
+    }
+}
+
+void MainWindow::handleDialZoom(int angle) {
+    if (!tracking) {
+        startAngle = angle;  
+        accumulatedRotation = 0;  
+        tracking = true;
+        lastAngle = angle;
+        return;
+    }
+
+    int delta = angle - lastAngle;
+
+    // ✅ Handle 360-degree wrapping
+    if (delta > 180) delta -= 360;
+    if (delta < -180) delta += 360;
+
+    accumulatedRotation += delta;
+
+    if (abs(delta) < 3) {  
+        return;  
+    }
+
+    // ✅ Apply zoom dynamically (instead of waiting for release)
+    int newZoom = qBound(20, zoomSlider->value() + (delta / 2), 250);  
+    zoomSlider->setValue(newZoom);
+    updateZoom();  // ✅ Ensure zoom updates immediately
+    updateDialDisplay(); 
+
+    lastAngle = angle;
+}
+
+void MainWindow::onZoomReleased() {
+    accumulatedRotation = 0;
+    tracking = false;
+}
+
+
+void MainWindow::handleDialThickness(int angle) {
+    if (!tracking) {
+        startAngle = angle;
+        tracking = true;
+        lastAngle = angle;
+        return;
+    }
+
+    int delta = angle - lastAngle;
+    if (delta > 180) delta -= 360;
+    if (delta < -180) delta += 360;
+
+    int thicknessStep = fastForwardMode ? 5 : 1;
+    currentCanvas()->setPenThickness(qBound<qreal>(1.0, currentCanvas()->getPenThickness() + (delta / 10.0) * thicknessStep, 50.0));
+
+    updateDialDisplay();
+    lastAngle = angle;
+}
+
+void MainWindow::onThicknessReleased() {
+    accumulatedRotation = 0;
+    tracking = false;
+}
+
+void MainWindow::handlePresetSelection(int angle) {
+    static int lastAngle = angle;
+    int delta = angle - lastAngle;
+
+    // ✅ Handle 360-degree wrapping
+    if (delta > 180) delta -= 360;
+    if (delta < -180) delta += 360;
+
+    if (abs(delta) >= 60) {  // ✅ Change preset every 60° (6 presets)
+        lastAngle = angle;
+        currentPresetIndex = (currentPresetIndex + (delta > 0 ? 1 : -1) + colorPresets.size()) % colorPresets.size();
+        
+        QColor selectedColor = colorPresets[currentPresetIndex];
+        currentCanvas()->setPenColor(selectedColor);
+        customColorInput->setText(selectedColor.name().toUpper());
+        updateDialDisplay();
+        
+        if (dialClickSound) dialClickSound->play();  // ✅ Provide feedback
+    }
+}
+
+void MainWindow::onPresetReleased() {
+    accumulatedRotation = 0;
+    tracking = false;
+}
+
+
+void MainWindow::handleDialColor(int angle) {
+    if (!tracking) {
+        startAngle = angle;
+        accumulatedRotation = 0;
+        tracking = true;
+        lastAngle = angle;
+        return;
+    }
+
+    int delta = angle - lastAngle;
+    if (delta > 180) delta -= 360;
+    if (delta < -180) delta += 360;
+
+    accumulatedRotation += delta;
+
+    if (abs(delta) < 5) {  // 🔹 If movement is too small, force an update
+        return;
+    }
+    
+
+    QColor color = currentCanvas()->getPenColor();
+    int changeAmount = fastForwardMode ? 4 : 1;
+
+    if (selectedChannel == 0) {  // Red
+        color.setRed(qBound(0, color.red() + (delta / 5) * changeAmount, 255));
+    } else if (selectedChannel == 1) {  // Green
+        color.setGreen(qBound(0, color.green() + (delta / 5) * changeAmount, 255));
+    } else if (selectedChannel == 2) {  // Blue
+        color.setBlue(qBound(0, color.blue() + (delta / 5) * changeAmount, 255));
+    }
+
+    currentCanvas()->setPenColor(color);
+    customColorInput->setText(color.name().toUpper());
+    updateDialDisplay(); 
+
+    colorPreview->setStyleSheet(QString("border-radius: 15px; border: 1px solid black; background-color: %1;").arg(color.name()));
+    
+
+    lastAngle = angle;
+}
+
+void MainWindow::onColorReleased() {
+    accumulatedRotation = 0;
+    tracking = false;
+}
+
+void MainWindow::updateSelectedChannel(int index) {
+    selectedChannel = index;  // ✅ Store which channel to modify
+}
+
+void MainWindow::cycleColorChannel() {
+    if (currentDialMode != ColorAdjustment) return; // ✅ Ensure it's only active in color mode
+
+    selectedChannel = (selectedChannel + 1) % 3; // ✅ Cycle between 0 (Red), 1 (Green), 2 (Blue)
+    channelSelector->setCurrentIndex(selectedChannel); // ✅ Update dropdown UI
+    updateDialDisplay(); // ✅ Update dial display
+}
+
+void MainWindow::addColorPreset() {
+    QColor currentColor = currentCanvas()->getPenColor();
+
+    // ✅ Prevent duplicates
+    if (!colorPresets.contains(currentColor)) {
+        if (colorPresets.size() >= 6) {
+            colorPresets.dequeue();  // ✅ Remove oldest color
+        }
+        colorPresets.enqueue(currentColor);
+    }
+}

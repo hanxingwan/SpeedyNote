@@ -25,5 +25,24 @@
     <file>resources/icons/zoom.png</file>
     <file>resources/icons/thickness.png</file>
     <file>resources/icons/fullscreen.png</file>
+    <file>resources/icons/bookpage.png</file>
+    <file>resources/icons/dial.png</file>
+    <file>resources/icons/fastforward.png</file>
+    <file>resources/icons/color.png</file>
+    <file>resources/icons/preset.png</file>
+    <file>resources/icons/savepreset.png</file>
+    <file>resources/icons/mainicon.png</file>
+    <file>resources/reversed_icons/color_reversed.png</file>
+    <file>resources/reversed_icons/bookpage_reversed.png</file>
+    <file>resources/reversed_icons/zoom_reversed.png</file>
+    <file>resources/reversed_icons/thickness_reversed.png</file>
+    <file>resources/reversed_icons/eraser_reversed.png</file>
+    <file>resources/reversed_icons/marker_reversed.png</file>
+    <file>resources/reversed_icons/pen_reversed.png</file>
+    <file>resources/reversed_icons/preset_reversed.png</file>
+    <file>resources/sounds/dial_click.wav</file>
+    <file>resources/fonts/PixelFont.ttf</file>
+    <file>resources/fonts/Jersey20-Regular.ttf</file>
+    
 </qresource>
 </RCC>

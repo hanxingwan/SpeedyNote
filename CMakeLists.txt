@@ -8,7 +8,7 @@ set(CMAKE_PREFIX_PATH "C:/Qt/6.8.2/mingw_64/lib/cmake")
 set(CMAKE_MODULE_PATH "C:/Qt/6.8.2/mingw_64/lib/cmake/Poppler")
 
 # ✅ Find Qt5 components
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets VirtualKeyboard Multimedia)
 find_package(Poppler REQUIRED)
 
 # ✅ Process the .qrc file properly
@@ -30,4 +30,4 @@ add_executable(NoteApp main.cpp MainWindow.cpp InkCanvas.cpp ${QRCC_FILES})
 
 # ✅ Link necessary Qt5 libraries
 add_compile_definitions(QT_NO_DEPRECATED_WARNINGS)
-target_link_libraries(NoteApp Qt6::Core Qt6::Gui Qt6::Widgets ${POPPLER_LIBRARIES})
+target_link_libraries(NoteApp Qt6::Core Qt6::Gui Qt6::Widgets Qt6::VirtualKeyboard Qt6::Multimedia ${POPPLER_LIBRARIES})

@@ -71,6 +71,9 @@ public:
 
     void setLastPanY(int pan) { lastPanY = pan; }
     int getLastPanY() const { return lastPanY; }
+    QColor getPenColor(); // Added getter for pen color
+    qreal getPenThickness(); // Added getter for pen thickness
+    ToolType getCurrentTool(); // Added getter for tool type
 
     
 

@@ -581,3 +581,15 @@ void InkCanvas::saveCurrentPage() {
     int currentPage = mainWin->getCurrentPageForCanvas(this);  // ✅ Get correct page
     saveToFile(currentPage);
 }
+
+QColor InkCanvas::getPenColor(){
+    return penColor;
+}
+
+qreal InkCanvas::getPenThickness(){
+    return penThickness;
+}
+
+ToolType InkCanvas::getCurrentTool() {
+    return currentTool;
+}
