@@ -231,8 +231,10 @@ void InkCanvas::drawStroke(const QPointF &start, const QPointF &end, qreal press
 
     qreal thickness = penThickness;
 
+    qreal updatePadding = (currentTool == ToolType::Marker) ? thickness * 4.0 : 10;
+
     if (currentTool == ToolType::Marker) {
-        thickness *= 15.0;
+        thickness *= 8.0;
         QColor markerColor = penColor;
         markerColor.setAlpha(4); // Semi-transparent for marker effect
         QPen pen(markerColor, thickness, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
@@ -251,7 +253,7 @@ void InkCanvas::drawStroke(const QPointF &start, const QPointF &end, qreal press
 
     QRectF updateRect = QRectF(bufferStart, bufferEnd)
                         .normalized()
-                        .adjusted(-10, -10, 10, 10);
+                        .adjusted(-updatePadding, -updatePadding, updatePadding, updatePadding);
 
     QRect scaledUpdateRect = QRect(
         ((updateRect.topLeft() - QPointF(panOffsetX, panOffsetY)) * (zoomFactor / 100.0)).toPoint(),

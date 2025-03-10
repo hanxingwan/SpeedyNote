@@ -100,7 +100,7 @@ private slots:
     void handlePresetSelection(int angle);
     void onPresetReleased();
     void addColorPreset();
-    
+    qreal getDevicePixelRatio(); 
 
 
     
@@ -213,6 +213,8 @@ private:
     QQueue<QColor> colorPresets;  // ✅ FIFO queue for color presets
     QPushButton *addPresetButton;  // ✅ Button to add current color to queue
     int currentPresetIndex = 0;  // ✅ Track selected preset
+
+    qreal initialDpr = getDevicePixelRatio(); // Get initial device pixel ratio
     
 
     void setupUi();

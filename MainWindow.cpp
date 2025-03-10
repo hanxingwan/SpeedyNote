@@ -23,7 +23,7 @@
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false) {
 
-    setWindowTitle("SpeedyNote Alpha 0.3.0");
+    setWindowTitle("SpeedyNote Alpha 0.3.1");
     
 
     // QString iconPath = QCoreApplication::applicationDirPath() + "/icon.ico"; 
@@ -49,6 +49,8 @@ MainWindow::MainWindow(QWidget *parent)
     updatePanRange(); // Set initial slider range  HERE IS THE PROBLEM!!
     // toggleFullscreen(); // ✅ Toggle fullscreen to adjust layout
     // toggleDial(); // ✅ Toggle dial to adjust layout
+   
+    zoomSlider->setValue(100 / initialDpr); // Set initial zoom level based on DPR
 
 }
 
@@ -138,14 +140,14 @@ void MainWindow::setupUi() {
     QIcon blueIcon(":/resources/icons/blue.png");  // Path to your icon in resources
     blueButton->setIcon(blueIcon);
     blueButton->setStyleSheet(buttonStyle);
-    connect(blueButton, &QPushButton::clicked, [this]() { currentCanvas()->setPenColor(QColor("#1122FF")); updateDialDisplay(); });
+    connect(blueButton, &QPushButton::clicked, [this]() { currentCanvas()->setPenColor(QColor("#0033FF")); updateDialDisplay(); });
 
     yellowButton = new QPushButton(this);
     yellowButton->setFixedSize(30, 30);
     QIcon yellowIcon(":/resources/icons/yellow.png");  // Path to your icon in resources
     yellowButton->setIcon(yellowIcon);
     yellowButton->setStyleSheet(buttonStyle);
-    connect(yellowButton, &QPushButton::clicked, [this]() { currentCanvas()->setPenColor(QColor("#EEDD00")); updateDialDisplay(); });
+    connect(yellowButton, &QPushButton::clicked, [this]() { currentCanvas()->setPenColor(QColor("#FFEE00")); updateDialDisplay(); });
 
 
     greenButton = new QPushButton(this);
@@ -153,7 +155,7 @@ void MainWindow::setupUi() {
     QIcon greenIcon(":/resources/icons/green.png");  // Path to your icon in resources
     greenButton->setIcon(greenIcon);
     greenButton->setStyleSheet(buttonStyle);
-    connect(greenButton, &QPushButton::clicked, [this]() { currentCanvas()->setPenColor(QColor("#00CC00")); updateDialDisplay(); });
+    connect(greenButton, &QPushButton::clicked, [this]() { currentCanvas()->setPenColor(QColor("#33EE00")); updateDialDisplay(); });
     
 
     blackButton = new QPushButton(this);
@@ -396,6 +398,11 @@ void MainWindow::setupUi() {
 
     // ✅ Ensure at least one preset exists (black placeholder)
     colorPresets.enqueue(QColor("#000000"));
+    colorPresets.enqueue(QColor("#EE0000"));
+    colorPresets.enqueue(QColor("#FFEE00"));
+    colorPresets.enqueue(QColor("#0033FF"));
+    colorPresets.enqueue(QColor("#33EE00"));
+    colorPresets.enqueue(QColor("#FFFFFF"));
 
     // ✅ Button to add current color to presets
     addPresetButton = new QPushButton(QIcon(":/resources/icons/savepreset.png"), "", this);
@@ -610,7 +617,7 @@ void MainWindow::updateZoom() {
     }
 }
 
-qreal getDevicePixelRatio(){
+qreal MainWindow::getDevicePixelRatio(){
     QScreen *screen = QGuiApplication::primaryScreen();
     qreal devicePixelRatio = screen ? screen->devicePixelRatio() : 1.0; // Default to 1.0 if null
     return devicePixelRatio;
@@ -767,6 +774,9 @@ void MainWindow::addNewTab() {
     // ✅ Select the new tab
     tabList->setCurrentItem(tabItem);
     canvasStack->setCurrentWidget(newCanvas);
+
+    zoomSlider->setValue(100 / initialDpr); // Set initial zoom level based on DPR
+    updateDialDisplay();
 }
 
 
