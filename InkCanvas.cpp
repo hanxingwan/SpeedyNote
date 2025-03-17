@@ -107,7 +107,7 @@ void InkCanvas::loadPdfPage(int pageNumber) {
         return;
     }
 
-    // ✅ Ensure the cache holds only 5 pages max
+    // ✅ Ensure the cache holds only 10 pages max
     if (pdfCache.count() >= 10) {
         auto oldestKey = pdfCache.keys().first();
         pdfCache.remove(oldestKey);
@@ -117,7 +117,7 @@ void InkCanvas::loadPdfPage(int pageNumber) {
     if (pageNumber >= 0 && pageNumber < pdfDocument->numPages()) {
         std::unique_ptr<Poppler::Page> page(pdfDocument->page(pageNumber));
         if (page) {
-            QImage pdfImage = page->renderToImage(300, 300);
+            QImage pdfImage = page->renderToImage(288, 288);
             if (!pdfImage.isNull()) {
                 QPixmap cachedPixmap = QPixmap::fromImage(pdfImage);
                 pdfCache.insert(pageNumber, new QPixmap(cachedPixmap));
@@ -130,6 +130,26 @@ void InkCanvas::loadPdfPage(int pageNumber) {
     }
     loadPage(pageNumber);  // Load existing canvas annotations
     update();
+}
+
+
+void InkCanvas::loadPdfPreview(int pageNumber) {
+    if (!pdfDocument) return;
+
+    if (pageNumber >= 0 && pageNumber < pdfDocument->numPages()) {
+        std::unique_ptr<Poppler::Page> page(pdfDocument->page(pageNumber));
+        if (page) {
+            QImage pdfImage = page->renderToImage(72, 72);  // ✅ Render at low DPI
+            
+            if (!pdfImage.isNull()) {
+                // ✅ Scale the preview to match the final page size (4x upscale)
+                QImage upscaledPreview = pdfImage.scaled(pdfImage.width() * 4, pdfImage.height() * 4, 
+                                                         Qt::KeepAspectRatio, Qt::SmoothTransformation);
+                backgroundImage = QPixmap::fromImage(upscaledPreview);
+                update();
+            }
+        }
+    }
 }
 
 void InkCanvas::startBenchmark() {
@@ -224,6 +244,10 @@ void InkCanvas::mouseReleaseEvent(QMouseEvent *event) {
 void InkCanvas::drawStroke(const QPointF &start, const QPointF &end, qreal pressure) {
     if (buffer.isNull()) {
         initializeBuffer();
+    }
+
+    if (!edited){
+        edited = true;
     }
 
     QPainter painter(&buffer);
@@ -340,12 +364,20 @@ void InkCanvas::saveToFile(int pageNumber) {
         return;
     }
     QString filePath = saveFolder + QString("/%1_%2.png").arg(QFileInfo(saveFolder).baseName()).arg(pageNumber, 5, 10, QChar('0'));
+
+    // ✅ If no file exists and the buffer is empty, do nothing
     
+    if (!edited) {
+        return;
+    }
+
+
     QImage image(buffer.size(), QImage::Format_ARGB32);
     image.fill(Qt::transparent);
     QPainter painter(&image);
     painter.drawPixmap(0, 0, buffer);
     image.save(filePath, "PNG");
+    edited = false;
 }
 
 void InkCanvas::saveAnnotated(int pageNumber) {
@@ -380,26 +412,22 @@ void InkCanvas::loadPage(int pageNumber) {
     }
     // Load PDF page as a background if applicable
     if (isPdfLoaded && pdfDocument && pageNumber >= 0 && pageNumber < pdfDocument->numPages()) {
-        std::unique_ptr<Poppler::Page> pdfPage(pdfDocument->page(pageNumber));
-        if (pdfPage) {
-            QImage pdfImage = pdfPage->renderToImage(300, 300);  // High-resolution render
-            if (!pdfImage.isNull()) {
-                backgroundImage = QPixmap::fromImage(pdfImage);
+        // std::unique_ptr<Poppler::Page> pdfPage(pdfDocument->page(pageNumber));
 
-                // Resize canvas to match PDF page size
-                if (pdfImage.size() != size()) {
-                    QPixmap newBuffer(pdfImage.size());
-                    newBuffer.fill(Qt::transparent);
+        backgroundImage = *pdfCache.object(pageNumber);
+        // Resize canvas to match PDF page size
+        if (backgroundImage.size() != buffer.size()) {
+            QPixmap newBuffer(backgroundImage.size());
+            newBuffer.fill(Qt::transparent);
 
-                    // Copy existing drawings
-                    QPainter painter(&newBuffer);
-                    painter.drawPixmap(0, 0, buffer);
+            // Copy existing drawings
+            QPainter painter(&newBuffer);
+            painter.drawPixmap(0, 0, buffer);
 
-                    buffer = newBuffer;
-                    setMaximumSize(pdfImage.width(), pdfImage.height());
-                }
-            }
-        }
+            buffer = newBuffer;
+            setMaximumSize(backgroundImage.width(), backgroundImage.height());
+        } 
+        
     } else {
         QString bgFileName = saveFolder + QString("/bg_%1_%2.png")
                                     .arg(QFileInfo(saveFolder).baseName())

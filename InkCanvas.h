@@ -75,6 +75,8 @@ public:
     qreal getPenThickness(); // Added getter for pen thickness
     ToolType getCurrentTool(); // Added getter for tool type
 
+    void loadPdfPreview(int pageNumber);  // ✅ Load a quick preview of the PDF page
+
     
 
 protected:
@@ -117,6 +119,10 @@ private:
     int lastZoomLevel = 100;  // ✅ Default zoom level
     int lastPanX = 0;  // ✅ Default pan X
     int lastPanY = 0;  // ✅ Default pan Y
+
+    // QImage *pdfImage = nullptr;  // ✅ Image for the current PDF page
+
+    bool edited = false;  // ✅ Track if the canvas has been edited
 
     
     

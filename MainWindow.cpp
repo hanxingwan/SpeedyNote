@@ -23,7 +23,7 @@
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false) {
 
-    setWindowTitle("SpeedyNote Alpha 0.3.1");
+    setWindowTitle("SpeedyNote Alpha 0.3.2");
     
 
     // QString iconPath = QCoreApplication::applicationDirPath() + "/icon.ico"; 
@@ -572,9 +572,9 @@ void MainWindow::switchPage(int pageNumber) {
     int newPage = pageNumber - 1;
     pageMap[canvas] = newPage;  // ✅ Save the page for this tab
 
-    if (canvas->isPdfLoadedFunc() && pageNumber < canvas->getTotalPdfPages()) {
+    if (canvas->isPdfLoadedFunc() && pageNumber - 1 < canvas->getTotalPdfPages()) {
         canvas->loadPdfPage(newPage);
-        canvas->loadPage(newPage);
+        // canvas->loadPage(newPage);
     } else {
         canvas->loadPage(newPage);
     }
@@ -1141,6 +1141,13 @@ void MainWindow::handleDialInput(int angle) {
             tempClicks = currentClicks;
             updateDialDisplay();
             
+
+            // int previewPage = qBound(1, getCurrentPageForCanvas(currentCanvas()) + currentClicks, 99999);
+            // currentCanvas()->loadPdfPreview(previewPage);
+
+            
+            
+            
         }
         
     }
@@ -1168,6 +1175,8 @@ void MainWindow::onDialReleased() {
     
 
     if (totalClicks != 0) {  // ✅ Only switch pages if movement happened
+        saveCurrentPage(); // autosave
+
         int currentPage = getCurrentPageForCanvas(currentCanvas()) + 1;
         int newPage = qBound(1, currentPage + totalClicks * pagesToAdvance, 99999);
         switchPage(newPage);
