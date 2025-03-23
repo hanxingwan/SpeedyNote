@@ -32,8 +32,8 @@ InkCanvas::InkCanvas(QWidget *parent)
     // Detect screen resolution and set canvas size
     QScreen *screen = QGuiApplication::primaryScreen();
     if (screen) {
-        QSize nativeSize = screen->size() * screen->devicePixelRatio();
-        setFixedSize(nativeSize.width(), nativeSize.height());
+        QSize logicalSize = screen->availableGeometry().size() * 0.9;
+        setFixedSize(logicalSize);
     } else {
         setFixedSize(1920, 1080); // Fallback size
     }
@@ -51,8 +51,17 @@ InkCanvas::~InkCanvas() {
 
 
 void InkCanvas::initializeBuffer() {
-    buffer = QPixmap(size());
+    QScreen *screen = QGuiApplication::primaryScreen();
+    qreal dpr = screen ? screen->devicePixelRatio() : 1.0;
+
+    // Get logical screen size
+    QSize logicalSize = screen ? screen->size() : QSize(1440, 900);
+    QSize pixelSize = logicalSize * dpr;
+
+    buffer = QPixmap(pixelSize);
     buffer.fill(Qt::transparent);
+
+    setMaximumSize(pixelSize); // 🔥 KEY LINE to make full canvas drawable
 }
 
 void InkCanvas::loadPdf(const QString &pdfPath) {
@@ -172,12 +181,15 @@ int InkCanvas::getProcessedRate() {
 
 
 void InkCanvas::resizeEvent(QResizeEvent *event) {
-    QPixmap newBuffer(event->size());
-    newBuffer.fill(Qt::transparent);
+    // Only resize the buffer if the new size is larger
+    if (event->size().width() > buffer.width() || event->size().height() > buffer.height()) {
+        QPixmap newBuffer(event->size());
+        newBuffer.fill(Qt::transparent);
 
-    QPainter painter(&newBuffer);
-    painter.drawPixmap(0, 0, buffer);
-    buffer = newBuffer;
+        QPainter painter(&newBuffer);
+        painter.drawPixmap(0, 0, buffer);
+        buffer = newBuffer;
+    }
 
     QWidget::resizeEvent(event);
 }

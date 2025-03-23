@@ -102,6 +102,9 @@ private slots:
     void addColorPreset();
     qreal getDevicePixelRatio(); 
 
+    bool isDarkMode();
+    QIcon loadThemedIcon(const QString& baseName);
+
 
     
 
@@ -135,6 +138,7 @@ private:
 
     QPushButton *loadPdfButton;
     QPushButton *clearPdfButton;
+    QPushButton *toggleTabBarButton;
 
     QMap<InkCanvas*, int> pageMap;
     
@@ -215,6 +219,8 @@ private:
     int currentPresetIndex = 0;  // ✅ Track selected preset
 
     qreal initialDpr = getDevicePixelRatio(); // Get initial device pixel ratio
+
+    QWidget *sidebarContainer;  // Container for sidebar
     
 
     void setupUi();

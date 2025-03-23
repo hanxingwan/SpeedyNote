@@ -1,5 +1,0 @@
-C:/Games/notecpp_2rowlowres_legacy/build/CMakeFiles/NoteApp.dir
-C:/Games/notecpp_2rowlowres_legacy/build/CMakeFiles/edit_cache.dir
-C:/Games/notecpp_2rowlowres_legacy/build/CMakeFiles/rebuild_cache.dir
-C:/Games/notecpp_2rowlowres_legacy/build/CMakeFiles/NoteApp_autogen_timestamp_deps.dir
-C:/Games/notecpp_2rowlowres_legacy/build/CMakeFiles/NoteApp_autogen.dir

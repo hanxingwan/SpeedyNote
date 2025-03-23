@@ -5,32 +5,58 @@
     <file>resources/icons/blue.png</file>
     <file>resources/icons/red.png</file>
     <file>resources/icons/background.png</file>
+    <file>resources/icons/background_reversed.png</file>
     <file>resources/icons/benchmark.png</file>
+    <file>resources/icons/benchmark_reversed.png</file>
     <file>resources/icons/black.png</file>
     <file>resources/icons/white.png</file>
     <file>resources/icons/green.png</file>
     <file>resources/icons/pen.png</file>
+    <file>resources/icons/pen_reversed.png</file>
     <file>resources/icons/marker.png</file>
+    <file>resources/icons/marker_reversed.png</file>
     <file>resources/icons/eraser.png</file>
+    <file>resources/icons/eraser_reversed.png</file>
+    <file>resources/icons/save_reversed.png</file>
     <file>resources/icons/save.png</file>
     <file>resources/icons/saveannotated.png</file>
+    <file>resources/icons/saveannotated_reversed.png</file>
     <file>resources/icons/pdf.png</file>
+    <file>resources/icons/pdf_reversed.png</file>
     <file>resources/icons/pdfdelete.png</file>
+    <file>resources/icons/pdfdelete_reversed.png</file>
     <file>resources/icons/folder.png</file>
+    <file>resources/icons/folder_reversed.png</file>
     <file>resources/icons/trash.png</file>
+    <file>resources/icons/trash_reversed.png</file>
     <file>resources/icons/addtab.png</file>
+    <file>resources/icons/addtab_reversed.png</file>
     <file>resources/icons/cross.png</file>
+    <file>resources/icons/cross_reversed.png</file>
     <file>resources/icons/up_arrow.png</file>
+    <file>resources/icons/up_arrow_reversed.png</file>
     <file>resources/icons/down_arrow.png</file>
+    <file>resources/icons/down_arrow_reversed.png</file>
     <file>resources/icons/zoom.png</file>
+    <file>resources/icons/zoom_reversed.png</file>
     <file>resources/icons/thickness.png</file>
+    <file>resources/icons/thickness_reversed.png</file>
     <file>resources/icons/fullscreen.png</file>
+    <file>resources/icons/fullscreen_reversed.png</file>
     <file>resources/icons/bookpage.png</file>
+    <file>resources/icons/bookpage_reversed.png</file>
     <file>resources/icons/dial.png</file>
+    <file>resources/icons/dial_reversed.png</file>
     <file>resources/icons/fastforward.png</file>
+    <file>resources/icons/fastforward_reversed.png</file>
     <file>resources/icons/color.png</file>
+    <file>resources/icons/color_reversed.png</file>
     <file>resources/icons/preset.png</file>
+    <file>resources/icons/preset_reversed.png</file>
     <file>resources/icons/savepreset.png</file>
+    <file>resources/icons/savepreset_reversed.png</file>
+    <file>resources/icons/tabs.png</file>
+    <file>resources/icons/tabs_reversed.png</file>
     <file>resources/icons/mainicon.png</file>
     <file>resources/reversed_icons/color_reversed.png</file>
     <file>resources/reversed_icons/bookpage_reversed.png</file>

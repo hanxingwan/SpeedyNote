@@ -18,12 +18,13 @@
 #include <QDial>
 #include <QSoundEffect>
 #include <QFontDatabase>
+#include <QStandardPaths>
 // #include "HandwritingLineEdit.h"
 
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false) {
 
-    setWindowTitle("SpeedyNote Alpha 0.3.2");
+    setWindowTitle("SpeedyNote Alpha 0.3.3");
     
 
     // QString iconPath = QCoreApplication::applicationDirPath() + "/icon.ico"; 
@@ -33,8 +34,8 @@ MainWindow::MainWindow(QWidget *parent)
     // ✅ Get screen size & adjust window size
     QScreen *screen = QGuiApplication::primaryScreen();
     if (screen) {
-        QSize nativeSize = screen->availableGeometry().size();
-        resize(nativeSize);
+        QSize logicalSize = screen->availableGeometry().size() * 0.9;
+        resize(logicalSize);
     }
     // ✅ Create a stacked widget to hold multiple canvases
     canvasStack = new QStackedWidget(this);
@@ -79,8 +80,8 @@ void MainWindow::setupUi() {
     clearPdfButton = new QPushButton(this);
     loadPdfButton->setFixedSize(30, 30);
     clearPdfButton->setFixedSize(30, 30);
-    QIcon pdfIcon(":/resources/icons/pdf.png");  // Path to your icon in resources
-    QIcon pdfDeleteIcon(":/resources/icons/pdfdelete.png");  // Path to your icon in resources
+    QIcon pdfIcon(loadThemedIcon("pdf"));  // Path to your icon in resources
+    QIcon pdfDeleteIcon(loadThemedIcon("pdfdelete"));  // Path to your icon in resources
     loadPdfButton->setIcon(pdfIcon);
     clearPdfButton->setIcon(pdfDeleteIcon);
     loadPdfButton->setStyleSheet(buttonStyle);
@@ -89,17 +90,22 @@ void MainWindow::setupUi() {
     connect(clearPdfButton, &QPushButton::clicked, this, &MainWindow::clearPdf);
 
     benchmarkButton = new QPushButton(this);
-    QIcon benchmarkIcon(":/resources/icons/benchmark.png");  // Path to your icon in resources
+    QIcon benchmarkIcon(loadThemedIcon("benchmark"));  // Path to your icon in resources
     benchmarkButton->setIcon(benchmarkIcon);
     benchmarkButton->setFixedSize(30, 30); // Make the benchmark button smaller
     benchmarkButton->setStyleSheet(buttonStyle);
     benchmarkLabel = new QLabel("PR:N/A", this);
     benchmarkLabel->setFixedHeight(40);  // Make the benchmark bar smaller
 
+    toggleTabBarButton = new QPushButton(this);
+    toggleTabBarButton->setIcon(loadThemedIcon("tabs"));  // You can design separate icons for "show" and "hide"
+    toggleTabBarButton->setToolTip("Show/Hide Tabs");
+    toggleTabBarButton->setFixedSize(30, 30);
+    toggleTabBarButton->setStyleSheet(buttonStyle);
 
     selectFolderButton = new QPushButton(this);
     selectFolderButton->setFixedSize(30, 30);
-    QIcon folderIcon(":/resources/icons/folder.png");  // Path to your icon in resources
+    QIcon folderIcon(loadThemedIcon("folder"));  // Path to your icon in resources
     selectFolderButton->setIcon(folderIcon);
     selectFolderButton->setStyleSheet(buttonStyle);
     connect(selectFolderButton, &QPushButton::clicked, this, &MainWindow::selectFolder);
@@ -107,20 +113,20 @@ void MainWindow::setupUi() {
     
     saveButton = new QPushButton(this);
     saveButton->setFixedSize(30, 30);
-    QIcon saveIcon(":/resources/icons/save.png");  // Path to your icon in resources
+    QIcon saveIcon(loadThemedIcon("save"));  // Path to your icon in resources
     saveButton->setIcon(saveIcon);
     saveButton->setStyleSheet(buttonStyle);
     connect(saveButton, &QPushButton::clicked, this, &MainWindow::saveCurrentPage);
     
     saveAnnotatedButton = new QPushButton(this);
     saveAnnotatedButton->setFixedSize(30, 30);
-    QIcon saveAnnotatedIcon(":/resources/icons/saveannotated.png");  // Path to your icon in resources
+    QIcon saveAnnotatedIcon(loadThemedIcon("saveannotated"));  // Path to your icon in resources
     saveAnnotatedButton->setIcon(saveAnnotatedIcon);
     saveAnnotatedButton->setStyleSheet(buttonStyle);
     connect(saveAnnotatedButton, &QPushButton::clicked, this, &MainWindow::saveAnnotated);
 
     fullscreenButton = new QPushButton(this);
-    fullscreenButton->setIcon(QIcon(":/resources/icons/fullscreen.png"));  // Load from resources
+    fullscreenButton->setIcon(loadThemedIcon("fullscreen"));  // Load from resources
     fullscreenButton->setFixedSize(30, 30);
     fullscreenButton->setToolTip("Toggle Fullscreen");
     fullscreenButton->setStyleSheet(buttonStyle);
@@ -178,7 +184,7 @@ void MainWindow::setupUi() {
     connect(customColorInput, &QLineEdit::returnPressed, this, &MainWindow::applyCustomColor);
 
     thicknessButton = new QPushButton(this);
-    thicknessButton->setIcon(QIcon(":/resources/icons/thickness.png"));
+    thicknessButton->setIcon(loadThemedIcon("thickness"));
     thicknessButton->setFixedSize(30, 30);
     thicknessButton->setStyleSheet(buttonStyle);
     connect(thicknessButton, &QPushButton::clicked, this, &MainWindow::toggleThicknessSlider);
@@ -208,16 +214,16 @@ void MainWindow::setupUi() {
 
 
     toolSelector = new QComboBox(this);
-    toolSelector->addItem(QIcon(":/resources/icons/pen.png"), "");
-    toolSelector->addItem(QIcon(":/resources/icons/marker.png"), "");
-    toolSelector->addItem(QIcon(":/resources/icons/eraser.png"), "");
+    toolSelector->addItem(loadThemedIcon("pen"), "");
+    toolSelector->addItem(loadThemedIcon("marker"), "");
+    toolSelector->addItem(loadThemedIcon("eraser"), "");
     toolSelector->setFixedWidth(43);
     toolSelector->setFixedHeight(30);
     connect(toolSelector, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::changeTool);
 
     backgroundButton = new QPushButton(this);
     backgroundButton->setFixedSize(30, 30);
-    QIcon bgIcon(":/resources/icons/background.png");  // Path to your icon in resources
+    QIcon bgIcon(loadThemedIcon("background"));  // Path to your icon in resources
     backgroundButton->setIcon(bgIcon);
     backgroundButton->setStyleSheet(buttonStyle);
     connect(backgroundButton, &QPushButton::clicked, this, &MainWindow::selectBackground);
@@ -226,13 +232,13 @@ void MainWindow::setupUi() {
     
     deletePageButton = new QPushButton(this);
     deletePageButton->setFixedSize(30, 30);
-    QIcon trashIcon(":/resources/icons/trash.png");  // Path to your icon in resources
+    QIcon trashIcon(loadThemedIcon("trash"));  // Path to your icon in resources
     deletePageButton->setIcon(trashIcon);
     deletePageButton->setStyleSheet(buttonStyle);
     connect(deletePageButton, &QPushButton::clicked, this, &MainWindow::deleteCurrentPage);
 
     zoomButton = new QPushButton(this);
-    zoomButton->setIcon(QIcon(":/resources/icons/zoom.png"));
+    zoomButton->setIcon(loadThemedIcon("zoom"));
     zoomButton->setFixedSize(30, 30);
     zoomButton->setStyleSheet(buttonStyle);
     connect(zoomButton, &QPushButton::clicked, this, &MainWindow::toggleZoomSlider);
@@ -289,7 +295,7 @@ void MainWindow::setupUi() {
 
     // 🌟 Left Side: Tabs List
     tabList = new QListWidget(this);
-    tabList->setFixedWidth(100);  // Adjust width as needed
+    tabList->setFixedWidth(110);  // Adjust width as needed
     tabList->setSelectionMode(QAbstractItemView::SingleSelection);
 
 
@@ -297,6 +303,7 @@ void MainWindow::setupUi() {
     addTabButton = new QPushButton(this);
     QIcon addTab(":/resources/icons/addtab.png");  // Path to your icon in resources
     addTabButton->setIcon(addTab);
+    addTabButton->setFixedWidth(110);
     addTabButton->setFixedHeight(45);  // Adjust height as needed
     connect(addTabButton, &QPushButton::clicked, this, &MainWindow::addNewTab);
 
@@ -306,11 +313,32 @@ void MainWindow::setupUi() {
 
     connect(tabList, &QListWidget::currentRowChanged, this, &MainWindow::switchTab);
 
-
-    QVBoxLayout *tabLayout = new QVBoxLayout();
-    tabLayout->setContentsMargins(0, 0, 5, 0); 
+    sidebarContainer = new QWidget(this);  // <-- New container
+    sidebarContainer->setContentsMargins(0, 0, 0, 0);  // <-- Remove margins
+    QVBoxLayout *tabLayout = new QVBoxLayout(sidebarContainer);
+    tabLayout->setContentsMargins(0, 0, 1, 0); 
     tabLayout->addWidget(tabList);
     tabLayout->addWidget(addTabButton);
+
+    connect(toggleTabBarButton, &QPushButton::clicked, this, [=]() {
+        bool isVisible = sidebarContainer->isVisible();
+        sidebarContainer->setVisible(!isVisible);
+
+        QTimer::singleShot(0, this, [this]() {
+            if (auto *canvas = currentCanvas()) {
+                canvas->setMaximumSize(canvas->getCanvasSize());
+                // canvas->adjustSize();
+            }
+        });
+
+        // Force layout recalc & canvas size restore
+        // Force layout recalculation
+
+    
+        // Optional: switch icon or tooltip
+        // toggleTabBarButton->setIcon(loadThemedIcon(isVisible ? "show_tabs" : "hide_tabs"));
+        // toggleTabBarButton->setToolTip(isVisible ? "Show Tabs" : "Hide Tabs");
+    });
 
     
 
@@ -323,15 +351,15 @@ void MainWindow::setupUi() {
     connect(pageInput, QOverload<int>::of(&QSpinBox::valueChanged), this, &MainWindow::switchPage);
 
     jumpToPageButton = new QPushButton(this);
-    QIcon jumpIcon(":/resources/icons/bookpage.png");  // Path to your icon in resources
+    // QIcon jumpIcon(":/resources/icons/bookpage.png");  // Path to your icon in resources
     jumpToPageButton->setFixedSize(30, 30);
     jumpToPageButton->setStyleSheet(buttonStyle);
-    jumpToPageButton->setIcon(jumpIcon);
+    jumpToPageButton->setIcon(loadThemedIcon("bookpage"));
     connect(jumpToPageButton, &QPushButton::clicked, this, &MainWindow::showJumpToPageDialog);
 
     // ✅ Dial Toggle Button
     dialToggleButton = new QPushButton(this);
-    dialToggleButton->setIcon(QIcon(":/resources/icons/dial.png"));  // Icon for dial
+    dialToggleButton->setIcon(loadThemedIcon("dial"));  // Icon for dial
     dialToggleButton->setFixedSize(30, 30);
     dialToggleButton->setToolTip("Toggle Page Dial");
     dialToggleButton->setStyleSheet(buttonStyle);
@@ -342,8 +370,8 @@ void MainWindow::setupUi() {
 
     fastForwardButton = new QPushButton(this);
     fastForwardButton->setFixedSize(30, 30);
-    QIcon ffIcon(":/resources/icons/fastforward.png");  // Path to your icon in resources
-    fastForwardButton->setIcon(ffIcon);
+    // QIcon ffIcon(":/resources/icons/fastforward.png");  // Path to your icon in resources
+    fastForwardButton->setIcon(loadThemedIcon("fastforward"));
     fastForwardButton->setToolTip("Toggle Fast Forward");
     fastForwardButton->setStyleSheet(buttonStyle);
 
@@ -376,17 +404,17 @@ void MainWindow::setupUi() {
     colorPreview->setStyleSheet("border-radius: 15px; border: 1px solid gray;");
     colorPreview->setEnabled(false);  // ✅ Prevents it from being clicked
 
-    btnPageSwitch = new QPushButton(QIcon(":/resources/icons/bookpage.png"), "", this);
+    btnPageSwitch = new QPushButton(loadThemedIcon("bookpage"), "", this);
     btnPageSwitch->setStyleSheet(buttonStyle);
-    btnZoom = new QPushButton(QIcon(":/resources/icons/zoom.png"), "", this);
+    btnZoom = new QPushButton(loadThemedIcon("zoom"), "", this);
     btnZoom->setStyleSheet(buttonStyle);
-    btnThickness = new QPushButton(QIcon(":/resources/icons/thickness.png"), "", this);
+    btnThickness = new QPushButton(loadThemedIcon("thickness"), "", this);
     btnThickness->setStyleSheet(buttonStyle);
-    btnColor = new QPushButton(QIcon(":/resources/icons/color.png"), "", this);
+    btnColor = new QPushButton(loadThemedIcon("color"), "", this);
     btnColor->setStyleSheet(buttonStyle);
-    btnTool = new QPushButton(QIcon(":/resources/icons/pen.png"), "", this);
+    btnTool = new QPushButton(loadThemedIcon("pen"), "", this);
     btnTool->setStyleSheet(buttonStyle);
-    btnPresets = new QPushButton(QIcon(":/resources/icons/preset.png"), "", this);
+    btnPresets = new QPushButton(loadThemedIcon("preset"), "", this);
     btnPresets->setStyleSheet(buttonStyle);
 
     connect(btnPageSwitch, &QPushButton::clicked, this, [this]() { changeDialMode(PageSwitching); });
@@ -405,13 +433,14 @@ void MainWindow::setupUi() {
     colorPresets.enqueue(QColor("#FFFFFF"));
 
     // ✅ Button to add current color to presets
-    addPresetButton = new QPushButton(QIcon(":/resources/icons/savepreset.png"), "", this);
+    addPresetButton = new QPushButton(loadThemedIcon("savepreset"), "", this);
     addPresetButton->setStyleSheet(buttonStyle);
     connect(addPresetButton, &QPushButton::clicked, this, &MainWindow::addColorPreset);
 
 
     QHBoxLayout *controlLayout = new QHBoxLayout;
     
+    controlLayout->addWidget(toggleTabBarButton);
     controlLayout->addWidget(selectFolderButton);
     controlLayout->addWidget(loadPdfButton);
     controlLayout->addWidget(clearPdfButton);
@@ -470,15 +499,15 @@ void MainWindow::setupUi() {
         
 
     canvasStack = new QStackedWidget();
+    canvasStack->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
     QVBoxLayout *canvasLayout = new QVBoxLayout;
     canvasLayout->addWidget(panXSlider);
     canvasLayout->addWidget(canvasStack);
 
-
     QHBoxLayout *content_layout = new QHBoxLayout;
-    content_layout->setContentsMargins(5, 5, 5, 5); 
-    content_layout->addLayout(tabLayout); 
+    content_layout->setContentsMargins(5, 0, 5, 5); 
+    content_layout->addWidget(sidebarContainer); 
     content_layout->addWidget(panYSlider);
     content_layout->addLayout(canvasLayout);
 
@@ -498,6 +527,15 @@ void MainWindow::setupUi() {
     benchmarkTimer = new QTimer(this);
     connect(benchmarkButton, &QPushButton::clicked, this, &MainWindow::toggleBenchmark);
     connect(benchmarkTimer, &QTimer::timeout, this, &MainWindow::updateBenchmarkDisplay);
+
+    QString tempDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/temp_session";
+    QDir dir(tempDir);
+
+    // Remove all contents (but keep the directory itself)
+    if (dir.exists()) {
+        dir.removeRecursively();  // Careful: this wipes everything inside
+    }
+    QDir().mkpath(tempDir);  // Recreate clean directory
 
     addNewTab();
 
@@ -574,7 +612,6 @@ void MainWindow::switchPage(int pageNumber) {
 
     if (canvas->isPdfLoadedFunc() && pageNumber - 1 < canvas->getTotalPdfPages()) {
         canvas->loadPdfPage(newPage);
-        // canvas->loadPage(newPage);
     } else {
         canvas->loadPage(newPage);
     }
@@ -777,6 +814,10 @@ void MainWindow::addNewTab() {
 
     zoomSlider->setValue(100 / initialDpr); // Set initial zoom level based on DPR
     updateDialDisplay();
+
+    QString tempDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/temp_session";
+    newCanvas->setSaveFolder(tempDir);
+    
 }
 
 
@@ -1474,4 +1515,17 @@ void MainWindow::addColorPreset() {
         }
         colorPresets.enqueue(currentColor);
     }
+}
+
+// to support dark mode icon switching.
+bool MainWindow::isDarkMode() {
+    QColor bg = palette().color(QPalette::Window);
+    return bg.lightness() < 128;  // Lightness scale: 0 (black) - 255 (white)
+}
+
+QIcon MainWindow::loadThemedIcon(const QString& baseName) {
+    QString path = isDarkMode()
+        ? QString(":/resources/icons/%1_reversed.png").arg(baseName)
+        : QString(":/resources/icons/%1.png").arg(baseName);
+    return QIcon(path);
 }
