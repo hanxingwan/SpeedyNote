@@ -35,6 +35,19 @@ public:
     explicit MainWindow(QWidget *parent = nullptr);
     virtual ~MainWindow();
     int getCurrentPageForCanvas(InkCanvas *canvas); 
+
+    bool lowResPreviewEnabled = true;
+
+    void setLowResPreviewEnabled(bool enabled);
+    bool isLowResPreviewEnabled() const;
+
+    bool areBenchmarkControlsVisible() const;
+    void setBenchmarkControlsVisible(bool visible);
+
+    bool scrollOnTopEnabled = false;
+    bool isScrollOnTopEnabled() const;
+    void setScrollOnTopEnabled(bool enabled);
+
     
 
 private slots:
@@ -105,6 +118,9 @@ private slots:
     bool isDarkMode();
     QIcon loadThemedIcon(const QString& baseName);
 
+    
+
+
 
     
 
@@ -126,6 +142,7 @@ private:
     QPushButton *blackButton;
     QPushButton *whiteButton;
     QLineEdit *customColorInput;
+    QPushButton *customColorButton;
     QPushButton *thicknessButton; // Added thickness button
     QSlider *thicknessSlider; // Added thickness slider
     QFrame *thicknessFrame; // Added thickness frame
@@ -135,6 +152,7 @@ private:
     QPushButton *saveButton; // Button to save file
     QPushButton *saveAnnotatedButton;
     QPushButton *fullscreenButton;
+    QPushButton *openControlPanelButton;
 
     QPushButton *loadPdfButton;
     QPushButton *clearPdfButton;
@@ -174,6 +192,8 @@ private:
     bool tracking = false;
     int accumulatedRotation = 0;
     QSoundEffect *dialClickSound = nullptr;
+
+    int grossTotalClicks = 0;
 
     /*
     enum DialMode {

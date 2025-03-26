@@ -19,12 +19,14 @@
 #include <QSoundEffect>
 #include <QFontDatabase>
 #include <QStandardPaths>
+#include <QSettings>
 // #include "HandwritingLineEdit.h"
+#include "ControlPanelDialog.h"
 
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false) {
 
-    setWindowTitle("SpeedyNote Alpha 0.3.3");
+    setWindowTitle("SpeedyNote Alpha 0.3.5");
     
 
     // QString iconPath = QCoreApplication::applicationDirPath() + "/icon.ico"; 
@@ -34,7 +36,7 @@ MainWindow::MainWindow(QWidget *parent)
     // ✅ Get screen size & adjust window size
     QScreen *screen = QGuiApplication::primaryScreen();
     if (screen) {
-        QSize logicalSize = screen->availableGeometry().size() * 0.9;
+        QSize logicalSize = screen->availableGeometry().size() * 0.89;
         resize(logicalSize);
     }
     // ✅ Create a stacked widget to hold multiple canvases
@@ -52,6 +54,11 @@ MainWindow::MainWindow(QWidget *parent)
     // toggleDial(); // ✅ Toggle dial to adjust layout
    
     zoomSlider->setValue(100 / initialDpr); // Set initial zoom level based on DPR
+
+    QSettings settings("SpeedyNote", "App");
+    lowResPreviewEnabled = settings.value("lowResPreviewEnabled", true).toBool();
+
+    setBenchmarkControlsVisible(false);
 
 }
 
@@ -86,6 +93,8 @@ void MainWindow::setupUi() {
     clearPdfButton->setIcon(pdfDeleteIcon);
     loadPdfButton->setStyleSheet(buttonStyle);
     clearPdfButton->setStyleSheet(buttonStyle);
+    loadPdfButton->setToolTip("Load PDF");
+    clearPdfButton->setToolTip("Clear PDF");
     connect(loadPdfButton, &QPushButton::clicked, this, &MainWindow::loadPdf);
     connect(clearPdfButton, &QPushButton::clicked, this, &MainWindow::clearPdf);
 
@@ -94,8 +103,9 @@ void MainWindow::setupUi() {
     benchmarkButton->setIcon(benchmarkIcon);
     benchmarkButton->setFixedSize(30, 30); // Make the benchmark button smaller
     benchmarkButton->setStyleSheet(buttonStyle);
+    benchmarkButton->setToolTip("Toggle Benchmark");
     benchmarkLabel = new QLabel("PR:N/A", this);
-    benchmarkLabel->setFixedHeight(40);  // Make the benchmark bar smaller
+    benchmarkLabel->setFixedHeight(30);  // Make the benchmark bar smaller
 
     toggleTabBarButton = new QPushButton(this);
     toggleTabBarButton->setIcon(loadThemedIcon("tabs"));  // You can design separate icons for "show" and "hide"
@@ -108,6 +118,7 @@ void MainWindow::setupUi() {
     QIcon folderIcon(loadThemedIcon("folder"));  // Path to your icon in resources
     selectFolderButton->setIcon(folderIcon);
     selectFolderButton->setStyleSheet(buttonStyle);
+    selectFolderButton->setToolTip("Select Save Folder");
     connect(selectFolderButton, &QPushButton::clicked, this, &MainWindow::selectFolder);
     
     
@@ -116,6 +127,7 @@ void MainWindow::setupUi() {
     QIcon saveIcon(loadThemedIcon("save"));  // Path to your icon in resources
     saveButton->setIcon(saveIcon);
     saveButton->setStyleSheet(buttonStyle);
+    saveButton->setToolTip("Save Current Page");
     connect(saveButton, &QPushButton::clicked, this, &MainWindow::saveCurrentPage);
     
     saveAnnotatedButton = new QPushButton(this);
@@ -123,6 +135,7 @@ void MainWindow::setupUi() {
     QIcon saveAnnotatedIcon(loadThemedIcon("saveannotated"));  // Path to your icon in resources
     saveAnnotatedButton->setIcon(saveAnnotatedIcon);
     saveAnnotatedButton->setStyleSheet(buttonStyle);
+    saveAnnotatedButton->setToolTip("Save Page with Background");
     connect(saveAnnotatedButton, &QPushButton::clicked, this, &MainWindow::saveAnnotated);
 
     fullscreenButton = new QPushButton(this);
@@ -183,6 +196,7 @@ void MainWindow::setupUi() {
     customColorInput->setFixedSize(85, 30);
     connect(customColorInput, &QLineEdit::returnPressed, this, &MainWindow::applyCustomColor);
 
+    
     thicknessButton = new QPushButton(this);
     thicknessButton->setIcon(loadThemedIcon("thickness"));
     thicknessButton->setFixedSize(30, 30);
@@ -226,6 +240,7 @@ void MainWindow::setupUi() {
     QIcon bgIcon(loadThemedIcon("background"));  // Path to your icon in resources
     backgroundButton->setIcon(bgIcon);
     backgroundButton->setStyleSheet(buttonStyle);
+    backgroundButton->setToolTip("Set Background Pic");
     connect(backgroundButton, &QPushButton::clicked, this, &MainWindow::selectBackground);
 
     
@@ -235,6 +250,7 @@ void MainWindow::setupUi() {
     QIcon trashIcon(loadThemedIcon("trash"));  // Path to your icon in resources
     deletePageButton->setIcon(trashIcon);
     deletePageButton->setStyleSheet(buttonStyle);
+    deletePageButton->setToolTip("Delete Current Page");
     connect(deletePageButton, &QPushButton::clicked, this, &MainWindow::deleteCurrentPage);
 
     zoomButton = new QPushButton(this);
@@ -268,18 +284,21 @@ void MainWindow::setupUi() {
   
 
     zoom50Button = new QPushButton("0.5x", this);
-    zoom50Button->setFixedSize(40, 30);
+    zoom50Button->setFixedSize(35, 30);
     zoom50Button->setStyleSheet(buttonStyle);
+    zoom50Button->setToolTip("Set Zoom to 50%");
     connect(zoom50Button, &QPushButton::clicked, [this]() { zoomSlider->setValue(50); updateDialDisplay(); });
 
     dezoomButton = new QPushButton("1x", this);
-    dezoomButton->setFixedSize(40, 30);
+    dezoomButton->setFixedSize(30, 30);
     dezoomButton->setStyleSheet(buttonStyle);
+    dezoomButton->setToolTip("Set Zoom to 100%");
     connect(dezoomButton, &QPushButton::clicked, [this]() { zoomSlider->setValue(100); updateDialDisplay();});
 
     zoom200Button = new QPushButton("2x", this);
-    zoom200Button->setFixedSize(40, 30);
+    zoom200Button->setFixedSize(31, 30);
     zoom200Button->setStyleSheet(buttonStyle);
+    zoom200Button->setToolTip("Set Zoom to 200%");
     connect(zoom200Button, &QPushButton::clicked, [this]() { zoomSlider->setValue(200); updateDialDisplay();});
 
     panXSlider = new QSlider(Qt::Horizontal, this);
@@ -295,7 +314,7 @@ void MainWindow::setupUi() {
 
     // 🌟 Left Side: Tabs List
     tabList = new QListWidget(this);
-    tabList->setFixedWidth(110);  // Adjust width as needed
+    tabList->setFixedWidth(122);  // Adjust width as needed
     tabList->setSelectionMode(QAbstractItemView::SingleSelection);
 
 
@@ -303,7 +322,7 @@ void MainWindow::setupUi() {
     addTabButton = new QPushButton(this);
     QIcon addTab(":/resources/icons/addtab.png");  // Path to your icon in resources
     addTabButton->setIcon(addTab);
-    addTabButton->setFixedWidth(110);
+    addTabButton->setFixedWidth(122);
     addTabButton->setFixedHeight(45);  // Adjust height as needed
     connect(addTabButton, &QPushButton::clicked, this, &MainWindow::addNewTab);
 
@@ -347,7 +366,7 @@ void MainWindow::setupUi() {
     pageInput->setMinimum(1);
     pageInput->setMaximum(9999);
     pageInput->setValue(1);
-    pageInput->setMaximumWidth(120);
+    pageInput->setMaximumWidth(100);
     connect(pageInput, QOverload<int>::of(&QSpinBox::valueChanged), this, &MainWindow::switchPage);
 
     jumpToPageButton = new QPushButton(this);
@@ -361,7 +380,7 @@ void MainWindow::setupUi() {
     dialToggleButton = new QPushButton(this);
     dialToggleButton->setIcon(loadThemedIcon("dial"));  // Icon for dial
     dialToggleButton->setFixedSize(30, 30);
-    dialToggleButton->setToolTip("Toggle Page Dial");
+    dialToggleButton->setToolTip("Toggle Magic Dial");
     dialToggleButton->setStyleSheet(buttonStyle);
 
     // ✅ Connect to toggle function
@@ -372,7 +391,7 @@ void MainWindow::setupUi() {
     fastForwardButton->setFixedSize(30, 30);
     // QIcon ffIcon(":/resources/icons/fastforward.png");  // Path to your icon in resources
     fastForwardButton->setIcon(loadThemedIcon("fastforward"));
-    fastForwardButton->setToolTip("Toggle Fast Forward");
+    fastForwardButton->setToolTip("Toggle Fast Forward 8x");
     fastForwardButton->setStyleSheet(buttonStyle);
 
     // ✅ Toggle fast-forward mode
@@ -406,16 +425,22 @@ void MainWindow::setupUi() {
 
     btnPageSwitch = new QPushButton(loadThemedIcon("bookpage"), "", this);
     btnPageSwitch->setStyleSheet(buttonStyle);
+    btnPageSwitch->setToolTip("Set Dial Mode to Page Switching");
     btnZoom = new QPushButton(loadThemedIcon("zoom"), "", this);
     btnZoom->setStyleSheet(buttonStyle);
+    btnZoom->setToolTip("Set Dial Mode to Zoom Ctrl");
     btnThickness = new QPushButton(loadThemedIcon("thickness"), "", this);
     btnThickness->setStyleSheet(buttonStyle);
+    btnThickness->setToolTip("Set Dial Mode to Pen Tip Thickness Ctrl");
     btnColor = new QPushButton(loadThemedIcon("color"), "", this);
     btnColor->setStyleSheet(buttonStyle);
+    btnColor->setToolTip("Set Dial Mode to Color Adjustment");
     btnTool = new QPushButton(loadThemedIcon("pen"), "", this);
     btnTool->setStyleSheet(buttonStyle);
+    btnTool->setToolTip("Set Dial Mode to Tool Switching");
     btnPresets = new QPushButton(loadThemedIcon("preset"), "", this);
     btnPresets->setStyleSheet(buttonStyle);
+    btnPresets->setToolTip("Set Dial Mode to Color Preset Selection");
 
     connect(btnPageSwitch, &QPushButton::clicked, this, [this]() { changeDialMode(PageSwitching); });
     connect(btnZoom, &QPushButton::clicked, this, [this]() { changeDialMode(ZoomControl); });
@@ -435,8 +460,47 @@ void MainWindow::setupUi() {
     // ✅ Button to add current color to presets
     addPresetButton = new QPushButton(loadThemedIcon("savepreset"), "", this);
     addPresetButton->setStyleSheet(buttonStyle);
+    addPresetButton->setToolTip("Add Current Color to Presets");
     connect(addPresetButton, &QPushButton::clicked, this, &MainWindow::addColorPreset);
 
+
+    openControlPanelButton = new QPushButton(this);
+    openControlPanelButton->setIcon(loadThemedIcon("settings"));  // Replace with your actual settings icon
+    openControlPanelButton->setStyleSheet(buttonStyle);
+    openControlPanelButton->setToolTip("Open Control Panel");
+    openControlPanelButton->setFixedSize(30, 30);  // Adjust to match your other buttons
+
+    connect(openControlPanelButton, &QPushButton::clicked, this, [=]() {
+        InkCanvas *canvas = currentCanvas();
+        if (canvas) {
+            ControlPanelDialog dialog(this, canvas, this);
+            dialog.exec();  // Modal
+        }
+    });
+
+    customColorButton = new QPushButton(this);
+    customColorButton->setFixedSize(62, 30);
+    customColorButton->setText("#000000");
+    QColor initialColor = Qt::black;  // Default fallback color
+
+    if (currentCanvas()) {
+        initialColor = currentCanvas()->getPenColor();
+    }
+
+    customColorButton->setStyleSheet(QString("background-color: %1").arg(initialColor.name()));
+
+    QTimer::singleShot(0, this, [=]() {
+        connect(customColorButton, &QPushButton::clicked, this, [=]() {
+            if (!currentCanvas()) return;
+            QColor chosen = QColorDialog::getColor(currentCanvas()->getPenColor(), this, "Select Pen Color");
+            if (chosen.isValid()) {
+                currentCanvas()->setPenColor(chosen);
+                customColorButton->setStyleSheet(QString("background-color: %1").arg(chosen.name()));
+                customColorButton->setText(QString("%1").arg(chosen.name()).toUpper());
+                updateDialDisplay();
+            }
+        });
+    });
 
     QHBoxLayout *controlLayout = new QHBoxLayout;
     
@@ -447,13 +511,14 @@ void MainWindow::setupUi() {
     controlLayout->addWidget(backgroundButton);
     controlLayout->addWidget(saveButton);
     controlLayout->addWidget(saveAnnotatedButton);
+    controlLayout->addWidget(openControlPanelButton);
     controlLayout->addWidget(redButton);
     controlLayout->addWidget(blueButton);
     controlLayout->addWidget(yellowButton);
     controlLayout->addWidget(greenButton);
     controlLayout->addWidget(blackButton);
     controlLayout->addWidget(whiteButton);
-    controlLayout->addWidget(customColorInput);
+    controlLayout->addWidget(customColorButton);
     // controlLayout->addWidget(colorPreview);
     // controlLayout->addWidget(thicknessButton);
     // controlLayout->addWidget(jumpToPageButton);
@@ -476,6 +541,7 @@ void MainWindow::setupUi() {
     controlLayout->addWidget(zoom50Button);
     controlLayout->addWidget(dezoomButton);
     controlLayout->addWidget(zoom200Button);
+    
     controlLayout->addStretch();
     controlLayout->addWidget(pageInput);
     controlLayout->addWidget(benchmarkButton);
@@ -776,7 +842,7 @@ void MainWindow::addNewTab() {
     QLabel *tabLabel = new QLabel(QString("Tab %1").arg(newTabIndex + 1), tabWidget);    
     tabLabel->setObjectName("tabLabel"); // ✅ Name the label for easy retrieval later
     tabLabel->setWordWrap(true); // ✅ Allow text to wrap
-    tabLabel->setFixedWidth(85); // ✅ Adjust width for better readability
+    tabLabel->setFixedWidth(95); // ✅ Adjust width for better readability
     tabLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 
     // ✅ Create the close button (❌)
@@ -798,7 +864,7 @@ void MainWindow::addNewTab() {
     
     // ✅ Create the tab item and set widget
     QListWidgetItem *tabItem = new QListWidgetItem();
-    tabItem->setSizeHint(QSize(77, 45)); // ✅ Adjust height only, keep default style
+    tabItem->setSizeHint(QSize(84, 45)); // ✅ Adjust height only, keep default style
     tabList->addItem(tabItem);
     tabList->setItemWidget(tabItem, tabWidget);  // Attach tab layout
 
@@ -817,6 +883,9 @@ void MainWindow::addNewTab() {
 
     QString tempDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/temp_session";
     newCanvas->setSaveFolder(tempDir);
+    newCanvas->setBackgroundStyle(BackgroundStyle::Grid);
+    newCanvas->setBackgroundColor(Qt::white);
+    newCanvas->setBackgroundDensity(30);  // The default bg settings are here
     
 }
 
@@ -1179,15 +1248,14 @@ void MainWindow::handleDialInput(int angle) {
         
         if (dialClickSound) {
             dialClickSound->play();
+            grossTotalClicks += 1;  // just in case clicks a few times and returns to original position
             tempClicks = currentClicks;
             updateDialDisplay();
             
-
-            // int previewPage = qBound(1, getCurrentPageForCanvas(currentCanvas()) + currentClicks, 99999);
-            // currentCanvas()->loadPdfPreview(previewPage);
-
-            
-            
+            if (isLowResPreviewEnabled()) {
+                int previewPage = qBound(1, getCurrentPageForCanvas(currentCanvas()) + currentClicks, 99999);
+                currentCanvas()->loadPdfPreviewAsync(previewPage);
+            }
             
         }
         
@@ -1215,7 +1283,7 @@ void MainWindow::onDialReleased() {
     */
     
 
-    if (totalClicks != 0) {  // ✅ Only switch pages if movement happened
+    if (totalClicks != 0 || grossTotalClicks != 0) {  // ✅ Only switch pages if movement happened
         saveCurrentPage(); // autosave
 
         int currentPage = getCurrentPageForCanvas(currentCanvas()) + 1;
@@ -1224,15 +1292,19 @@ void MainWindow::onDialReleased() {
         pageInput->setValue(newPage);
         tempClicks = 0;
         updateDialDisplay(); 
+        // currentCanvas()->setPanY(0);
+        if (scrollOnTopEnabled) {
+            panYSlider->setValue(0);
+        }   // This line toggles whether the page is scrolled to the top after switching
         /*
         if (dialClickSound) {
             dialClickSound->play();
         }
         */
-        
     }
-    
+
     accumulatedRotation = 0;  // ✅ Reset tracking
+    grossTotalClicks = 0;
     tracking = false;
 }
 
@@ -1434,7 +1506,8 @@ void MainWindow::handlePresetSelection(int angle) {
         
         QColor selectedColor = colorPresets[currentPresetIndex];
         currentCanvas()->setPenColor(selectedColor);
-        customColorInput->setText(selectedColor.name().toUpper());
+        customColorButton->setText(selectedColor.name().toUpper());
+        customColorButton->setStyleSheet(QString("background-color: %1").arg(selectedColor.name()));
         updateDialDisplay();
         
         if (dialClickSound) dialClickSound->play();  // ✅ Provide feedback
@@ -1479,7 +1552,8 @@ void MainWindow::handleDialColor(int angle) {
     }
 
     currentCanvas()->setPenColor(color);
-    customColorInput->setText(color.name().toUpper());
+    customColorButton->setText(color.name().toUpper());
+    customColorButton->setStyleSheet(QString("background-color: %1").arg(color.name()));
     updateDialDisplay(); 
 
     colorPreview->setStyleSheet(QString("border-radius: 15px; border: 1px solid black; background-color: %1;").arg(color.name()));
@@ -1528,4 +1602,35 @@ QIcon MainWindow::loadThemedIcon(const QString& baseName) {
         ? QString(":/resources/icons/%1_reversed.png").arg(baseName)
         : QString(":/resources/icons/%1.png").arg(baseName);
     return QIcon(path);
+}
+
+// performance optimizations
+void MainWindow::setLowResPreviewEnabled(bool enabled) {
+    lowResPreviewEnabled = enabled;
+
+    QSettings settings("SpeedyNote", "App");
+    settings.setValue("lowResPreviewEnabled", enabled);
+}
+
+bool MainWindow::isLowResPreviewEnabled() const {
+    return lowResPreviewEnabled;
+}
+
+// ui optimizations
+
+bool MainWindow::areBenchmarkControlsVisible() const {
+    return benchmarkButton->isVisible() && benchmarkLabel->isVisible();
+}
+
+void MainWindow::setBenchmarkControlsVisible(bool visible) {
+    benchmarkButton->setVisible(visible);
+    benchmarkLabel->setVisible(visible);
+}
+
+bool MainWindow::isScrollOnTopEnabled() const {
+    return scrollOnTopEnabled;
+}
+
+void MainWindow::setScrollOnTopEnabled(bool enabled) {
+    scrollOnTopEnabled = enabled;
 }

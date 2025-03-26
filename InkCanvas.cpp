@@ -19,6 +19,10 @@
 #include <QInputDevice>
 #include <QTabletEvent>
 
+#include <QtConcurrent/QtConcurrentRun>
+#include <QFuture>
+#include <QFutureWatcher>
+
 #include <poppler-qt6.h>
 
 
@@ -28,11 +32,13 @@ InkCanvas::InkCanvas(QWidget *parent)
     : QWidget(parent), drawing(false), penColor(Qt::black), penThickness(5.0), zoomFactor(100), panOffsetX(0), panOffsetY(0), currentTool(ToolType::Pen) {    
     setAttribute(Qt::WA_StaticContents);
     setTabletTracking(true);
+
+    
     
     // Detect screen resolution and set canvas size
     QScreen *screen = QGuiApplication::primaryScreen();
     if (screen) {
-        QSize logicalSize = screen->availableGeometry().size() * 0.9;
+        QSize logicalSize = screen->availableGeometry().size() * 0.89;
         setFixedSize(logicalSize);
     } else {
         setFixedSize(1920, 1080); // Fallback size
@@ -142,24 +148,35 @@ void InkCanvas::loadPdfPage(int pageNumber) {
 }
 
 
-void InkCanvas::loadPdfPreview(int pageNumber) {
-    if (!pdfDocument) return;
+void InkCanvas::loadPdfPreviewAsync(int pageNumber) {
+    if (!pdfDocument || pageNumber < 0 || pageNumber >= pdfDocument->numPages()) return;
 
-    if (pageNumber >= 0 && pageNumber < pdfDocument->numPages()) {
-        std::unique_ptr<Poppler::Page> page(pdfDocument->page(pageNumber));
-        if (page) {
-            QImage pdfImage = page->renderToImage(72, 72);  // ✅ Render at low DPI
-            
-            if (!pdfImage.isNull()) {
-                // ✅ Scale the preview to match the final page size (4x upscale)
-                QImage upscaledPreview = pdfImage.scaled(pdfImage.width() * 4, pdfImage.height() * 4, 
-                                                         Qt::KeepAspectRatio, Qt::SmoothTransformation);
-                backgroundImage = QPixmap::fromImage(upscaledPreview);
-                update();
-            }
+    QFutureWatcher<QPixmap> *watcher = new QFutureWatcher<QPixmap>(this);
+
+    connect(watcher, &QFutureWatcher<QPixmap>::finished, this, [this, watcher]() {
+        QPixmap result = watcher->result();
+        if (!result.isNull()) {
+            backgroundImage = result;
+            update();  // trigger repaint
         }
-    }
+        watcher->deleteLater();  // Clean up
+    });
+
+    QFuture<QPixmap> future = QtConcurrent::run([=]() -> QPixmap {
+        std::unique_ptr<Poppler::Page> page(pdfDocument->page(pageNumber));
+        if (!page) return QPixmap();
+
+        QImage pdfImage = page->renderToImage(96, 96);
+        if (pdfImage.isNull()) return QPixmap();
+
+        QImage upscaled = pdfImage.scaled(pdfImage.width() * 3, pdfImage.height() * 3,
+                                          Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        return QPixmap::fromImage(upscaled);
+    });
+
+    watcher->setFuture(future);
 }
+
 
 void InkCanvas::startBenchmark() {
     benchmarking = true;
@@ -203,9 +220,43 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
     // Pan offset needs to be reversed because painter works in transformed coordinates
     painter.translate(-panOffsetX, -panOffsetY);
 
+    // 🟨 Optional notebook-style background rendering
+    if (backgroundImage.isNull() && backgroundStyle != BackgroundStyle::None) {
+        // QPixmap bg(size());
+        painter.save();
+        painter.fillRect(QRectF(0, 0, buffer.width(), buffer.height()), backgroundColor);  // Default: Qt::white or Qt::transparent
+
+        // QPainter bgPainter(&bg);
+        QPen linePen(QColor(100, 100, 100, 100));  // Subtle gray lines
+        linePen.setWidthF(1.0);
+        painter.setPen(linePen);
+
+        qreal scaledDensity = backgroundDensity;
+
+        if (devicePixelRatioF() > 1.0)
+            scaledDensity *= devicePixelRatioF();  // Optional DPI handling
+
+        // const int step = backgroundDensity;  // e.g., 40 px
+
+        if (backgroundStyle == BackgroundStyle::Lines || backgroundStyle == BackgroundStyle::Grid) {
+            for (int y = 0; y < buffer.height(); y += scaledDensity)
+                painter.drawLine(0, y, buffer.width(), y);
+        }
+        if (backgroundStyle == BackgroundStyle::Grid) {
+            for (int x = 0; x < buffer.width(); x += scaledDensity)
+            painter.drawLine(x, 0, x, buffer.height());
+        }
+
+        // painter.drawPixmap(0, 0, buffer);
+        painter.restore();
+    }
+
+    // ✅ Draw loaded image or PDF background if available
     if (!backgroundImage.isNull()) {
         painter.drawPixmap(0, 0, backgroundImage);
     }
+
+    // ✅ Draw user's strokes from the buffer (transparent overlay)
     painter.drawPixmap(0, 0, buffer);
 }
 
@@ -342,6 +393,28 @@ void InkCanvas::setTool(ToolType tool) {
 void InkCanvas::setSaveFolder(const QString &folderPath) {
     saveFolder = folderPath;
     clearPdfNoDelete(); 
+
+    QString bgMetaFile = saveFolder + "/.background_config.txt";  // This metadata is for background styles, not to be confused with pdf directories. 
+    if (QFile::exists(bgMetaFile)) {
+        QFile file(bgMetaFile);
+        if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QTextStream in(&file);
+            while (!in.atEnd()) {
+                QString line = in.readLine().trimmed();
+                if (line.startsWith("style=")) {
+                    QString val = line.mid(6);
+                    if (val == "Grid") backgroundStyle = BackgroundStyle::Grid;
+                    else if (val == "Lines") backgroundStyle = BackgroundStyle::Lines;
+                    else backgroundStyle = BackgroundStyle::None;
+                } else if (line.startsWith("color=")) {
+                    backgroundColor = QColor(line.mid(6));
+                } else if (line.startsWith("density=")) {
+                    backgroundDensity = line.mid(8).toInt();
+                }
+            }
+            file.close();
+        }
+    }
 
     // ✅ Check if the folder has a saved PDF path
     QString metadataFile = saveFolder + "/.pdf_path.txt";
@@ -634,4 +707,39 @@ qreal InkCanvas::getPenThickness(){
 
 ToolType InkCanvas::getCurrentTool() {
     return currentTool;
+}
+
+
+// for background
+void InkCanvas::setBackgroundStyle(BackgroundStyle style) {
+    backgroundStyle = style;
+    update();  // Trigger repaint
+}
+
+void InkCanvas::setBackgroundColor(const QColor &color) {
+    backgroundColor = color;
+    update();
+}
+
+void InkCanvas::setBackgroundDensity(int density) {
+    backgroundDensity = density;
+    update();
+}
+
+void InkCanvas::saveBackgroundMetadata() {
+    if (saveFolder.isEmpty()) return;
+
+    QString bgMetaFile = saveFolder + "/.background_config.txt";
+    QFile file(bgMetaFile);
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QTextStream out(&file);
+        QString styleStr = "None";
+        if (backgroundStyle == BackgroundStyle::Grid) styleStr = "Grid";
+        else if (backgroundStyle == BackgroundStyle::Lines) styleStr = "Lines";
+
+        out << "style=" << styleStr << "\n";
+        out << "color=" << backgroundColor.name().toUpper() << "\n";
+        out << "density=" << backgroundDensity << "\n";
+        file.close();
+    }
 }

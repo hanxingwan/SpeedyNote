@@ -12,12 +12,23 @@
 #include <QImage>
 #include <poppler-qt6.h>
 #include <QCache>
+#include <QTimer>
+
+enum class BackgroundStyle {
+    None,
+    Grid,
+    Lines
+};
 
 
 
 class InkCanvas : public QWidget {
     Q_OBJECT
 
+
+    BackgroundStyle backgroundStyle = BackgroundStyle::None;
+    QColor backgroundColor = Qt::transparent;
+    int backgroundDensity = 40;  // pixels between lines
 
 
 public:
@@ -75,7 +86,18 @@ public:
     qreal getPenThickness(); // Added getter for pen thickness
     ToolType getCurrentTool(); // Added getter for tool type
 
-    void loadPdfPreview(int pageNumber);  // ✅ Load a quick preview of the PDF page
+    void loadPdfPreviewAsync(int pageNumber);  // ✅ Load a quick preview of the PDF page
+    // for notebook background below
+    void setBackgroundStyle(BackgroundStyle style);
+    void setBackgroundColor(const QColor &color);
+    void setBackgroundDensity(int density);
+
+    BackgroundStyle getBackgroundStyle() const { return backgroundStyle; }
+    QColor getBackgroundColor() const { return backgroundColor; }
+    int getBackgroundDensity() const { return backgroundDensity; }
+
+    void saveBackgroundMetadata();  // ✅ Save background metadata
+    
 
     
 
@@ -132,6 +154,8 @@ private:
     bool benchmarking;
     std::deque<qint64> processedTimestamps;
     QElapsedTimer benchmarkTimer;
+
+
 };
 
 #endif // INKCANVAS_H
