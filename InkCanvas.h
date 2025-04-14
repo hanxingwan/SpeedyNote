@@ -12,12 +12,23 @@
 #include <QImage>
 #include <poppler-qt5.h>
 #include <QCache>
+#include <QTimer>
+
+enum class BackgroundStyle {
+    None,
+    Grid,
+    Lines
+};
 
 
 
 class InkCanvas : public QWidget {
     Q_OBJECT
 
+
+    BackgroundStyle backgroundStyle = BackgroundStyle::None;
+    QColor backgroundColor = Qt::transparent;
+    int backgroundDensity = 40;  // pixels between lines
 
 
 public:
@@ -71,6 +82,24 @@ public:
 
     void setLastPanY(int pan) { lastPanY = pan; }
     int getLastPanY() const { return lastPanY; }
+    QColor getPenColor(); // Added getter for pen color
+    qreal getPenThickness(); // Added getter for pen thickness
+    ToolType getCurrentTool(); // Added getter for tool type
+
+    void loadPdfPreviewAsync(int pageNumber);  // ✅ Load a quick preview of the PDF page
+    // for notebook background below
+    void setBackgroundStyle(BackgroundStyle style);
+    void setBackgroundColor(const QColor &color);
+    void setBackgroundDensity(int density);
+
+    BackgroundStyle getBackgroundStyle() const { return backgroundStyle; }
+    QColor getBackgroundColor() const { return backgroundColor; }
+    int getBackgroundDensity() const { return backgroundDensity; }
+
+    void saveBackgroundMetadata();  // ✅ Save background metadata
+
+    int getBufferWidth() const { return buffer.width(); }
+    
 
     
 
@@ -115,6 +144,10 @@ private:
     int lastPanX = 0;  // ✅ Default pan X
     int lastPanY = 0;  // ✅ Default pan Y
 
+    // QImage *pdfImage = nullptr;  // ✅ Image for the current PDF page
+
+    bool edited = false;  // ✅ Track if the canvas has been edited
+
     
     
 
@@ -123,6 +156,8 @@ private:
     bool benchmarking;
     std::deque<qint64> processedTimestamps;
     QElapsedTimer benchmarkTimer;
+
+
 };
 
 #endif // INKCANVAS_H

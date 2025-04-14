@@ -8,7 +8,7 @@ set(CMAKE_PREFIX_PATH "C:/Qt/5.15.2/mingw81_64/lib/cmake")
 set(CMAKE_MODULE_PATH "C:/Qt/5.15.2/mingw81_64/lib/cmake/Poppler")
 
 # ✅ Find Qt5 components
-find_package(Qt5 REQUIRED COMPONENTS Core Gui Widgets)
+find_package(Qt5 REQUIRED COMPONENTS Core Gui Widgets Multimedia Concurrent Qml Quick)
 find_package(Poppler REQUIRED)
 
 # ✅ Process the .qrc file properly
@@ -26,8 +26,8 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
 # ✅ Create the executable with resources
-add_executable(NoteApp main.cpp MainWindow.cpp InkCanvas.cpp ${QRCC_FILES})
+add_executable(NoteApp main.cpp MainWindow.cpp InkCanvas.cpp ControlPanelDialog.cpp ${QRCC_FILES})
 
 # ✅ Link necessary Qt5 libraries
 add_compile_definitions(QT_NO_DEPRECATED_WARNINGS)
-target_link_libraries(NoteApp Qt5::Core Qt5::Gui Qt5::Widgets ${POPPLER_LIBRARIES})
+target_link_libraries(NoteApp Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Multimedia Qt5::Concurrent Qt5::Qml Qt5::Quick ${POPPLER_LIBRARIES})

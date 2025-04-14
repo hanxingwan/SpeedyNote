@@ -69,6 +69,12 @@
         "qhboxlayout": "cpp",
         "qlabel": "cpp",
         "qapplication": "cpp",
-        "codecvt": "cpp"
-    }
+        "codecvt": "cpp",
+        "qgestureevent": "cpp",
+        "qstackedwidget": "cpp",
+        "qguiapplication": "cpp",
+        "qlineedit": "cpp",
+        "qfocusevent": "cpp"
+    },
+    "C_Cpp.errorSquiggles": "disabled"
 }
