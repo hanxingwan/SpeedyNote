@@ -17,16 +17,81 @@
 #include <QSoundEffect>
 #include <QFont>
 #include <QQueue>
+#include "SDLControllerManager.h"
 // #include "HandwritingLineEdit.h"
 
 enum DialMode {
+    None,
     PageSwitching,
     ZoomControl,
     ThicknessControl,
     ColorAdjustment,
     ToolSwitching,
-    PresetSelection
+    PresetSelection,
+    PanAndPageScroll
 };
+
+enum class ControllerAction {
+    None,
+    ToggleFullscreen,
+    ToggleDial,
+    Zoom50,
+    ZoomOut,
+    Zoom200,
+    AddPreset,
+    DeletePage,
+    FastForward,
+    OpenControlPanel,
+    RedColor,
+    BlueColor,
+    YellowColor,
+    GreenColor,
+    BlackColor,
+    WhiteColor,
+    CustomColor
+};
+
+static QString actionToString(ControllerAction action) {
+    switch (action) {
+        case ControllerAction::ToggleFullscreen: return "Toggle Fullscreen";
+        case ControllerAction::ToggleDial: return "Toggle Dial";
+        case ControllerAction::Zoom50: return "Zoom 50%";
+        case ControllerAction::ZoomOut: return "Zoom Out";
+        case ControllerAction::Zoom200: return "Zoom 200%";
+        case ControllerAction::AddPreset: return "Add Preset";
+        case ControllerAction::DeletePage: return "Delete Page";
+        case ControllerAction::FastForward: return "Fast Forward";
+        case ControllerAction::OpenControlPanel: return "Open Control Panel";
+        case ControllerAction::RedColor: return "Red";
+        case ControllerAction::BlueColor: return "Blue";
+        case ControllerAction::YellowColor: return "Yellow";
+        case ControllerAction::GreenColor: return "Green";
+        case ControllerAction::BlackColor: return "Black";
+        case ControllerAction::WhiteColor: return "White";
+        case ControllerAction::CustomColor: return "Custom Color";
+        default: return "None";
+    }
+}
+
+static ControllerAction stringToAction(const QString &str) {
+    if (str == "Toggle Fullscreen") return ControllerAction::ToggleFullscreen;
+    if (str == "Toggle Dial") return ControllerAction::ToggleDial;
+    if (str == "Zoom 50%") return ControllerAction::Zoom50;
+    if (str == "Zoom Out") return ControllerAction::ZoomOut;
+    if (str == "Zoom 200%") return ControllerAction::Zoom200;
+    if (str == "Add Preset") return ControllerAction::AddPreset;
+    if (str == "Delete Page") return ControllerAction::DeletePage;
+    if (str == "Fast Forward") return ControllerAction::FastForward;
+    if (str == "Open Control Panel") return ControllerAction::OpenControlPanel;
+    if (str == "Red") return ControllerAction::RedColor;
+    if (str == "Blue") return ControllerAction::BlueColor;
+    if (str == "Yellow") return ControllerAction::YellowColor;
+    if (str == "Green") return ControllerAction::GreenColor;
+    if (str == "Black") return ControllerAction::BlackColor;
+    if (str == "White") return ControllerAction::WhiteColor;
+    if (str == "Custom Color") return ControllerAction::CustomColor;
+    return ControllerAction::None;
+}
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -47,6 +112,19 @@ public:
     bool scrollOnTopEnabled = false;
     bool isScrollOnTopEnabled() const;
     void setScrollOnTopEnabled(bool enabled);
+
+    SDLControllerManager *controllerManager = nullptr;
+    QThread *controllerThread = nullptr;
+
+    QString getHoldMapping(const QString &buttonName);
+    QString getPressMapping(const QString &buttonName);
+
+    void saveButtonMappings();
+    void loadButtonMappings();
+
+    void setHoldMapping(const QString &buttonName, const QString &dialMode);
+    void setPressMapping(const QString &buttonName, const QString &action);
+    DialMode dialModeFromString(const QString &mode);
 
     
 
@@ -210,7 +288,9 @@ private:
     int selectedChannel = 0;  // ✅ Default channel
     */
     
-    DialMode currentDialMode = PageSwitching;  // ✅ Default mode
+    DialMode currentDialMode = PanAndPageScroll;  // ✅ Default mode
+    DialMode temporaryDialMode = None;
+
     QComboBox *dialModeSelector;  // ✅ Mode selector
     QComboBox *channelSelector;  // ✅ Channel selector
     int selectedChannel = 0;  // ✅ Default channel
@@ -230,6 +310,7 @@ private:
     QPushButton *btnColor;
     QPushButton *btnTool;
     QPushButton *btnPresets;
+    QPushButton *btnPannScroll;
     int tempClicks = 0;
 
     QPushButton *dialHiddenButton;  // ✅ Invisible tap button over OLED display
@@ -241,7 +322,31 @@ private:
     qreal initialDpr = getDevicePixelRatio(); // Get initial device pixel ratio
 
     QWidget *sidebarContainer;  // Container for sidebar
+
+    void setTemporaryDialMode(DialMode mode);
+    void clearTemporaryDialMode();
+
+    int accumulatedRotationAfterLimit = 0; 
+
+    int pendingPageFlip = 0;  // -1 for previous, +1 for next, 0 for no flip. This is used for mode PanAndPageScroll
+    void handleDialPanScroll(int angle);
+    void onPanScrollReleased();
+
+    // Add in MainWindow class:
+    QMap<QString, QString> buttonHoldMapping;
+    QMap<QString, QString> buttonPressMapping;
+    QMap<QString, ControllerAction> buttonPressActionMapping;
+
+
+    void handleButtonHeld(const QString &buttonName);
+    void handleButtonReleased(const QString &buttonName);
+
+    void handleControllerButton(const QString &buttonName);
+
+
     
+
+
 
     void setupUi();
 

@@ -21,7 +21,7 @@ ControlPanelDialog::ControlPanelDialog(MainWindow *mainWindow, InkCanvas *target
         tabWidget->addTab(performanceTab, "Performance");
         createToolbarTab();
     }
-
+    createButtonMappingTab();
     // === Buttons ===
     applyButton = new QPushButton("Apply");
     okButton = new QPushButton("OK");
@@ -97,6 +97,19 @@ void ControlPanelDialog::applyChanges() {
     canvas->setBackgroundDensity(densitySpin->value());
     canvas->update();
     canvas->saveBackgroundMetadata();
+
+    // ✅ Apply button mappings back to MainWindow
+    if (mainWindowRef) {
+        for (const QString &button : holdMappingCombos.keys()) {
+            mainWindowRef->setHoldMapping(button, holdMappingCombos[button]->currentText());
+        }
+        for (const QString &button : pressMappingCombos.keys()) {
+            mainWindowRef->setPressMapping(button, pressMappingCombos[button]->currentText());
+        }
+
+        // ✅ Save to persistent settings
+        mainWindowRef->saveButtonMappings();
+    }
 }
 
 void ControlPanelDialog::loadFromCanvas() {
@@ -105,6 +118,20 @@ void ControlPanelDialog::loadFromCanvas() {
     selectedColor = canvas->getBackgroundColor();
 
     colorButton->setStyleSheet(QString("background-color: %1").arg(selectedColor.name()));
+
+    if (mainWindowRef) {
+        for (const QString &button : holdMappingCombos.keys()) {
+            QString mode = mainWindowRef->getHoldMapping(button);
+            int index = holdMappingCombos[button]->findText(mode);
+            if (index >= 0) holdMappingCombos[button]->setCurrentIndex(index);
+        }
+
+        for (const QString &button : pressMappingCombos.keys()) {
+            QString action = mainWindowRef->getPressMapping(button);
+            int index = pressMappingCombos[button]->findText(action);
+            if (index >= 0) pressMappingCombos[button]->setCurrentIndex(index);
+        }
+    }
 }
 
 
@@ -146,4 +173,41 @@ void ControlPanelDialog::createToolbarTab(){
     // Connect the checkbox
     connect(benchmarkVisibilityCheckbox, &QCheckBox::toggled, mainWindowRef, &MainWindow::setBenchmarkControlsVisible);
     connect(scrollOnTopCheckBox, &QCheckBox::toggled, mainWindowRef, &MainWindow::setScrollOnTopEnabled);
+}
+
+
+void ControlPanelDialog::createButtonMappingTab() {
+    QWidget *buttonTab = new QWidget(this);
+    QVBoxLayout *layout = new QVBoxLayout(buttonTab);
+
+    QStringList buttons = {"LEFTSHOULDER", "RIGHTSHOULDER", "PADDLE2", "PADDLE4", "Y", "A", "B", "X", "LEFTSTICK", "START", "GUIDE"};
+    QStringList dialModes = {"None", "PageSwitching", "ZoomControl", "ThicknessControl", "ColorAdjustment", "ToolSwitching", "PresetSelection", "PanAndPageScroll"};
+    QStringList actions = {
+        "None", "Toggle Fullscreen", "Toggle Dial", "Zoom 50%", "Zoom Out", "Zoom 200%",
+        "Add Preset", "Delete Page", "Fast Forward", "Open Control Panel",
+        "Red", "Blue", "Yellow", "Green", "Black", "White", "Custom Color"
+    };
+
+    for (const QString &button : buttons) {
+        QHBoxLayout *h = new QHBoxLayout();
+        h->addWidget(new QLabel(button));
+
+        QComboBox *holdCombo = new QComboBox();
+        holdCombo->addItems(dialModes);
+        holdMappingCombos[button] = holdCombo;
+        h->addWidget(new QLabel("Hold:"));
+        h->addWidget(holdCombo);
+
+        QComboBox *pressCombo = new QComboBox();
+        pressCombo->addItems(actions);
+        pressMappingCombos[button] = pressCombo;
+        h->addWidget(new QLabel("Press:"));
+        h->addWidget(pressCombo);
+
+        layout->addLayout(h);
+    }
+
+    layout->addStretch();
+    buttonTab->setLayout(layout);
+    tabWidget->addTab(buttonTab, "Button Mapping");
 }

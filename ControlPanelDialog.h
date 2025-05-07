@@ -47,6 +47,14 @@ private:
     QWidget *toolbarTab;
     void createToolbarTab();
     void createPerformanceTab();
+
+    QWidget *controllerMappingTab;
+
+    // Mapping comboboxes for hold and press
+    QMap<QString, QComboBox*> holdMappingCombos;
+    QMap<QString, QComboBox*> pressMappingCombos;
+
+    void createButtonMappingTab();
 };
 
 #endif // CONTROLPANELDIALOG_H

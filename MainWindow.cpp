@@ -22,6 +22,7 @@
 #include <QSettings>
 // #include "HandwritingLineEdit.h"
 #include "ControlPanelDialog.h"
+#include "SDLControllerManager.h"
 
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false) {
@@ -46,6 +47,15 @@ MainWindow::MainWindow(QWidget *parent)
     // ✅ Create the first tab (default canvas)
     // addNewTab();
     setupUi();    // ✅ Move all UI setup here
+
+    controllerManager = new SDLControllerManager();
+    controllerThread = new QThread(this);
+
+    controllerManager->moveToThread(controllerThread);
+    connect(controllerThread, &QThread::started, controllerManager, &SDLControllerManager::start);
+    connect(controllerThread, &QThread::finished, controllerManager, &SDLControllerManager::deleteLater);
+
+    controllerThread->start();
 
     
     updateZoom(); // ✅ Keep this for initial zoom adjustment
@@ -386,6 +396,9 @@ void MainWindow::setupUi() {
     // ✅ Connect to toggle function
     connect(dialToggleButton, &QPushButton::clicked, this, &MainWindow::toggleDial);
 
+    // toggleDial();
+
+    
 
     fastForwardButton = new QPushButton(this);
     fastForwardButton->setFixedSize(30, 30);
@@ -441,6 +454,9 @@ void MainWindow::setupUi() {
     btnPresets = new QPushButton(loadThemedIcon("preset"), "", this);
     btnPresets->setStyleSheet(buttonStyle);
     btnPresets->setToolTip("Set Dial Mode to Color Preset Selection");
+    btnPannScroll = new QPushButton(loadThemedIcon("scroll"), "", this);
+    btnPannScroll->setStyleSheet(buttonStyle);
+    btnPannScroll->setToolTip("Slide and turn pages with the dial");
 
     connect(btnPageSwitch, &QPushButton::clicked, this, [this]() { changeDialMode(PageSwitching); });
     connect(btnZoom, &QPushButton::clicked, this, [this]() { changeDialMode(ZoomControl); });
@@ -448,6 +464,8 @@ void MainWindow::setupUi() {
     connect(btnColor, &QPushButton::clicked, this, [this]() { changeDialMode(ColorAdjustment); });
     connect(btnTool, &QPushButton::clicked, this, [this]() { changeDialMode(ToolSwitching); });
     connect(btnPresets, &QPushButton::clicked, this, [this]() { changeDialMode(PresetSelection); }); 
+    connect(btnPannScroll, &QPushButton::clicked, this, [this]() { changeDialMode(PanAndPageScroll); });
+
 
     // ✅ Ensure at least one preset exists (black placeholder)
     colorPresets.enqueue(QColor("#000000"));
@@ -526,6 +544,7 @@ void MainWindow::setupUi() {
     controlLayout->addWidget(fastForwardButton);
     // controlLayout->addWidget(channelSelector);
     controlLayout->addWidget(btnPageSwitch);
+    controlLayout->addWidget(btnPannScroll);
     controlLayout->addWidget(btnZoom);
     controlLayout->addWidget(btnThickness);
     controlLayout->addWidget(btnColor);
@@ -542,17 +561,18 @@ void MainWindow::setupUi() {
     controlLayout->addWidget(dezoomButton);
     controlLayout->addWidget(zoom200Button);
     
-    controlLayout->addStretch();
+    
     controlLayout->addWidget(pageInput);
     controlLayout->addWidget(benchmarkButton);
     controlLayout->addWidget(benchmarkLabel);
     controlLayout->addWidget(deletePageButton);
+    controlLayout->addStretch();
     
     
 
     QWidget *controlBar = new QWidget;
     controlBar->setLayout(controlLayout);
-    controlBar->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    controlBar->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
 
     QPalette palette = QGuiApplication::palette();
     QColor highlightColor = palette.highlight().color();  // System highlight color
@@ -608,6 +628,8 @@ void MainWindow::setupUi() {
 }
 
 MainWindow::~MainWindow() {
+
+    saveButtonMappings();  // ✅ Save on exit, as backup
     delete canvas;
 }
 
@@ -1123,6 +1145,17 @@ void MainWindow::toggleDial() {
         dialDisplay = new QLabel(dialContainer);
     }
     updateDialDisplay(); // ✅ Ensure it's updated before showing
+
+    if (controllerManager) {
+        connect(controllerManager, &SDLControllerManager::buttonHeld, this, &MainWindow::handleButtonHeld);
+        connect(controllerManager, &SDLControllerManager::buttonReleased, this, &MainWindow::handleButtonReleased);
+        connect(controllerManager, &SDLControllerManager::leftStickAngleChanged, pageDial, &QDial::setValue);
+        connect(controllerManager, &SDLControllerManager::leftStickReleased, pageDial, &QDial::sliderReleased);
+        connect(controllerManager, &SDLControllerManager::buttonSinglePress, this, &MainWindow::handleControllerButton);
+    }
+
+    loadButtonMappings();  // ✅ Load button mappings for the controller
+
 }
 
 void MainWindow::updateDialDisplay() {
@@ -1192,7 +1225,10 @@ void MainWindow::updateDialDisplay() {
                                             .arg(colorPresets[currentPresetIndex].name().remove("#"))); // ✅ Display hex color
             // dialIconView->setPixmap(QPixmap(":/resources/reversed_icons/preset_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
             break;
-        
+        case DialMode::PanAndPageScroll:
+            dialIconView->setPixmap(QPixmap(":/resources/icons/scroll_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+            dialDisplay->setText(QString("\n\nPage\n%1").arg(getCurrentPageForCanvas(currentCanvas()) + 1));
+            break;
     }
 }
 
@@ -1248,17 +1284,22 @@ void MainWindow::handleDialInput(int angle) {
         
         if (dialClickSound) {
             dialClickSound->play();
-            grossTotalClicks += 1;  // just in case clicks a few times and returns to original position
+    
+            // ✅ Vibrate controller
+            SDL_GameController *controller = controllerManager->getController();
+            if (controller) {
+                SDL_GameControllerRumble(controller, 0xA000, 0xF000, 10);  // Vibrate shortly
+            }
+    
+            grossTotalClicks += 1;
             tempClicks = currentClicks;
             updateDialDisplay();
-            
+    
             if (isLowResPreviewEnabled()) {
                 int previewPage = qBound(1, getCurrentPageForCanvas(currentCanvas()) + currentClicks, 99999);
                 currentCanvas()->loadPdfPreviewAsync(previewPage);
             }
-            
         }
-        
     }
 
     lastAngle = angle;  // ✅ Store last position
@@ -1326,6 +1367,14 @@ void MainWindow::handleToolSelection(int angle) {
         if (dialClickSound) {
             dialClickSound->play();
         }
+
+        SDL_GameController *controller = controllerManager->getController();
+
+        if (controller) {
+            SDL_GameControllerRumble(controller, 0xA000, 0xF000, 20);  // ✅ Vibrate controller
+        }
+
+        
         updateDialDisplay();  // ✅ Update dial display]
     }
 }
@@ -1429,6 +1478,11 @@ void MainWindow::changeDialMode(DialMode mode) {
             connect(pageDial, &QDial::valueChanged, this, &MainWindow::handlePresetSelection);
             connect(pageDial, &QDial::sliderReleased, this, &MainWindow::onPresetReleased);
             break;
+        case PanAndPageScroll:
+            connect(pageDial, &QDial::valueChanged, this, &MainWindow::handleDialPanScroll);
+            connect(pageDial, &QDial::sliderReleased, this, &MainWindow::onPanScrollReleased);
+            break;
+        
     }
 }
 
@@ -1454,7 +1508,7 @@ void MainWindow::handleDialZoom(int angle) {
     }
 
     // ✅ Apply zoom dynamically (instead of waiting for release)
-    int newZoom = qBound(20, zoomSlider->value() + (delta / 2), 250);  
+    int newZoom = qBound(20, zoomSlider->value() + (delta / 4), 250);  
     zoomSlider->setValue(newZoom);
     updateZoom();  // ✅ Ensure zoom updates immediately
     updateDialDisplay(); 
@@ -1466,6 +1520,93 @@ void MainWindow::onZoomReleased() {
     accumulatedRotation = 0;
     tracking = false;
 }
+
+// New variable (add to MainWindow.h near accumulatedRotation)
+int accumulatedRotationAfterLimit = 0;
+
+void MainWindow::handleDialPanScroll(int angle) {
+    if (!tracking) {
+        startAngle = angle;
+        accumulatedRotation = 0;
+        accumulatedRotationAfterLimit = 0;
+        tracking = true;
+        lastAngle = angle;
+        pendingPageFlip = 0;
+        return;
+    }
+
+    int delta = angle - lastAngle;
+
+    // Handle 360 wrap
+    if (delta > 180) delta -= 360;
+    if (delta < -180) delta += 360;
+
+    accumulatedRotation += delta;
+
+    // Pan scroll
+    int panDelta = delta * 4;  // Adjust scroll sensitivity here
+    int currentPan = panYSlider->value();
+    int newPan = currentPan + panDelta;
+
+    // Clamp pan slider
+    newPan = qBound(panYSlider->minimum(), newPan, panYSlider->maximum());
+    panYSlider->setValue(newPan);
+
+    // ✅ NEW → if slider reached top/bottom, accumulate AFTER LIMIT
+    if (newPan == panYSlider->maximum()) {
+        accumulatedRotationAfterLimit += delta;
+
+        if (accumulatedRotationAfterLimit >= 120) {
+            pendingPageFlip = +1;  // Flip next when released
+        }
+    } 
+    else if (newPan == panYSlider->minimum()) {
+        accumulatedRotationAfterLimit += delta;
+
+        if (accumulatedRotationAfterLimit <= -120) {
+            pendingPageFlip = -1;  // Flip previous when released
+        }
+    } 
+    else {
+        // Reset after limit accumulator when not at limit
+        accumulatedRotationAfterLimit = 0;
+        pendingPageFlip = 0;
+    }
+
+    lastAngle = angle;
+}
+
+void MainWindow::onPanScrollReleased() {
+    // ✅ Perform page flip only when dial released and flip is pending
+    if (pendingPageFlip != 0) {
+        saveCurrentPage();
+
+        int currentPage = getCurrentPageForCanvas(currentCanvas());
+        int newPage = qBound(1, currentPage + pendingPageFlip + 1, 99999);
+        switchPage(newPage);
+        pageInput->setValue(newPage);
+        updateDialDisplay();
+
+        SDL_GameController *controller = controllerManager->getController();
+        if (controller) {
+            SDL_GameControllerRumble(controller, 0xA000, 0xF000, 25);  // Vibrate shortly
+        }
+
+        // Reset pan to top or bottom accordingly
+        if (pendingPageFlip == +1) {
+            panYSlider->setValue(0);  // New page → scroll top
+        } else if (pendingPageFlip == -1) {
+            panYSlider->setValue(panYSlider->maximum());  // Previous page → scroll bottom
+        }
+    }
+
+    // Reset states
+    pendingPageFlip = 0;
+    accumulatedRotation = 0;
+    accumulatedRotationAfterLimit = 0;
+    tracking = false;
+}
+
 
 
 void MainWindow::handleDialThickness(int angle) {
@@ -1511,6 +1652,10 @@ void MainWindow::handlePresetSelection(int angle) {
         updateDialDisplay();
         
         if (dialClickSound) dialClickSound->play();  // ✅ Provide feedback
+        SDL_GameController *controller = controllerManager->getController();
+            if (controller) {
+                SDL_GameControllerRumble(controller, 0xA000, 0xF000, 25);  // Vibrate shortly
+            }
     }
 }
 
@@ -1633,4 +1778,165 @@ bool MainWindow::isScrollOnTopEnabled() const {
 
 void MainWindow::setScrollOnTopEnabled(bool enabled) {
     scrollOnTopEnabled = enabled;
+}
+
+
+
+
+void MainWindow::setTemporaryDialMode(DialMode mode) {
+    if (temporaryDialMode == None) {
+        temporaryDialMode = currentDialMode;
+    }
+    changeDialMode(mode);
+}
+
+void MainWindow::clearTemporaryDialMode() {
+    if (temporaryDialMode != None) {
+        changeDialMode(temporaryDialMode);
+        temporaryDialMode = None;
+    }
+}
+
+
+
+void MainWindow::handleButtonHeld(const QString &buttonName) {
+    QString mode = buttonHoldMapping.value(buttonName, "None");
+    if (mode != "None") {
+        setTemporaryDialMode(dialModeFromString(mode));
+        return;
+    }
+}
+
+void MainWindow::handleButtonReleased(const QString &buttonName) {
+    QString mode = buttonHoldMapping.value(buttonName, "None");
+    if (mode != "None") {
+        clearTemporaryDialMode();
+    }
+}
+
+void MainWindow::setHoldMapping(const QString &buttonName, const QString &dialMode) {
+    buttonHoldMapping[buttonName] = dialMode;
+}
+
+void MainWindow::setPressMapping(const QString &buttonName, const QString &action) {
+    buttonPressMapping[buttonName] = action;
+    buttonPressActionMapping[buttonName] = stringToAction(action);  // ✅ THIS LINE WAS MISSING
+}
+
+
+DialMode MainWindow::dialModeFromString(const QString &mode) {
+    if (mode == "PageSwitching") return PageSwitching;
+    if (mode == "ZoomControl") return ZoomControl;
+    if (mode == "ThicknessControl") return ThicknessControl;
+    if (mode == "ColorAdjustment") return ColorAdjustment;
+    if (mode == "ToolSwitching") return ToolSwitching;
+    if (mode == "PresetSelection") return PresetSelection;
+    if (mode == "PanAndPageScroll") return PanAndPageScroll;
+    return PanAndPageScroll;
+}
+
+// MainWindow.cpp
+
+QString MainWindow::getHoldMapping(const QString &buttonName) {
+    return buttonHoldMapping.value(buttonName, "None");
+}
+
+QString MainWindow::getPressMapping(const QString &buttonName) {
+    return buttonPressMapping.value(buttonName, "None");
+}
+
+void MainWindow::saveButtonMappings() {
+    QSettings settings("SpeedyNote", "App");
+
+    settings.beginGroup("ButtonHoldMappings");
+    for (auto it = buttonHoldMapping.begin(); it != buttonHoldMapping.end(); ++it) {
+        settings.setValue(it.key(), it.value());
+    }
+    settings.endGroup();
+
+    settings.beginGroup("ButtonPressMappings");
+    for (auto it = buttonPressMapping.begin(); it != buttonPressMapping.end(); ++it) {
+        settings.setValue(it.key(), it.value());
+    }
+    settings.endGroup();
+}
+
+void MainWindow::loadButtonMappings() {
+    QSettings settings("SpeedyNote", "App");
+
+    settings.beginGroup("ButtonHoldMappings");
+    QStringList holdKeys = settings.allKeys();
+    for (const QString &key : holdKeys) {
+        buttonHoldMapping[key] = settings.value(key, "None").toString();
+    }
+    settings.endGroup();
+
+    settings.beginGroup("ButtonPressMappings");
+    QStringList pressKeys = settings.allKeys();
+    for (const QString &key : pressKeys) {
+        QString value = settings.value(key, "None").toString();
+        buttonPressMapping[key] = value;
+
+        // ✅ ADD THIS LINE
+        buttonPressActionMapping[key] = stringToAction(value);
+    }
+    settings.endGroup();
+}
+
+
+void MainWindow::handleControllerButton(const QString &buttonName) {  // This is for single press functions
+    ControllerAction action = buttonPressActionMapping.value(buttonName, ControllerAction::None);
+
+    switch (action) {
+        case ControllerAction::ToggleFullscreen:
+            fullscreenButton->click();
+            break;
+        case ControllerAction::ToggleDial:
+            toggleDial();
+            break;
+        case ControllerAction::Zoom50:
+            zoom50Button->click();
+            break;
+        case ControllerAction::ZoomOut:
+            dezoomButton->click();
+            break;
+        case ControllerAction::Zoom200:
+            zoom200Button->click();
+            break;
+        case ControllerAction::AddPreset:
+            addPresetButton->click();
+            break;
+        case ControllerAction::DeletePage:
+            deletePageButton->click();  // assuming you have this
+            break;
+        case ControllerAction::FastForward:
+            fastForwardButton->click();  // assuming you have this
+            break;
+        case ControllerAction::OpenControlPanel:
+            openControlPanelButton->click();
+            break;
+        case ControllerAction::RedColor:
+            redButton->click();
+            break;
+        case ControllerAction::BlueColor:
+            blueButton->click();
+            break;
+        case ControllerAction::YellowColor:
+            yellowButton->click();
+            break;
+        case ControllerAction::GreenColor:
+            greenButton->click();
+            break;
+        case ControllerAction::BlackColor:
+            blackButton->click();
+            break;
+        case ControllerAction::WhiteColor:
+            whiteButton->click();
+            break;
+        case ControllerAction::CustomColor:
+            customColorButton->click();
+            break;
+        default:
+            break;
+    }
 }
