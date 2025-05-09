@@ -21,17 +21,9 @@ _A lightweight, fast, and stylus-optimized note-taking app built for classic tab
 
 ## 📸 Screenshots
 
- - **Drawing**
-
- ![draw](https://i.imgur.com/3hckMMU.gif)
-
- - **Dial UI / Joycon Controls**
-
- ![pdf](https://i.imgur.com/uWmliEC.gif)
-
- - **Overlay Grid Options**
-  
- ![grid](https://i.imgur.com/YaEdx1p.gif)
+| Drawing | Dial UI / Joycon Controls | Overlay Grid Options |
+|----------------|------------------------|-----------------------|
+| ![draw](https://i.imgur.com/iARL6Vo.gif) | ![pdf](https://i.imgur.com/NnrqOQQ.gif) | ![grid](https://i.imgur.com/YaEdx1p.gif) |
 
 
 ---
