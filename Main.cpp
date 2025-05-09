@@ -41,7 +41,16 @@ int main(int argc, char *argv[]) {
 
     qputenv("QT_IM_MODULE", QByteArray("qtvirtualkeyboard"));  // ✅ Enable Virtual Keyboard
     QApplication app(argc, argv);
+    QString notebookFile;
+    if (argc >= 2) {
+        notebookFile = QString::fromLocal8Bit(argv[1]);
+        qDebug() << "Notebook file received:" << notebookFile;
+    }
+
     MainWindow w;
+    if (!notebookFile.isEmpty()) {
+        w.importNotebookFromFile(notebookFile);
+    }
     w.show();
     return app.exec();
 }

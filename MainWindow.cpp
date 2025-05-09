@@ -20,6 +20,7 @@
 #include <QFontDatabase>
 #include <QStandardPaths>
 #include <QSettings>
+#include <QMessageBox>
 // #include "HandwritingLineEdit.h"
 #include "ControlPanelDialog.h"
 #include "SDLControllerManager.h"
@@ -27,7 +28,7 @@
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false) {
 
-    setWindowTitle("SpeedyNote Alpha 0.3.5");
+    setWindowTitle("SpeedyNote Beta 0.4.0");
     
 
     // QString iconPath = QCoreApplication::applicationDirPath() + "/icon.ico"; 
@@ -107,6 +108,34 @@ void MainWindow::setupUi() {
     clearPdfButton->setToolTip("Clear PDF");
     connect(loadPdfButton, &QPushButton::clicked, this, &MainWindow::loadPdf);
     connect(clearPdfButton, &QPushButton::clicked, this, &MainWindow::clearPdf);
+
+    exportNotebookButton = new QPushButton(this);
+    exportNotebookButton->setFixedSize(30, 30);
+    QIcon exportIcon(loadThemedIcon("export"));  // Path to your icon in resources
+    exportNotebookButton->setIcon(exportIcon);
+    exportNotebookButton->setStyleSheet(buttonStyle);
+    exportNotebookButton->setToolTip("Export Notebook Into .SNPKG File");
+    importNotebookButton = new QPushButton(this);
+    importNotebookButton->setFixedSize(30, 30);
+    QIcon importIcon(loadThemedIcon("import"));  // Path to your icon in resources
+    importNotebookButton->setIcon(importIcon);
+    importNotebookButton->setStyleSheet(buttonStyle);
+    importNotebookButton->setToolTip("Import Notebook From .SNPKG File");
+
+    connect(exportNotebookButton, &QPushButton::clicked, this, [=]() {
+        QString filename = QFileDialog::getSaveFileName(this, "Export Notebook", "", "SpeedyNote Package (*.snpkg)");
+        if (!filename.isEmpty()) {
+            if (!filename.endsWith(".snpkg")) filename += ".snpkg";
+            currentCanvas()->exportNotebook(filename);
+        }
+    });
+    
+    connect(importNotebookButton, &QPushButton::clicked, this, [=]() {
+        QString filename = QFileDialog::getOpenFileName(this, "Import Notebook", "", "SpeedyNote Package (*.snpkg)");
+        if (!filename.isEmpty()) {
+            currentCanvas()->importNotebook(filename);
+        }
+    });
 
     benchmarkButton = new QPushButton(this);
     QIcon benchmarkIcon(loadThemedIcon("benchmark"));  // Path to your icon in resources
@@ -524,6 +553,9 @@ void MainWindow::setupUi() {
     
     controlLayout->addWidget(toggleTabBarButton);
     controlLayout->addWidget(selectFolderButton);
+
+    controlLayout->addWidget(exportNotebookButton);
+    controlLayout->addWidget(importNotebookButton);
     controlLayout->addWidget(loadPdfButton);
     controlLayout->addWidget(clearPdfButton);
     controlLayout->addWidget(backgroundButton);
@@ -875,7 +907,16 @@ void MainWindow::addNewTab() {
     
     // ✅ Handle tab closing when the button is clicked
     connect(closeButton, &QPushButton::clicked, this, [=]() {
-        removeTabAt(newTabIndex);
+
+        // Find the item associated with this button's parent (tabWidget)
+        for (int i = 0; i < tabList->count(); ++i) {
+            QListWidgetItem *item = tabList->item(i);
+            QWidget *widget = tabList->itemWidget(item);
+            if (widget == tabWidget) {
+                removeTabAt(i);
+                return;
+            }
+        }
     });
 
     // ✅ Add widgets to the tab layout
@@ -1939,4 +1980,24 @@ void MainWindow::handleControllerButton(const QString &buttonName) {  // This is
         default:
             break;
     }
+}
+
+
+void MainWindow::importNotebookFromFile(const QString &packageFile) {
+
+    QString destDir = QFileDialog::getExistingDirectory(this, "Select Working Directory for Notebook");
+
+    if (destDir.isEmpty()) {
+        QMessageBox::warning(this, "Import Cancelled", "No directory selected. Notebook will not be opened.");
+        return;
+    }
+
+    InkCanvas *canvas = currentCanvas();
+    if (!canvas) return;
+
+    canvas->importNotebookTo(packageFile, destDir);
+
+    // Change saveFolder in InkCanvas
+    canvas->setSaveFolder(destDir);
+    canvas->loadPage(0);
 }

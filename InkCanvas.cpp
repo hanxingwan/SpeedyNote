@@ -23,6 +23,12 @@
 #include <QFuture>
 #include <QFutureWatcher>
 
+#include <QDirIterator>
+#include <QFileInfo>
+#include <QProcess>
+#include <QTemporaryDir>
+#include <QMessageBox>
+
 #include <poppler-qt6.h>
 
 
@@ -394,6 +400,11 @@ void InkCanvas::setSaveFolder(const QString &folderPath) {
     saveFolder = folderPath;
     clearPdfNoDelete(); 
 
+    if (!saveFolder.isEmpty()) {
+        QDir().mkpath(saveFolder);
+        loadNotebookId();  // ✅ Load notebook ID when save folder is set
+    }
+
     QString bgMetaFile = saveFolder + "/.background_config.txt";  // This metadata is for background styles, not to be confused with pdf directories. 
     if (QFile::exists(bgMetaFile)) {
         QFile file(bgMetaFile);
@@ -448,7 +459,7 @@ void InkCanvas::saveToFile(int pageNumber) {
     if (saveFolder.isEmpty()) {
         return;
     }
-    QString filePath = saveFolder + QString("/%1_%2.png").arg(QFileInfo(saveFolder).baseName()).arg(pageNumber, 5, 10, QChar('0'));
+    QString filePath = saveFolder + QString("/%1_%2.png").arg(notebookId).arg(pageNumber, 5, 10, QChar('0'));
 
     // ✅ If no file exists and the buffer is empty, do nothing
     
@@ -468,7 +479,7 @@ void InkCanvas::saveToFile(int pageNumber) {
 void InkCanvas::saveAnnotated(int pageNumber) {
     if (saveFolder.isEmpty()) return;
 
-    QString filePath = saveFolder + QString("/annotated_%1_%2.png").arg(QFileInfo(saveFolder).baseName()).arg(pageNumber, 5, 10, QChar('0'));
+    QString filePath = saveFolder + QString("/annotated_%1_%2.png").arg(notebookId).arg(pageNumber, 5, 10, QChar('0'));
 
     // Use the buffer size to ensure correct resolution
     QImage image(buffer.size(), QImage::Format_ARGB32);
@@ -487,7 +498,7 @@ void InkCanvas::saveAnnotated(int pageNumber) {
 void InkCanvas::loadPage(int pageNumber) {
     if (saveFolder.isEmpty()) return;
 
-    QString fileName = saveFolder + QString("/%1_%2.png").arg(QFileInfo(saveFolder).baseName()).arg(pageNumber, 5, 10, QChar('0'));
+    QString fileName = saveFolder + QString("/%1_%2.png").arg(notebookId).arg(pageNumber, 5, 10, QChar('0'));
 
 
     if (QFile::exists(fileName)) {
@@ -514,13 +525,8 @@ void InkCanvas::loadPage(int pageNumber) {
         } 
         
     } else {
-        QString bgFileName = saveFolder + QString("/bg_%1_%2.png")
-                                    .arg(QFileInfo(saveFolder).baseName())
-                                    .arg(pageNumber, 5, 10, QChar('0'));
-
-        QString metadataFile = saveFolder + QString("/.%1_bgsize_%2.txt")
-                                        .arg(QFileInfo(saveFolder).baseName())
-                                        .arg(pageNumber, 5, 10, QChar('0'));
+        QString bgFileName = saveFolder + QString("/bg_%1_%2.png").arg(notebookId).arg(pageNumber, 5, 10, QChar('0'));
+        QString metadataFile = saveFolder + QString("/.%1_bgsize_%2.txt").arg(notebookId).arg(pageNumber, 5, 10, QChar('0'));
 
         int bgWidth = 0, bgHeight = 0;
         if (QFile::exists(metadataFile)) {
@@ -567,11 +573,9 @@ void InkCanvas::deletePage(int pageNumber) {
     if (saveFolder.isEmpty()) {
         return;
     }
-    QString fileName = saveFolder + QString("/%1_%2.png").arg(QFileInfo(saveFolder).baseName()).arg(pageNumber, 5, 10, QChar('0'));
-    QString bgFileName = saveFolder + QString("/bg_%1_%2.png").arg(QFileInfo(saveFolder).baseName()).arg(pageNumber, 5, 10, QChar('0'));
-    QString metadataFileName = saveFolder + QString("/.%1_bgsize_%2.txt")  
-                                         .arg(QFileInfo(saveFolder).baseName())
-                                         .arg(pageNumber, 5, 10, QChar('0'));
+    QString fileName = saveFolder + QString("/%1_%2.png").arg(notebookId).arg(pageNumber, 5, 10, QChar('0'));
+    QString bgFileName = saveFolder + QString("/bg_%1_%2.png").arg(notebookId).arg(pageNumber, 5, 10, QChar('0'));
+    QString metadataFileName = saveFolder + QString("/.%1_bgsize_%2.txt").arg(notebookId).arg(pageNumber, 5, 10, QChar('0'));
     
     #ifdef Q_OS_WIN
     // Remove hidden attribute before deleting in Windows
@@ -589,7 +593,7 @@ void InkCanvas::setBackground(const QString &filePath, int pageNumber) {
     }
 
     // Construct full path inside save folder
-    QString bgFileName = saveFolder + QString("/bg_%1_%2.png").arg(QFileInfo(saveFolder).baseName()).arg(pageNumber, 5, 10, QChar('0'));
+    QString bgFileName = saveFolder + QString("/bg_%1_%2.png").arg(notebookId).arg(pageNumber, 5, 10, QChar('0'));
 
     // Copy the file to the save folder
     QFile::copy(filePath, bgFileName);
@@ -600,7 +604,7 @@ void InkCanvas::setBackground(const QString &filePath, int pageNumber) {
     if (!bgImage.isNull()) {
         // Save background resolution in metadata file
         QString metadataFile = saveFolder + QString("/.%1_bgsize_%2.txt")
-                                            .arg(QFileInfo(saveFolder).baseName())
+                                            .arg(notebookId)
                                             .arg(pageNumber, 5, 10, QChar('0'));
         QFile file(metadataFile);
         if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
@@ -743,3 +747,172 @@ void InkCanvas::saveBackgroundMetadata() {
         file.close();
     }
 }
+
+
+void InkCanvas::exportNotebook(const QString &destinationFile) {
+    if (destinationFile.isEmpty()) {
+        QMessageBox::warning(nullptr, "Export Error", "No export file specified.");
+        return;
+    }
+
+    if (saveFolder.isEmpty()) {
+        QMessageBox::warning(nullptr, "Export Error", "No notebook loaded (saveFolder is empty)");
+        return;
+    }
+
+    QStringList files;
+
+    // Collect all files from saveFolder
+    QDir dir(saveFolder);
+    QDirIterator it(saveFolder, QDir::Files, QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        QString filePath = it.next();
+        QString relativePath = dir.relativeFilePath(filePath);
+        files << relativePath;
+    }
+
+    if (files.isEmpty()) {
+        QMessageBox::warning(nullptr, "Export Error", "No files found to export.");
+        return;
+    }
+
+    // Generate temporary file list
+    QString tempFileList = saveFolder + "/filelist.txt";
+    QFile listFile(tempFileList);
+    if (listFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QTextStream out(&listFile);
+        for (const QString &file : files) {
+            out << file << "\n";
+        }
+        listFile.close();
+    } else {
+        QMessageBox::warning(nullptr, "Export Error", "Failed to create temporary file list.");
+        return;
+    }
+
+#ifdef _WIN32
+    QString tarExe = QCoreApplication::applicationDirPath() + "/bsdtar.exe";
+#else
+    QString tarExe = "tar";
+#endif
+
+    QStringList args;
+    args << "-cf" << QDir::toNativeSeparators(destinationFile);
+
+    for (const QString &file : files) {
+        args << QDir::toNativeSeparators(file);
+    }
+
+    QProcess process;
+    process.setWorkingDirectory(saveFolder);
+
+    process.start(tarExe, args);
+    if (!process.waitForFinished()) {
+        QMessageBox::warning(nullptr, "Export Error", "Tar process failed to finish.");
+        QFile::remove(tempFileList);
+        return;
+    }
+
+    QFile::remove(tempFileList);
+
+    if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
+        QMessageBox::warning(nullptr, "Export Error", "Tar process failed.");
+        return;
+    }
+
+    QMessageBox::information(nullptr, "Export", "Notebook exported successfully.");
+}
+
+
+void InkCanvas::importNotebook(const QString &packageFile) {
+
+    // Ask user for destination working folder
+    QString destFolder = QFileDialog::getExistingDirectory(nullptr, "Select Destination Folder for Imported Notebook");
+
+    if (destFolder.isEmpty()) {
+        QMessageBox::warning(nullptr, "Import Canceled", "No destination folder selected.");
+        return;
+    }
+
+    // Check if destination folder is empty (optional, good practice)
+    QDir destDir(destFolder);
+    if (!destDir.entryList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot).isEmpty()) {
+        QMessageBox::StandardButton reply = QMessageBox::question(nullptr, "Destination Not Empty",
+            "The selected folder is not empty. Files may be overwritten. Continue?",
+            QMessageBox::Yes | QMessageBox::No);
+        if (reply != QMessageBox::Yes) {
+            return;
+        }
+    }
+
+#ifdef _WIN32
+    QString tarExe = QCoreApplication::applicationDirPath() + "/bsdtar.exe";
+#else
+    QString tarExe = "tar";
+#endif
+
+    // Extract package
+    QStringList args;
+    args << "-xf" << packageFile;
+
+    QProcess process;
+    process.setWorkingDirectory(destFolder);
+    process.start(tarExe, args);
+    process.waitForFinished();
+
+    // Switch notebook folder
+    setSaveFolder(destFolder);
+    loadPage(0);
+
+    QMessageBox::information(nullptr, "Import Complete", "Notebook imported successfully.");
+}
+
+
+void InkCanvas::loadNotebookId() {
+    QString idFile = saveFolder + "/.notebook_id.txt";
+    if (QFile::exists(idFile)) {
+        QFile file(idFile);
+        if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QTextStream in(&file);
+            notebookId = in.readLine().trimmed();
+        }
+    } else {
+        // No ID file → create new random ID
+        notebookId = QUuid::createUuid().toString(QUuid::WithoutBraces).replace("-", "");
+        saveNotebookId();
+    }
+}
+
+void InkCanvas::saveNotebookId() {
+    QString idFile = saveFolder + "/.notebook_id.txt";
+    QFile file(idFile);
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QTextStream out(&file);
+        out << notebookId;
+    }
+}
+
+
+void InkCanvas::importNotebookTo(const QString &packageFile, const QString &destFolder) {
+
+    #ifdef _WIN32
+        QString tarExe = QCoreApplication::applicationDirPath() + "/bsdtar.exe";
+    #else
+        QString tarExe = "tar";
+    #endif
+    
+        QStringList args;
+        args << "-xf" << packageFile;
+    
+        QProcess process;
+        process.setWorkingDirectory(destFolder);
+        process.start(tarExe, args);
+        process.waitForFinished();
+    
+        setSaveFolder(destFolder);
+        loadNotebookId();
+        loadPage(0);
+    
+        QMessageBox::information(nullptr, "Import", "Notebook imported successfully.");
+    }
+    

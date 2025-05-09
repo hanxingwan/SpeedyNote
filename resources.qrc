@@ -62,6 +62,10 @@
     <file>resources/icons/settings_reversed.png</file>
     <file>resources/icons/scroll.png</file>
     <file>resources/icons/scroll_reversed.png</file>
+    <file>resources/icons/import.png</file>
+    <file>resources/icons/import_reversed.png</file>
+    <file>resources/icons/export.png</file>
+    <file>resources/icons/export_reversed.png</file>
     <file>resources/reversed_icons/color_reversed.png</file>
     <file>resources/reversed_icons/bookpage_reversed.png</file>
     <file>resources/reversed_icons/zoom_reversed.png</file>

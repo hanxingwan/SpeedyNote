@@ -126,6 +126,9 @@ public:
     void setPressMapping(const QString &buttonName, const QString &action);
     DialMode dialModeFromString(const QString &mode);
 
+    void importNotebookFromFile(const QString &packageFile);
+
+
     
 
 private slots:
@@ -213,6 +216,10 @@ private:
     QLabel *benchmarkLabel;
     QTimer *benchmarkTimer;
     bool benchmarking;
+
+    QPushButton *exportNotebookButton;
+    QPushButton *importNotebookButton;
+
     QPushButton *redButton;
     QPushButton *blueButton;
     QPushButton *yellowButton;

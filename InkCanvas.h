@@ -97,6 +97,14 @@ public:
     int getBackgroundDensity() const { return backgroundDensity; }
 
     void saveBackgroundMetadata();  // ✅ Save background metadata
+
+    int getBufferWidth() const { return buffer.width(); }
+
+    void exportNotebook(const QString &destinationFile);
+    void importNotebook(const QString &packageFile);
+
+    void importNotebookTo(const QString &packageFile, const QString &destFolder);
+
     
 
     
@@ -154,6 +162,11 @@ private:
     bool benchmarking;
     std::deque<qint64> processedTimestamps;
     QElapsedTimer benchmarkTimer;
+
+    QString notebookId;
+
+    void loadNotebookId();
+    void saveNotebookId();
 
 
 };
