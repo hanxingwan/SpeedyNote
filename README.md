@@ -2,7 +2,7 @@
 
 _A lightweight, fast, and stylus-optimized note-taking app built for classic tablet PCs, low-resolution screens, and vintage hardware._
 
-![cover](https://i.imgur.com/qENmB5x.png)
+![cover](https://i.imgur.com/HkCVF5W.png)
 
 ---
 
@@ -32,7 +32,7 @@ _A lightweight, fast, and stylus-optimized note-taking app built for classic tab
 
 ### ✅ Requirements
 
-- Windows 7/8/10/11/Ubuntu amd64/Kali amd64/PostmarketOS arm64
+- Windows 7/8/10/11/Mac OS 10.13+/Ubuntu amd64/Kali amd64/PostmarketOS arm64
 - Qt 5 or Qt 6 runtime (bundled in Windows releases)
 - Stylus input (Wacom recommended)
 
@@ -77,19 +77,15 @@ SpeedyNote supports controller input, ideal for tablet users:
 
 ## 📁 Building From Source
 
+Notice that the Mac version is VERY UNDERTESTED and I even had to compile poppler-qt6 myself to make it work. 
+ZL and L buttons on Nintendo Switch Joy-Con aren't mapped to anything. 
+
+For now, the Mac version is only a proof of concept and It may not work properly. 
 
 1. Install **Qt 6** and **CMake**
 2. Clone this repository
 3. Run:
 
 ```bash
-rm -r build
-mkdir build
-cd .\build
-cmake -G "MinGW Makefiles" .. 
-cmake --build .  
-& "C:\Qt\6.8.2\mingw_64\bin\windeployqt.exe" "NoteApp.exe"
-Copy-Item -Path "C:\yourfolder\dllpack\*.dll" -Destination "C:\yourfolder\build" -Force
-Copy-Item -Path "C:\yourfolder\bsdtar.exe" -Destination "C:\yourfolder\build" -Force
-./NoteApp.exe
-cd ../
+./build_poppler_qt6.sh
+./compile.sh
