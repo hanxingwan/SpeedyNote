@@ -44,7 +44,7 @@ InkCanvas::InkCanvas(QWidget *parent)
     // Detect screen resolution and set canvas size
     QScreen *screen = QGuiApplication::primaryScreen();
     if (screen) {
-        QSize logicalSize = screen->availableGeometry().size() * 0.89;
+        QSize logicalSize = screen->availableGeometry().size() * 0.90;
         setFixedSize(logicalSize);
     } else {
         setFixedSize(1920, 1080); // Fallback size

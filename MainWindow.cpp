@@ -28,7 +28,7 @@
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false) {
 
-    setWindowTitle("SpeedyNote Beta 0.4.0");
+    setWindowTitle("SpeedyNote Beta 0.4.0 for Mac");
     
 
     // QString iconPath = QCoreApplication::applicationDirPath() + "/icon.ico"; 
@@ -38,7 +38,7 @@ MainWindow::MainWindow(QWidget *parent)
     // ✅ Get screen size & adjust window size
     QScreen *screen = QGuiApplication::primaryScreen();
     if (screen) {
-        QSize logicalSize = screen->availableGeometry().size() * 0.89;
+        QSize logicalSize = screen->availableGeometry().size() * 0.90;
         resize(logicalSize);
     }
     // ✅ Create a stacked widget to hold multiple canvases
@@ -1324,7 +1324,7 @@ void MainWindow::handleDialInput(int angle) {
     if (currentClicks != previousClicks) {  // ✅ Play sound if a new boundary is crossed
         
         if (dialClickSound) {
-            dialClickSound->play();
+            // dialClickSound->play();
     
             // ✅ Vibrate controller
             SDL_GameController *controller = controllerManager->getController();
@@ -1406,7 +1406,7 @@ void MainWindow::handleToolSelection(int angle) {
 
         // ✅ Play click sound when tool changes
         if (dialClickSound) {
-            dialClickSound->play();
+            // dialClickSound->play();
         }
 
         SDL_GameController *controller = controllerManager->getController();
@@ -1692,7 +1692,7 @@ void MainWindow::handlePresetSelection(int angle) {
         customColorButton->setStyleSheet(QString("background-color: %1").arg(selectedColor.name()));
         updateDialDisplay();
         
-        if (dialClickSound) dialClickSound->play();  // ✅ Provide feedback
+        // if (dialClickSound) dialClickSound->play();  // ✅ Provide feedback
         SDL_GameController *controller = controllerManager->getController();
             if (controller) {
                 SDL_GameControllerRumble(controller, 0xA000, 0xF000, 25);  // Vibrate shortly
