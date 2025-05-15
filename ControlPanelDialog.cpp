@@ -75,6 +75,8 @@ void ControlPanelDialog::createBackgroundTab() {
     layout->addWidget(colorButton, 1, 1);
     layout->addWidget(densityLabel, 2, 0);
     layout->addWidget(densitySpin, 2, 1);
+    // layout->setColumnStretch(1, 1); // Stretch the second column
+    layout->setRowStretch(3, 1); // Stretch the last row
 }
 
 void ControlPanelDialog::chooseColor() {
@@ -163,16 +165,28 @@ void ControlPanelDialog::createToolbarTab(){
     QCheckBox *benchmarkVisibilityCheckbox = new QCheckBox("Show Benchmark Controls", toolbarTab);
     benchmarkVisibilityCheckbox->setChecked(mainWindowRef->areBenchmarkControlsVisible());
     toolbarLayout->addWidget(benchmarkVisibilityCheckbox);
+    QLabel *benchmarkNote = new QLabel("This will show/hide the benchmark controls on the toolbar. Press the clock button to start/stop the benchmark.");
+    benchmarkNote->setWordWrap(true);
+    benchmarkNote->setStyleSheet("color: gray; font-size: 10px;");
+    toolbarLayout->addWidget(benchmarkNote);
 
     QCheckBox *scrollOnTopCheckBox = new QCheckBox("Scroll on Top after Page Switching", toolbarTab);
     scrollOnTopCheckBox->setChecked(mainWindowRef->isScrollOnTopEnabled());
     toolbarLayout->addWidget(scrollOnTopCheckBox);
+    QLabel *scrollNote = new QLabel("Enabling this will make the page scroll to the top after switching to a new page.");
+    scrollNote->setWordWrap(true);
+    scrollNote->setStyleSheet("color: gray; font-size: 10px;");
+    toolbarLayout->addWidget(scrollNote);
+    toolbarLayout->addStretch();
     toolbarTab->setLayout(toolbarLayout);
     tabWidget->addTab(toolbarTab, "Features");
+
 
     // Connect the checkbox
     connect(benchmarkVisibilityCheckbox, &QCheckBox::toggled, mainWindowRef, &MainWindow::setBenchmarkControlsVisible);
     connect(scrollOnTopCheckBox, &QCheckBox::toggled, mainWindowRef, &MainWindow::setScrollOnTopEnabled);
+
+    
 }
 
 

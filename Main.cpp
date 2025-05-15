@@ -17,7 +17,8 @@ int main(int argc, char *argv[]) {
     AllocConsole();
     freopen("CONOUT$", "w", stdout);
     freopen("CONOUT$", "w", stderr);
-    */ // to show console for debugging
+     // to show console for debugging
+    */
     
 #endif
     SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI, "1");

@@ -28,7 +28,7 @@
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false) {
 
-    setWindowTitle("SpeedyNote Beta 0.4.0");
+    setWindowTitle("SpeedyNote Beta 0.4.1");
     
 
     // QString iconPath = QCoreApplication::applicationDirPath() + "/icon.ico"; 
@@ -372,6 +372,7 @@ void MainWindow::setupUi() {
     connect(tabList, &QListWidget::currentRowChanged, this, &MainWindow::switchTab);
 
     sidebarContainer = new QWidget(this);  // <-- New container
+    sidebarContainer->setObjectName("sidebarContainer");
     sidebarContainer->setContentsMargins(0, 0, 0, 0);  // <-- Remove margins
     QVBoxLayout *tabLayout = new QVBoxLayout(sidebarContainer);
     tabLayout->setContentsMargins(0, 0, 1, 0); 
@@ -402,6 +403,7 @@ void MainWindow::setupUi() {
 
 
     pageInput = new QSpinBox(this);
+    pageInput->setFixedSize(42, 30);
     pageInput->setMinimum(1);
     pageInput->setMaximum(9999);
     pageInput->setValue(1);
@@ -592,23 +594,26 @@ void MainWindow::setupUi() {
     controlLayout->addWidget(zoom50Button);
     controlLayout->addWidget(dezoomButton);
     controlLayout->addWidget(zoom200Button);
+    controlLayout->addStretch();
     
     
     controlLayout->addWidget(pageInput);
     controlLayout->addWidget(benchmarkButton);
     controlLayout->addWidget(benchmarkLabel);
     controlLayout->addWidget(deletePageButton);
-    controlLayout->addStretch();
+    
     
     
 
     QWidget *controlBar = new QWidget;
+    controlBar->setObjectName("controlBar");
     controlBar->setLayout(controlLayout);
     controlBar->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
 
     QPalette palette = QGuiApplication::palette();
     QColor highlightColor = palette.highlight().color();  // System highlight color
     controlBar->setStyleSheet(QString(R"(
+    QWidget#controlBar {
         background-color: %1;
         }
     )").arg(highlightColor.name()));
@@ -634,6 +639,7 @@ void MainWindow::setupUi() {
 
 
     QWidget *container = new QWidget;
+    container->setObjectName("container");
     QVBoxLayout *mainLayout = new QVBoxLayout(container);
     mainLayout->setContentsMargins(0, 0, 0, 0);  // ✅ Remove extra margins
     // mainLayout->setSpacing(0); // ✅ Remove spacing between toolbar and content
@@ -889,6 +895,7 @@ void MainWindow::addNewTab() {
 
     int newTabIndex = tabList->count();  // New tab index
     QWidget *tabWidget = new QWidget();  // Custom tab container
+    tabWidget->setObjectName("tabWidget"); // Name the widget for easy retrieval later
     QHBoxLayout *tabLayout = new QHBoxLayout(tabWidget);
     tabLayout->setContentsMargins(5, 2, 5, 2);
 
@@ -908,6 +915,14 @@ void MainWindow::addNewTab() {
     // ✅ Handle tab closing when the button is clicked
     connect(closeButton, &QPushButton::clicked, this, [=]() {
 
+        // Prevent closing if it's the last remaining tab
+        if (tabList->count() <= 1) {
+            // Optional: show a message or do nothing silently
+            QMessageBox::information(this, "Notice", "At least one tab must remain open.");
+
+            return;
+        }
+
         // Find the item associated with this button's parent (tabWidget)
         for (int i = 0; i < tabList->count(); ++i) {
             QListWidgetItem *item = tabList->item(i);
@@ -918,6 +933,7 @@ void MainWindow::addNewTab() {
             }
         }
     });
+
 
     // ✅ Add widgets to the tab layout
     tabLayout->addWidget(tabLabel);
@@ -1090,6 +1106,7 @@ void MainWindow::toggleDial() {
     if (!dialContainer) {  
         // ✅ Create floating container for the dial
         dialContainer = new QWidget(this);
+        dialContainer->setObjectName("dialContainer");
         dialContainer->setFixedSize(140, 140);
         dialContainer->setAttribute(Qt::WA_TranslucentBackground);
         dialContainer->setAttribute(Qt::WA_NoSystemBackground);
