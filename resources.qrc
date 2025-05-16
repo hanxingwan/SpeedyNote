@@ -77,6 +77,9 @@
     <file>resources/sounds/dial_click.wav</file>
     <file>resources/fonts/PixelFont.ttf</file>
     <file>resources/fonts/Jersey20-Regular.ttf</file>
+    <file>resources/translations/app_zh.qm</file>
+    <file>resources/translations/app_es.qm</file>
+    <file>resources/translations/app_fr.qm</file>
     
 </qresource>
 </RCC>

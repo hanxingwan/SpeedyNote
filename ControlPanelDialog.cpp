@@ -8,24 +8,24 @@
 ControlPanelDialog::ControlPanelDialog(MainWindow *mainWindow, InkCanvas *targetCanvas, QWidget *parent)
     : QDialog(parent), canvas(targetCanvas), selectedColor(canvas->getBackgroundColor()), mainWindowRef(mainWindow) {
 
-    setWindowTitle("Canvas Control Panel");
+    setWindowTitle(tr("Canvas Control Panel"));
     resize(400, 200);
 
     tabWidget = new QTabWidget(this);
 
     // === Tabs ===
     createBackgroundTab();
-    tabWidget->addTab(backgroundTab, "Background");
+    tabWidget->addTab(backgroundTab, tr("Background"));
     if (mainWindowRef) {
         createPerformanceTab();
-        tabWidget->addTab(performanceTab, "Performance");
+        tabWidget->addTab(performanceTab, tr("Performance"));
         createToolbarTab();
     }
     createButtonMappingTab();
     // === Buttons ===
-    applyButton = new QPushButton("Apply");
-    okButton = new QPushButton("OK");
-    cancelButton = new QPushButton("Cancel");
+    applyButton = new QPushButton(tr("Apply"));
+    okButton = new QPushButton(tr("OK"));
+    cancelButton = new QPushButton(tr("Cancel"));
 
     connect(applyButton, &QPushButton::clicked, this, &ControlPanelDialog::applyChanges);
     connect(okButton, &QPushButton::clicked, this, [=]() {
@@ -52,17 +52,17 @@ ControlPanelDialog::ControlPanelDialog(MainWindow *mainWindow, InkCanvas *target
 void ControlPanelDialog::createBackgroundTab() {
     backgroundTab = new QWidget(this);
 
-    QLabel *styleLabel = new QLabel("Background Style:");
+    QLabel *styleLabel = new QLabel(tr("Background Style:"));
     styleCombo = new QComboBox();
-    styleCombo->addItem("None", static_cast<int>(BackgroundStyle::None));
-    styleCombo->addItem("Grid", static_cast<int>(BackgroundStyle::Grid));
-    styleCombo->addItem("Lines", static_cast<int>(BackgroundStyle::Lines));
+    styleCombo->addItem(tr("None"), static_cast<int>(BackgroundStyle::None));
+    styleCombo->addItem(tr("Grid"), static_cast<int>(BackgroundStyle::Grid));
+    styleCombo->addItem(tr("Lines"), static_cast<int>(BackgroundStyle::Lines));
 
-    QLabel *colorLabel = new QLabel("Background Color:");
+    QLabel *colorLabel = new QLabel(tr("Background Color:"));
     colorButton = new QPushButton();
     connect(colorButton, &QPushButton::clicked, this, &ControlPanelDialog::chooseColor);
 
-    QLabel *densityLabel = new QLabel("Density:");
+    QLabel *densityLabel = new QLabel(tr("Density:"));
     densitySpin = new QSpinBox();
     densitySpin->setRange(10, 200);
     densitySpin->setSuffix(" px");
@@ -80,7 +80,7 @@ void ControlPanelDialog::createBackgroundTab() {
 }
 
 void ControlPanelDialog::chooseColor() {
-    QColor chosen = QColorDialog::getColor(selectedColor, this, "Select Background Color");
+    QColor chosen = QColorDialog::getColor(selectedColor, this, tr("Select Background Color"));
     if (chosen.isValid()) {
         selectedColor = chosen;
         colorButton->setStyleSheet(QString("background-color: %1").arg(selectedColor.name()));
@@ -141,12 +141,12 @@ void ControlPanelDialog::createPerformanceTab() {
     performanceTab = new QWidget();
     QVBoxLayout *layout = new QVBoxLayout(performanceTab);
 
-    QCheckBox *previewToggle = new QCheckBox("Enable Low-Resolution PDF Previews");
+    QCheckBox *previewToggle = new QCheckBox(tr("Enable Low-Resolution PDF Previews"));
     previewToggle->setChecked(mainWindowRef->isLowResPreviewEnabled());
 
     connect(previewToggle, &QCheckBox::toggled, mainWindowRef, &MainWindow::setLowResPreviewEnabled);
 
-    QLabel *note = new QLabel("Disabling this may improve dial smoothness on low-end devices.");
+    QLabel *note = new QLabel(tr("Disabling this may improve dial smoothness on low-end devices."));
     note->setWordWrap(true);
     note->setStyleSheet("color: gray; font-size: 10px;");
 
@@ -162,28 +162,38 @@ void ControlPanelDialog::createToolbarTab(){
     QVBoxLayout *toolbarLayout = new QVBoxLayout(toolbarTab);
 
     // ✅ Checkbox to show/hide benchmark controls
-    QCheckBox *benchmarkVisibilityCheckbox = new QCheckBox("Show Benchmark Controls", toolbarTab);
+    QCheckBox *benchmarkVisibilityCheckbox = new QCheckBox(tr("Show Benchmark Controls"), toolbarTab);
     benchmarkVisibilityCheckbox->setChecked(mainWindowRef->areBenchmarkControlsVisible());
     toolbarLayout->addWidget(benchmarkVisibilityCheckbox);
-    QLabel *benchmarkNote = new QLabel("This will show/hide the benchmark controls on the toolbar. Press the clock button to start/stop the benchmark.");
+    QLabel *benchmarkNote = new QLabel(tr("This will show/hide the benchmark controls on the toolbar. Press the clock button to start/stop the benchmark."));
     benchmarkNote->setWordWrap(true);
     benchmarkNote->setStyleSheet("color: gray; font-size: 10px;");
     toolbarLayout->addWidget(benchmarkNote);
 
-    QCheckBox *scrollOnTopCheckBox = new QCheckBox("Scroll on Top after Page Switching", toolbarTab);
+    // ✅ Checkbox to show/hide color buttons
+    QCheckBox *colorButtonsVisibilityCheckbox = new QCheckBox(tr("Show Color Buttons"), toolbarTab);
+    colorButtonsVisibilityCheckbox->setChecked(mainWindowRef->areColorButtonsVisible());
+    toolbarLayout->addWidget(colorButtonsVisibilityCheckbox);
+    QLabel *colorButtonsNote = new QLabel(tr("This will show/hide the color buttons on the toolbar"));
+    colorButtonsNote->setWordWrap(true);
+    colorButtonsNote->setStyleSheet("color: gray; font-size: 10px;");
+    toolbarLayout->addWidget(colorButtonsNote);
+
+    QCheckBox *scrollOnTopCheckBox = new QCheckBox(tr("Scroll on Top after Page Switching"), toolbarTab);
     scrollOnTopCheckBox->setChecked(mainWindowRef->isScrollOnTopEnabled());
     toolbarLayout->addWidget(scrollOnTopCheckBox);
-    QLabel *scrollNote = new QLabel("Enabling this will make the page scroll to the top after switching to a new page.");
+    QLabel *scrollNote = new QLabel(tr("Enabling this will make the page scroll to the top after switching to a new page."));
     scrollNote->setWordWrap(true);
     scrollNote->setStyleSheet("color: gray; font-size: 10px;");
     toolbarLayout->addWidget(scrollNote);
     toolbarLayout->addStretch();
     toolbarTab->setLayout(toolbarLayout);
-    tabWidget->addTab(toolbarTab, "Features");
+    tabWidget->addTab(toolbarTab, tr("Features"));
 
 
     // Connect the checkbox
     connect(benchmarkVisibilityCheckbox, &QCheckBox::toggled, mainWindowRef, &MainWindow::setBenchmarkControlsVisible);
+    connect(colorButtonsVisibilityCheckbox, &QCheckBox::toggled, mainWindowRef, &MainWindow::setColorButtonsVisible);
     connect(scrollOnTopCheckBox, &QCheckBox::toggled, mainWindowRef, &MainWindow::setScrollOnTopEnabled);
 
     
@@ -209,13 +219,13 @@ void ControlPanelDialog::createButtonMappingTab() {
         QComboBox *holdCombo = new QComboBox();
         holdCombo->addItems(dialModes);
         holdMappingCombos[button] = holdCombo;
-        h->addWidget(new QLabel("Hold:"));
+        h->addWidget(new QLabel(tr("Hold:")));
         h->addWidget(holdCombo);
 
         QComboBox *pressCombo = new QComboBox();
         pressCombo->addItems(actions);
         pressMappingCombos[button] = pressCombo;
-        h->addWidget(new QLabel("Press:"));
+        h->addWidget(new QLabel(tr("Press:")));
         h->addWidget(pressCombo);
 
         layout->addLayout(h);
@@ -223,5 +233,5 @@ void ControlPanelDialog::createButtonMappingTab() {
 
     layout->addStretch();
     buttonTab->setLayout(layout);
-    tabWidget->addTab(buttonTab, "Button Mapping");
+    tabWidget->addTab(buttonTab, tr("Button Mapping"));
 }

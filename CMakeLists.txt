@@ -1,33 +1,79 @@
 cmake_minimum_required(VERSION 3.10)
-project(NoteApp)
+cmake_policy(SET CMP0074 NEW)
 
+project(NoteApp)
 set(CMAKE_CXX_STANDARD 17)
 
-# Add the correct CMAKE_PREFIX_PATH
-set(CMAKE_PREFIX_PATH "C:/Qt/6.8.2/mingw_64/lib/cmake")
+# ✅ Add correct CMake module search paths
+set(CMAKE_PREFIX_PATH 
+    "C:/Qt/6.8.2/mingw_64/lib/cmake"
+    "C:/libs/SDL2/lib/cmake"
+)
 set(CMAKE_MODULE_PATH "C:/Qt/6.8.2/mingw_64/lib/cmake/Poppler")
+set(SDL2_ROOT "C:/libs/SDL2")
 
-# ✅ Find Qt5 components
+set(TS_FILES
+    ${CMAKE_SOURCE_DIR}/resources/translations/app_zh.ts
+    ${CMAKE_SOURCE_DIR}/resources/translations/app_es.ts
+    ${CMAKE_SOURCE_DIR}/resources/translations/app_fr.ts
+)
+
+# ✅ Prevent SDL2 from redefining main()
+add_compile_definitions(SDL_MAIN_HANDLED)
+
+# ✅ Find all dependencies
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets VirtualKeyboard Multimedia Concurrent)
 find_package(Poppler REQUIRED)
+find_package(SDL2 REQUIRED CONFIG)
+unset(SDL2main CACHE)  # Ensure SDL2main isn't picked up
 
-# ✅ Process the .qrc file properly
+# ✅ Resources
 set(RESOURCES resources.qrc)
 QT6_ADD_RESOURCES(QRCC_FILES ${RESOURCES})
 
-# ✅ Include directories for Poppler
-include_directories("C:/msys64/mingw64/include/poppler")
-include_directories("C:/msys64/mingw64/include/poppler/cpp")
-include_directories("C:/msys64/mingw64/include/poppler/qt6")
+# ✅ Include + Link paths
+include_directories(
+    "C:/msys64/mingw64/include/poppler"
+    "C:/msys64/mingw64/include/poppler/cpp"
+    "C:/msys64/mingw64/include/poppler/qt6"
+    "${SDL2_ROOT}/include"
+)
 link_directories("C:/msys64/mingw64/lib")
 
-# ✅ Enable Qt MOC and RCC
+# ✅ Qt Meta-Object Compiler support
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-# ✅ Create the executable with resources
-add_executable(NoteApp main.cpp MainWindow.cpp InkCanvas.cpp ControlPanelDialog.cpp ${QRCC_FILES})
+# ✅ Build target
+add_executable(NoteApp
+    Main.cpp MainWindow.cpp InkCanvas.cpp ControlPanelDialog.cpp SDLControllerManager.cpp ${QRCC_FILES}
+)
 
-# ✅ Link necessary Qt5 libraries
-add_compile_definitions(QT_NO_DEPRECATED_WARNINGS)
-target_link_libraries(NoteApp Qt6::Core Qt6::Gui Qt6::Widgets Qt6::VirtualKeyboard Qt6::Multimedia Qt6::Concurrent ${POPPLER_LIBRARIES})
+# ✅ Compile .ts → .qm using Qt's lrelease
+find_program(LRELEASE_EXECUTABLE lrelease PATHS "C:/Qt/6.8.2/mingw_64/bin")
+
+foreach(_ts ${TS_FILES})
+    get_filename_component(_qm ${_ts} NAME_WE)
+    set(_qm_file ${CMAKE_CURRENT_BINARY_DIR}/${_qm}.qm)
+    add_custom_command(
+        OUTPUT ${_qm_file}
+        COMMAND ${LRELEASE_EXECUTABLE} ${_ts} -qm ${_qm_file}
+        DEPENDS ${_ts}
+        COMMENT "Generating ${_qm_file}"
+        VERBATIM
+    )
+    list(APPEND QM_FILES ${_qm_file})
+endforeach()
+
+# ✅ Add a target to build translations
+# add_custom_target(translations ALL DEPENDS ${QM_FILES})
+
+#
+
+
+# ✅ Link libraries
+target_link_libraries(NoteApp 
+    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::VirtualKeyboard Qt6::Multimedia Qt6::Concurrent
+    SDL2::SDL2
+    ${POPPLER_LIBRARIES}
+)

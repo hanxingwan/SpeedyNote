@@ -109,6 +109,9 @@ public:
     bool areBenchmarkControlsVisible() const;
     void setBenchmarkControlsVisible(bool visible);
 
+    bool areColorButtonsVisible() const;
+    void setColorButtonsVisible(bool visible);
+
     bool scrollOnTopEnabled = false;
     bool isScrollOnTopEnabled() const;
     void setScrollOnTopEnabled(bool enabled);

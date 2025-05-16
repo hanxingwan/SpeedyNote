@@ -7,6 +7,8 @@
 #include <QQmlApplicationEngine>
 #include <QLoggingCategory>
 #include <QInputMethod>
+#include <QTranslator>
+#include <QLibraryInfo>
 #include "MainWindow.h"
 
 int main(int argc, char *argv[]) {
@@ -17,8 +19,10 @@ int main(int argc, char *argv[]) {
     AllocConsole();
     freopen("CONOUT$", "w", stdout);
     freopen("CONOUT$", "w", stderr);
-     // to show console for debugging
     */
+    
+     // to show console for debugging
+    
     
 #endif
     SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI, "1");
@@ -42,6 +46,22 @@ int main(int argc, char *argv[]) {
 
     qputenv("QT_IM_MODULE", QByteArray("qtvirtualkeyboard"));  // ✅ Enable Virtual Keyboard
     QApplication app(argc, argv);
+
+
+    QTranslator translator;
+    QString locale = QLocale::system().name(); // e.g., "zh_CN", "es_ES"
+    QString langCode = locale.section('_', 0, 0); // e.g., "zh"
+
+    printf("Locale: %s\n", locale.toStdString().c_str());
+    printf("Language Code: %s\n", langCode.toStdString().c_str());
+
+    // QString locale = "zh-CN"; // e.g., "zh_CN", "es_ES"
+    // QString langCode = "zh"; // e.g., "zh"
+
+    if (translator.load("./app_" + langCode + ".qm")) {
+        app.installTranslator(&translator);
+    }
+
     QString notebookFile;
     if (argc >= 2) {
         notebookFile = QString::fromLocal8Bit(argv[1]);

@@ -28,10 +28,10 @@
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false) {
 
-    setWindowTitle("SpeedyNote Beta 0.4.1");
-    
+    setWindowTitle(tr("SpeedyNote Beta 0.4.2"));
 
-    // QString iconPath = QCoreApplication::applicationDirPath() + "/icon.ico"; 
+
+    // QString iconPath = QCoreApplication::applicationDirPath() + "/icon.ico";
     setWindowIcon(QIcon(":/resources/icons/mainicon.png"));
     
 
@@ -70,6 +70,7 @@ MainWindow::MainWindow(QWidget *parent)
     lowResPreviewEnabled = settings.value("lowResPreviewEnabled", true).toBool();
 
     setBenchmarkControlsVisible(false);
+    // setColorButtonsVisible(false);
 
 }
 
@@ -104,8 +105,8 @@ void MainWindow::setupUi() {
     clearPdfButton->setIcon(pdfDeleteIcon);
     loadPdfButton->setStyleSheet(buttonStyle);
     clearPdfButton->setStyleSheet(buttonStyle);
-    loadPdfButton->setToolTip("Load PDF");
-    clearPdfButton->setToolTip("Clear PDF");
+    loadPdfButton->setToolTip(tr("Load PDF"));
+    clearPdfButton->setToolTip(tr("Clear PDF"));
     connect(loadPdfButton, &QPushButton::clicked, this, &MainWindow::loadPdf);
     connect(clearPdfButton, &QPushButton::clicked, this, &MainWindow::clearPdf);
 
@@ -114,13 +115,13 @@ void MainWindow::setupUi() {
     QIcon exportIcon(loadThemedIcon("export"));  // Path to your icon in resources
     exportNotebookButton->setIcon(exportIcon);
     exportNotebookButton->setStyleSheet(buttonStyle);
-    exportNotebookButton->setToolTip("Export Notebook Into .SNPKG File");
+    exportNotebookButton->setToolTip(tr("Export Notebook Into .SNPKG File"));
     importNotebookButton = new QPushButton(this);
     importNotebookButton->setFixedSize(30, 30);
     QIcon importIcon(loadThemedIcon("import"));  // Path to your icon in resources
     importNotebookButton->setIcon(importIcon);
     importNotebookButton->setStyleSheet(buttonStyle);
-    importNotebookButton->setToolTip("Import Notebook From .SNPKG File");
+    importNotebookButton->setToolTip(tr("Import Notebook From .SNPKG File"));
 
     connect(exportNotebookButton, &QPushButton::clicked, this, [=]() {
         QString filename = QFileDialog::getSaveFileName(this, "Export Notebook", "", "SpeedyNote Package (*.snpkg)");
@@ -142,13 +143,13 @@ void MainWindow::setupUi() {
     benchmarkButton->setIcon(benchmarkIcon);
     benchmarkButton->setFixedSize(30, 30); // Make the benchmark button smaller
     benchmarkButton->setStyleSheet(buttonStyle);
-    benchmarkButton->setToolTip("Toggle Benchmark");
+    benchmarkButton->setToolTip(tr("Toggle Benchmark"));
     benchmarkLabel = new QLabel("PR:N/A", this);
     benchmarkLabel->setFixedHeight(30);  // Make the benchmark bar smaller
 
     toggleTabBarButton = new QPushButton(this);
     toggleTabBarButton->setIcon(loadThemedIcon("tabs"));  // You can design separate icons for "show" and "hide"
-    toggleTabBarButton->setToolTip("Show/Hide Tabs");
+    toggleTabBarButton->setToolTip(tr("Show/Hide Tabs"));
     toggleTabBarButton->setFixedSize(30, 30);
     toggleTabBarButton->setStyleSheet(buttonStyle);
 
@@ -157,7 +158,7 @@ void MainWindow::setupUi() {
     QIcon folderIcon(loadThemedIcon("folder"));  // Path to your icon in resources
     selectFolderButton->setIcon(folderIcon);
     selectFolderButton->setStyleSheet(buttonStyle);
-    selectFolderButton->setToolTip("Select Save Folder");
+    selectFolderButton->setToolTip(tr("Select Save Folder"));
     connect(selectFolderButton, &QPushButton::clicked, this, &MainWindow::selectFolder);
     
     
@@ -166,7 +167,7 @@ void MainWindow::setupUi() {
     QIcon saveIcon(loadThemedIcon("save"));  // Path to your icon in resources
     saveButton->setIcon(saveIcon);
     saveButton->setStyleSheet(buttonStyle);
-    saveButton->setToolTip("Save Current Page");
+    saveButton->setToolTip(tr("Save Current Page"));
     connect(saveButton, &QPushButton::clicked, this, &MainWindow::saveCurrentPage);
     
     saveAnnotatedButton = new QPushButton(this);
@@ -174,13 +175,13 @@ void MainWindow::setupUi() {
     QIcon saveAnnotatedIcon(loadThemedIcon("saveannotated"));  // Path to your icon in resources
     saveAnnotatedButton->setIcon(saveAnnotatedIcon);
     saveAnnotatedButton->setStyleSheet(buttonStyle);
-    saveAnnotatedButton->setToolTip("Save Page with Background");
+    saveAnnotatedButton->setToolTip(tr("Save Page with Background"));
     connect(saveAnnotatedButton, &QPushButton::clicked, this, &MainWindow::saveAnnotated);
 
     fullscreenButton = new QPushButton(this);
     fullscreenButton->setIcon(loadThemedIcon("fullscreen"));  // Load from resources
     fullscreenButton->setFixedSize(30, 30);
-    fullscreenButton->setToolTip("Toggle Fullscreen");
+    fullscreenButton->setToolTip(tr("Toggle Fullscreen"));
     fullscreenButton->setStyleSheet(buttonStyle);
 
     // ✅ Connect button click to toggleFullscreen() function
@@ -279,7 +280,7 @@ void MainWindow::setupUi() {
     QIcon bgIcon(loadThemedIcon("background"));  // Path to your icon in resources
     backgroundButton->setIcon(bgIcon);
     backgroundButton->setStyleSheet(buttonStyle);
-    backgroundButton->setToolTip("Set Background Pic");
+    backgroundButton->setToolTip(tr("Set Background Pic"));
     connect(backgroundButton, &QPushButton::clicked, this, &MainWindow::selectBackground);
 
     
@@ -289,7 +290,7 @@ void MainWindow::setupUi() {
     QIcon trashIcon(loadThemedIcon("trash"));  // Path to your icon in resources
     deletePageButton->setIcon(trashIcon);
     deletePageButton->setStyleSheet(buttonStyle);
-    deletePageButton->setToolTip("Delete Current Page");
+    deletePageButton->setToolTip(tr("Delete Current Page"));
     connect(deletePageButton, &QPushButton::clicked, this, &MainWindow::deleteCurrentPage);
 
     zoomButton = new QPushButton(this);
@@ -325,20 +326,20 @@ void MainWindow::setupUi() {
     zoom50Button = new QPushButton("0.5x", this);
     zoom50Button->setFixedSize(35, 30);
     zoom50Button->setStyleSheet(buttonStyle);
-    zoom50Button->setToolTip("Set Zoom to 50%");
+    zoom50Button->setToolTip(tr("Set Zoom to 50%"));
     connect(zoom50Button, &QPushButton::clicked, [this]() { zoomSlider->setValue(50); updateDialDisplay(); });
 
     dezoomButton = new QPushButton("1x", this);
     dezoomButton->setFixedSize(30, 30);
     dezoomButton->setStyleSheet(buttonStyle);
-    dezoomButton->setToolTip("Set Zoom to 100%");
+    dezoomButton->setToolTip(tr("Set Zoom to 100%"));
     connect(dezoomButton, &QPushButton::clicked, [this]() { zoomSlider->setValue(100); updateDialDisplay();});
 
     zoom200Button = new QPushButton("2x", this);
     zoom200Button->setFixedSize(31, 30);
     zoom200Button->setStyleSheet(buttonStyle);
-    zoom200Button->setToolTip("Set Zoom to 200%");
-    connect(zoom200Button, &QPushButton::clicked, [this]() { zoomSlider->setValue(200); updateDialDisplay();});
+    zoom200Button->setToolTip(tr("Set Zoom to 200%"));
+    connect(zoom200Button, &QPushButton::clicked, [this]() { zoomSlider->setValue(200); updateDialDisplay(); });
 
     panXSlider = new QSlider(Qt::Horizontal, this);
     panYSlider = new QSlider(Qt::Vertical, this);
@@ -421,7 +422,7 @@ void MainWindow::setupUi() {
     dialToggleButton = new QPushButton(this);
     dialToggleButton->setIcon(loadThemedIcon("dial"));  // Icon for dial
     dialToggleButton->setFixedSize(30, 30);
-    dialToggleButton->setToolTip("Toggle Magic Dial");
+    dialToggleButton->setToolTip(tr("Toggle Magic Dial"));
     dialToggleButton->setStyleSheet(buttonStyle);
 
     // ✅ Connect to toggle function
@@ -435,7 +436,7 @@ void MainWindow::setupUi() {
     fastForwardButton->setFixedSize(30, 30);
     // QIcon ffIcon(":/resources/icons/fastforward.png");  // Path to your icon in resources
     fastForwardButton->setIcon(loadThemedIcon("fastforward"));
-    fastForwardButton->setToolTip("Toggle Fast Forward 8x");
+    fastForwardButton->setToolTip(tr("Toggle Fast Forward 8x"));
     fastForwardButton->setStyleSheet(buttonStyle);
 
     // ✅ Toggle fast-forward mode
@@ -469,25 +470,25 @@ void MainWindow::setupUi() {
 
     btnPageSwitch = new QPushButton(loadThemedIcon("bookpage"), "", this);
     btnPageSwitch->setStyleSheet(buttonStyle);
-    btnPageSwitch->setToolTip("Set Dial Mode to Page Switching");
+    btnPageSwitch->setToolTip(tr("Set Dial Mode to Page Switching"));
     btnZoom = new QPushButton(loadThemedIcon("zoom"), "", this);
     btnZoom->setStyleSheet(buttonStyle);
-    btnZoom->setToolTip("Set Dial Mode to Zoom Ctrl");
+    btnZoom->setToolTip(tr("Set Dial Mode to Zoom Ctrl"));
     btnThickness = new QPushButton(loadThemedIcon("thickness"), "", this);
     btnThickness->setStyleSheet(buttonStyle);
-    btnThickness->setToolTip("Set Dial Mode to Pen Tip Thickness Ctrl");
+    btnThickness->setToolTip(tr("Set Dial Mode to Pen Tip Thickness Ctrl"));
     btnColor = new QPushButton(loadThemedIcon("color"), "", this);
     btnColor->setStyleSheet(buttonStyle);
-    btnColor->setToolTip("Set Dial Mode to Color Adjustment");
+    btnColor->setToolTip(tr("Set Dial Mode to Color Adjustment"));
     btnTool = new QPushButton(loadThemedIcon("pen"), "", this);
     btnTool->setStyleSheet(buttonStyle);
-    btnTool->setToolTip("Set Dial Mode to Tool Switching");
+    btnTool->setToolTip(tr("Set Dial Mode to Tool Switching"));
     btnPresets = new QPushButton(loadThemedIcon("preset"), "", this);
     btnPresets->setStyleSheet(buttonStyle);
-    btnPresets->setToolTip("Set Dial Mode to Color Preset Selection");
+    btnPresets->setToolTip(tr("Set Dial Mode to Color Preset Selection"));
     btnPannScroll = new QPushButton(loadThemedIcon("scroll"), "", this);
     btnPannScroll->setStyleSheet(buttonStyle);
-    btnPannScroll->setToolTip("Slide and turn pages with the dial");
+    btnPannScroll->setToolTip(tr("Slide and turn pages with the dial"));
 
     connect(btnPageSwitch, &QPushButton::clicked, this, [this]() { changeDialMode(PageSwitching); });
     connect(btnZoom, &QPushButton::clicked, this, [this]() { changeDialMode(ZoomControl); });
@@ -509,14 +510,14 @@ void MainWindow::setupUi() {
     // ✅ Button to add current color to presets
     addPresetButton = new QPushButton(loadThemedIcon("savepreset"), "", this);
     addPresetButton->setStyleSheet(buttonStyle);
-    addPresetButton->setToolTip("Add Current Color to Presets");
+    addPresetButton->setToolTip(tr("Add Current Color to Presets"));
     connect(addPresetButton, &QPushButton::clicked, this, &MainWindow::addColorPreset);
 
 
     openControlPanelButton = new QPushButton(this);
     openControlPanelButton->setIcon(loadThemedIcon("settings"));  // Replace with your actual settings icon
     openControlPanelButton->setStyleSheet(buttonStyle);
-    openControlPanelButton->setToolTip("Open Control Panel");
+    openControlPanelButton->setToolTip(tr("Open Control Panel"));
     openControlPanelButton->setFixedSize(30, 30);  // Adjust to match your other buttons
 
     connect(openControlPanelButton, &QPushButton::clicked, this, [=]() {
@@ -679,13 +680,13 @@ void MainWindow::toggleBenchmark() {
     } else {
         currentCanvas()->stopBenchmark();
         benchmarkTimer->stop();
-        benchmarkLabel->setText("PR:N/A");
+        benchmarkLabel->setText(tr("PR:N/A"));
     }
 }
 
 void MainWindow::updateBenchmarkDisplay() {
     int sampleRate = currentCanvas()->getProcessedRate();
-    benchmarkLabel->setText(QString("PR:%1 Hz").arg(sampleRate));
+    benchmarkLabel->setText(QString(tr("PR:%1 Hz")).arg(sampleRate));
 }
 
 void MainWindow::applyCustomColor() {
@@ -918,7 +919,7 @@ void MainWindow::addNewTab() {
         // Prevent closing if it's the last remaining tab
         if (tabList->count() <= 1) {
             // Optional: show a message or do nothing silently
-            QMessageBox::information(this, "Notice", "At least one tab must remain open.");
+            QMessageBox::information(this, tr("Notice"), tr("At least one tab must remain open."));
 
             return;
         }
@@ -1156,6 +1157,7 @@ void MainWindow::toggleDial() {
         
 
         int fontId = QFontDatabase::addApplicationFont(":/resources/fonts/Jersey20-Regular.ttf");
+        // int chnFontId = QFontDatabase::addApplicationFont(":/resources/fonts/NotoSansSC-Medium.ttf");
         QStringList fontFamilies = QFontDatabase::applicationFontFamilies(fontId);
 
         if (!fontFamilies.isEmpty()) {
@@ -1225,32 +1227,32 @@ void MainWindow::updateDialDisplay() {
     switch (currentDialMode) {
         case DialMode::PageSwitching:
             if (fastForwardMode){
-                dialDisplay->setText(QString("\n\nPage\n%1").arg(getCurrentPageForCanvas(currentCanvas()) + 1 + tempClicks * 8));
+                dialDisplay->setText(QString(tr("\n\nPage\n%1").arg(getCurrentPageForCanvas(currentCanvas()) + 1 + tempClicks * 8)));
             }
             else {
-                dialDisplay->setText(QString("\n\nPage\n%1").arg(getCurrentPageForCanvas(currentCanvas()) + 1 + tempClicks));
+                dialDisplay->setText(QString(tr("\n\nPage\n%1").arg(getCurrentPageForCanvas(currentCanvas()) + 1 + tempClicks)));
             }
             dialIconView->setPixmap(QPixmap(":/resources/reversed_icons/bookpage_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
             break;
         case DialMode::ThicknessControl:
-            dialDisplay->setText(QString("\n\nThickness\n%1").arg(currentCanvas()->getPenThickness()));
+            dialDisplay->setText(QString(tr("\n\nThickness\n%1").arg(currentCanvas()->getPenThickness())));
             dialIconView->setPixmap(QPixmap(":/resources/reversed_icons/thickness_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
             break;
         case DialMode::ZoomControl:
-            dialDisplay->setText(QString("\n\nZoom\n%1%").arg(zoomSlider->value()));
+            dialDisplay->setText(QString(tr("\n\nZoom\n%1%").arg(zoomSlider->value())));
             dialIconView->setPixmap(QPixmap(":/resources/reversed_icons/zoom_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
             break;
         case DialMode::ColorAdjustment:
             dialIconView->hide();
             switch (selectedChannel) {
                 case 0:
-                    dialDisplay->setText(QString("\n\nAdjust Red\n#%1").arg(currentCanvas()->getPenColor().name().remove("#")));
+                    dialDisplay->setText(QString(tr("\n\nAdjust Red\n#%1").arg(currentCanvas()->getPenColor().name().remove("#"))));
                     break;
                 case 1:
-                    dialDisplay->setText(QString("\n\nAdjust Green\n#%1").arg(currentCanvas()->getPenColor().name().remove("#")));
+                    dialDisplay->setText(QString(tr("\n\nAdjust Green\n#%1").arg(currentCanvas()->getPenColor().name().remove("#"))));
                     break;
                 case 2:
-                    dialDisplay->setText(QString("\n\nAdjust Blue\n#%1").arg(currentCanvas()->getPenColor().name().remove("#")));
+                    dialDisplay->setText(QString(tr("\n\nAdjust Blue\n#%1").arg(currentCanvas()->getPenColor().name().remove("#"))));
                     break;
             }
             // dialDisplay->setText(QString("\n\nPen Color\n#%1").arg(currentCanvas()->getPenColor().name().remove("#")));
@@ -1260,15 +1262,15 @@ void MainWindow::updateDialDisplay() {
             // ✅ Convert ToolType to QString for display
             switch (currentCanvas()->getCurrentTool()) {
                 case ToolType::Pen:
-                    dialDisplay->setText("\n\n\nPen");
+                    dialDisplay->setText(tr("\n\n\nPen"));
                     dialIconView->setPixmap(QPixmap(":/resources/reversed_icons/pen_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
                     break;
                 case ToolType::Marker:
-                    dialDisplay->setText("\n\n\nMarker");
+                    dialDisplay->setText(tr("\n\n\nMarker"));
                     dialIconView->setPixmap(QPixmap(":/resources/reversed_icons/marker_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
                     break;
                 case ToolType::Eraser:
-                    dialDisplay->setText("\n\n\nEraser");
+                    dialDisplay->setText(tr("\n\n\nEraser"));
                     dialIconView->setPixmap(QPixmap(":/resources/reversed_icons/eraser_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
                     break;
             }
@@ -1278,14 +1280,14 @@ void MainWindow::updateDialDisplay() {
             dialIconView->hide();
             dialColorPreview->setStyleSheet(QString("background-color: %1; border-radius: 15px; border: 1px solid black;")
                                             .arg(colorPresets[currentPresetIndex].name()));
-            dialDisplay->setText(QString("\n\nPreset %1\n#%2")
+            dialDisplay->setText(QString(tr("\n\nPreset %1\n#%2"))
                                             .arg(currentPresetIndex + 1)  // ✅ Display preset index (1-based)
                                             .arg(colorPresets[currentPresetIndex].name().remove("#"))); // ✅ Display hex color
             // dialIconView->setPixmap(QPixmap(":/resources/reversed_icons/preset_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
             break;
         case DialMode::PanAndPageScroll:
             dialIconView->setPixmap(QPixmap(":/resources/icons/scroll_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-            dialDisplay->setText(QString("\n\nPage\n%1").arg(getCurrentPageForCanvas(currentCanvas()) + 1));
+            dialDisplay->setText(QString(tr("\n\nPage\n%1").arg(getCurrentPageForCanvas(currentCanvas()) + 1)));
             break;
     }
 }
@@ -1829,6 +1831,21 @@ void MainWindow::setBenchmarkControlsVisible(bool visible) {
     benchmarkButton->setVisible(visible);
     benchmarkLabel->setVisible(visible);
 }
+
+bool MainWindow::areColorButtonsVisible() const {
+    return redButton->isVisible();
+}
+
+void MainWindow::setColorButtonsVisible(bool visible) {
+    // redButton->setVisible(visible);
+    // blueButton->setVisible(visible);
+    yellowButton->setVisible(visible);
+    greenButton->setVisible(visible);
+    // blackButton->setVisible(visible);
+    whiteButton->setVisible(visible);
+}
+
+
 
 bool MainWindow::isScrollOnTopEnabled() const {
     return scrollOnTopEnabled;
