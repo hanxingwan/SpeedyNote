@@ -1563,7 +1563,7 @@ void MainWindow::handleDialZoom(int angle) {
 
     accumulatedRotation += delta;
 
-    if (abs(delta) < 3) {  
+    if (abs(delta) < 4) {  
         return;  
     }
 

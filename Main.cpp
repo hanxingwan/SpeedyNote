@@ -52,11 +52,11 @@ int main(int argc, char *argv[]) {
     QString locale = QLocale::system().name(); // e.g., "zh_CN", "es_ES"
     QString langCode = locale.section('_', 0, 0); // e.g., "zh"
 
-    printf("Locale: %s\n", locale.toStdString().c_str());
-    printf("Language Code: %s\n", langCode.toStdString().c_str());
+    // printf("Locale: %s\n", locale.toStdString().c_str());
+    // printf("Language Code: %s\n", langCode.toStdString().c_str());
 
-    // QString locale = "zh-CN"; // e.g., "zh_CN", "es_ES"
-    // QString langCode = "zh"; // e.g., "zh"
+    // QString locale = "es-ES"; // e.g., "zh_CN", "es_ES"
+    // QString langCode = "es"; // e.g., "zh"
 
     if (translator.load("./app_" + langCode + ".qm")) {
         app.installTranslator(&translator);
