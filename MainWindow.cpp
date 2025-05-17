@@ -124,7 +124,7 @@ void MainWindow::setupUi() {
     importNotebookButton->setToolTip(tr("Import Notebook From .SNPKG File"));
 
     connect(exportNotebookButton, &QPushButton::clicked, this, [=]() {
-        QString filename = QFileDialog::getSaveFileName(this, "Export Notebook", "", "SpeedyNote Package (*.snpkg)");
+        QString filename = QFileDialog::getSaveFileName(this, tr("Export Notebook"), "", "SpeedyNote Package (*.snpkg)");
         if (!filename.isEmpty()) {
             if (!filename.endsWith(".snpkg")) filename += ".snpkg";
             currentCanvas()->exportNotebook(filename);
@@ -132,7 +132,7 @@ void MainWindow::setupUi() {
     });
     
     connect(importNotebookButton, &QPushButton::clicked, this, [=]() {
-        QString filename = QFileDialog::getOpenFileName(this, "Import Notebook", "", "SpeedyNote Package (*.snpkg)");
+        QString filename = QFileDialog::getOpenFileName(this, tr("Import Notebook"), "", "SpeedyNote Package (*.snpkg)");
         if (!filename.isEmpty()) {
             currentCanvas()->importNotebook(filename);
         }
@@ -354,15 +354,15 @@ void MainWindow::setupUi() {
 
     // 🌟 Left Side: Tabs List
     tabList = new QListWidget(this);
-    tabList->setFixedWidth(122);  // Adjust width as needed
+    tabList->setMinimumWidth(122);  // Adjust width as needed
     tabList->setSelectionMode(QAbstractItemView::SingleSelection);
 
 
     // 🌟 Add Button for New Tab
     addTabButton = new QPushButton(this);
-    QIcon addTab(":/resources/icons/addtab.png");  // Path to your icon in resources
+    QIcon addTab(loadThemedIcon("addtab"));  // Path to your icon in resources
     addTabButton->setIcon(addTab);
-    addTabButton->setFixedWidth(122);
+    addTabButton->setMinimumWidth(122);
     addTabButton->setFixedHeight(45);  // Adjust height as needed
     connect(addTabButton, &QPushButton::clicked, this, &MainWindow::addNewTab);
 
@@ -375,6 +375,7 @@ void MainWindow::setupUi() {
     sidebarContainer = new QWidget(this);  // <-- New container
     sidebarContainer->setObjectName("sidebarContainer");
     sidebarContainer->setContentsMargins(0, 0, 0, 0);  // <-- Remove margins
+    sidebarContainer->setMaximumWidth(140);  // <-- Set max width
     QVBoxLayout *tabLayout = new QVBoxLayout(sidebarContainer);
     tabLayout->setContentsMargins(0, 0, 1, 0); 
     tabLayout->addWidget(tabList);
@@ -2019,10 +2020,10 @@ void MainWindow::handleControllerButton(const QString &buttonName) {  // This is
 
 void MainWindow::importNotebookFromFile(const QString &packageFile) {
 
-    QString destDir = QFileDialog::getExistingDirectory(this, "Select Working Directory for Notebook");
+    QString destDir = QFileDialog::getExistingDirectory(this, tr("Select Working Directory for Notebook"));
 
     if (destDir.isEmpty()) {
-        QMessageBox::warning(this, "Import Cancelled", "No directory selected. Notebook will not be opened.");
+        QMessageBox::warning(this, tr("Import Cancelled"), tr("No directory selected. Notebook will not be opened."));
         return;
     }
 

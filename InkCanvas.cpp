@@ -360,6 +360,10 @@ void InkCanvas::eraseStroke(const QPointF &start, const QPointF &end, qreal pres
         initializeBuffer();
     }
 
+    if (!edited){
+        edited = true;
+    }
+
     QPainter painter(&buffer);
     painter.setCompositionMode(QPainter::CompositionMode_Clear);
 
@@ -751,12 +755,12 @@ void InkCanvas::saveBackgroundMetadata() {
 
 void InkCanvas::exportNotebook(const QString &destinationFile) {
     if (destinationFile.isEmpty()) {
-        QMessageBox::warning(nullptr, "Export Error", "No export file specified.");
+        QMessageBox::warning(nullptr, tr("Export Error"), tr("No export file specified."));
         return;
     }
 
     if (saveFolder.isEmpty()) {
-        QMessageBox::warning(nullptr, "Export Error", "No notebook loaded (saveFolder is empty)");
+        QMessageBox::warning(nullptr, tr("Export Error"), tr("No notebook loaded (saveFolder is empty)"));
         return;
     }
 
@@ -772,7 +776,7 @@ void InkCanvas::exportNotebook(const QString &destinationFile) {
     }
 
     if (files.isEmpty()) {
-        QMessageBox::warning(nullptr, "Export Error", "No files found to export.");
+        QMessageBox::warning(nullptr, tr("Export Error"), tr("No files found to export."));
         return;
     }
 
@@ -786,7 +790,7 @@ void InkCanvas::exportNotebook(const QString &destinationFile) {
         }
         listFile.close();
     } else {
-        QMessageBox::warning(nullptr, "Export Error", "Failed to create temporary file list.");
+        QMessageBox::warning(nullptr, tr("Export Error"), tr("Failed to create temporary file list."));
         return;
     }
 
@@ -808,7 +812,7 @@ void InkCanvas::exportNotebook(const QString &destinationFile) {
 
     process.start(tarExe, args);
     if (!process.waitForFinished()) {
-        QMessageBox::warning(nullptr, "Export Error", "Tar process failed to finish.");
+        QMessageBox::warning(nullptr, tr("Export Error"), tr("Tar process failed to finish."));
         QFile::remove(tempFileList);
         return;
     }
@@ -816,29 +820,29 @@ void InkCanvas::exportNotebook(const QString &destinationFile) {
     QFile::remove(tempFileList);
 
     if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
-        QMessageBox::warning(nullptr, "Export Error", "Tar process failed.");
+        QMessageBox::warning(nullptr, tr("Export Error"), tr("Tar process failed."));
         return;
     }
 
-    QMessageBox::information(nullptr, "Export", "Notebook exported successfully.");
+    QMessageBox::information(nullptr, tr("Export"), tr("Notebook exported successfully."));
 }
 
 
 void InkCanvas::importNotebook(const QString &packageFile) {
 
     // Ask user for destination working folder
-    QString destFolder = QFileDialog::getExistingDirectory(nullptr, "Select Destination Folder for Imported Notebook");
+    QString destFolder = QFileDialog::getExistingDirectory(nullptr, tr("Select Destination Folder for Imported Notebook"));
 
     if (destFolder.isEmpty()) {
-        QMessageBox::warning(nullptr, "Import Canceled", "No destination folder selected.");
+        QMessageBox::warning(nullptr, tr("Import Canceled"), tr("No destination folder selected."));
         return;
     }
 
     // Check if destination folder is empty (optional, good practice)
     QDir destDir(destFolder);
     if (!destDir.entryList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot).isEmpty()) {
-        QMessageBox::StandardButton reply = QMessageBox::question(nullptr, "Destination Not Empty",
-            "The selected folder is not empty. Files may be overwritten. Continue?",
+        QMessageBox::StandardButton reply = QMessageBox::question(nullptr, tr("Destination Not Empty"),
+            tr("The selected folder is not empty. Files may be overwritten. Continue?"),
             QMessageBox::Yes | QMessageBox::No);
         if (reply != QMessageBox::Yes) {
             return;
@@ -864,7 +868,7 @@ void InkCanvas::importNotebook(const QString &packageFile) {
     setSaveFolder(destFolder);
     loadPage(0);
 
-    QMessageBox::information(nullptr, "Import Complete", "Notebook imported successfully.");
+    QMessageBox::information(nullptr, tr("Import Complete"), tr("Notebook imported successfully."));
 }
 
 
@@ -912,7 +916,7 @@ void InkCanvas::importNotebookTo(const QString &packageFile, const QString &dest
         setSaveFolder(destFolder);
         loadNotebookId();
         loadPage(0);
-    
-        QMessageBox::information(nullptr, "Import", "Notebook imported successfully.");
+
+        QMessageBox::information(nullptr, tr("Import"), tr("Notebook imported successfully."));
     }
     

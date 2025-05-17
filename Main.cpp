@@ -47,7 +47,7 @@ int main(int argc, char *argv[]) {
     qputenv("QT_IM_MODULE", QByteArray("qtvirtualkeyboard"));  // ✅ Enable Virtual Keyboard
     QApplication app(argc, argv);
 
-
+    
     QTranslator translator;
     QString locale = QLocale::system().name(); // e.g., "zh_CN", "es_ES"
     QString langCode = locale.section('_', 0, 0); // e.g., "zh"
@@ -57,8 +57,9 @@ int main(int argc, char *argv[]) {
 
     // QString locale = "es-ES"; // e.g., "zh_CN", "es_ES"
     // QString langCode = "es"; // e.g., "zh"
+    QString translationsPath = QCoreApplication::applicationDirPath();
 
-    if (translator.load("./app_" + langCode + ".qm")) {
+    if (translator.load(translationsPath + "/app_" + langCode + ".qm")) {
         app.installTranslator(&translator);
     }
 
