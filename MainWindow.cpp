@@ -28,7 +28,7 @@
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false) {
 
-    setWindowTitle(tr("SpeedyNote Beta 0.4.2"));
+    setWindowTitle(tr("SpeedyNote Beta 0.4.3"));
 
 
     // QString iconPath = QCoreApplication::applicationDirPath() + "/icon.ico";
@@ -1117,12 +1117,20 @@ void MainWindow::toggleDial() {
         dialContainer->setStyleSheet("background: transparent; border-radius: 100px;");  // ✅ More transparent
 
         // ✅ Create dial
+        QPalette palette = QGuiApplication::palette();
+        QColor highlightColor = palette.highlight().color();  // System highlight color
+
         pageDial = new QDial(dialContainer);
         pageDial->setFixedSize(140, 140);
         pageDial->setMinimum(0);
         pageDial->setMaximum(360);
         pageDial->setWrapping(true);  // ✅ Allow full-circle rotation
-        pageDial->setStyleSheet("background:rgba(85, 3, 144, 0);");
+        // pageDial->setStyleSheet("background:rgb(255, 255, 255);");
+        pageDial->setStyleSheet(QString(R"(
+        QDial {
+            background-color: %1;
+            }
+        )").arg(highlightColor.name()));
 
         /*
 

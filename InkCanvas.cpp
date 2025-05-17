@@ -45,7 +45,8 @@ InkCanvas::InkCanvas(QWidget *parent)
     QScreen *screen = QGuiApplication::primaryScreen();
     if (screen) {
         QSize logicalSize = screen->availableGeometry().size() * 0.89;
-        setFixedSize(logicalSize);
+        setMaximumSize(logicalSize); // Optional
+        setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     } else {
         setFixedSize(1920, 1080); // Fallback size
     }
