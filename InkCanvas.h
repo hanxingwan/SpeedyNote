@@ -105,6 +105,8 @@ public:
 
     void importNotebookTo(const QString &packageFile, const QString &destFolder);
 
+    bool isEdited() const { return edited; }  // ✅ Check if the canvas has been edited
+
     
 
     

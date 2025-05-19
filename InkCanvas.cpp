@@ -590,6 +590,14 @@ void InkCanvas::deletePage(int pageNumber) {
     QFile::remove(fileName);
     QFile::remove(bgFileName);
     QFile::remove(metadataFileName);
+
+    if (pdfDocument){
+        loadPdfPage(pageNumber);
+    }
+    else{
+        loadPage(pageNumber);
+    }
+
 }
 
 void InkCanvas::setBackground(const QString &filePath, int pageNumber) {
@@ -648,9 +656,8 @@ void InkCanvas::setBackground(const QString &filePath, int pageNumber) {
     update();  // Refresh canvas
 }
 
-
 void InkCanvas::setZoom(int zoomLevel) {
-    zoomFactor = qMax(20, qMin(zoomLevel, 400)); // Limit zoom to 50%-400%
+    zoomFactor = qMax(10, qMin(zoomLevel, 400)); // Limit zoom to 10%-400%
     update();
 }
 
@@ -920,4 +927,3 @@ void InkCanvas::importNotebookTo(const QString &packageFile, const QString &dest
 
         QMessageBox::information(nullptr, tr("Import"), tr("Notebook imported successfully."));
     }
-    

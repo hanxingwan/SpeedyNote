@@ -64,7 +64,7 @@ MainWindow::MainWindow(QWidget *parent)
     // toggleFullscreen(); // ✅ Toggle fullscreen to adjust layout
     // toggleDial(); // ✅ Toggle dial to adjust layout
    
-    zoomSlider->setValue(100 / initialDpr); // Set initial zoom level based on DPR
+    // zoomSlider->setValue(100 / initialDpr); // Set initial zoom level based on DPR
 
     QSettings settings("SpeedyNote", "App");
     lowResPreviewEnabled = settings.value("lowResPreviewEnabled", true).toBool();
@@ -311,7 +311,7 @@ void MainWindow::setupUi() {
     zoomFrame->setFixedSize(440, 40); // Adjust width/height as needed
 
     zoomSlider = new QSlider(Qt::Horizontal, this);
-    zoomSlider->setRange(20, 250);
+    zoomSlider->setRange(10, 400);
     zoomSlider->setValue(100);
     zoomSlider->setMaximumWidth(405);
 
@@ -327,23 +327,25 @@ void MainWindow::setupUi() {
     zoom50Button->setFixedSize(35, 30);
     zoom50Button->setStyleSheet(buttonStyle);
     zoom50Button->setToolTip(tr("Set Zoom to 50%"));
-    connect(zoom50Button, &QPushButton::clicked, [this]() { zoomSlider->setValue(50); updateDialDisplay(); });
+    connect(zoom50Button, &QPushButton::clicked, [this]() { zoomSlider->setValue(50 / initialDpr); updateDialDisplay(); });
 
     dezoomButton = new QPushButton("1x", this);
     dezoomButton->setFixedSize(30, 30);
     dezoomButton->setStyleSheet(buttonStyle);
     dezoomButton->setToolTip(tr("Set Zoom to 100%"));
-    connect(dezoomButton, &QPushButton::clicked, [this]() { zoomSlider->setValue(100); updateDialDisplay();});
+    connect(dezoomButton, &QPushButton::clicked, [this]() { zoomSlider->setValue(100 / initialDpr); updateDialDisplay(); });
 
     zoom200Button = new QPushButton("2x", this);
     zoom200Button->setFixedSize(31, 30);
     zoom200Button->setStyleSheet(buttonStyle);
     zoom200Button->setToolTip(tr("Set Zoom to 200%"));
-    connect(zoom200Button, &QPushButton::clicked, [this]() { zoomSlider->setValue(200); updateDialDisplay(); });
+    connect(zoom200Button, &QPushButton::clicked, [this]() { zoomSlider->setValue(200 / initialDpr); updateDialDisplay(); });
 
     panXSlider = new QSlider(Qt::Horizontal, this);
     panYSlider = new QSlider(Qt::Vertical, this);
     panYSlider->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+    // panXSlider->setFixedHeight(30);
+    // panYSlider->setFixedWidth(30);
 
     connect(panXSlider, &QSlider::valueChanged, this, &MainWindow::updatePanX);
     
@@ -735,6 +737,10 @@ void MainWindow::switchPage(int pageNumber) {
     InkCanvas *canvas = currentCanvas();
     if (!canvas) return;
 
+    if (currentCanvas()->isEdited()){
+        saveCurrentPage();
+    }
+
     int newPage = pageNumber - 1;
     pageMap[canvas] = newPage;  // ✅ Save the page for this tab
 
@@ -793,7 +799,7 @@ void MainWindow::updatePanRange() {
 
     QSize canvasSize = currentCanvas()->getCanvasSize();
     QSize viewportSize = QGuiApplication::primaryScreen()->size() * QGuiApplication::primaryScreen()->devicePixelRatio();
-    qreal dps = getDevicePixelRatio();
+    qreal dps = initialDpr;
     int maxPanX = qMax(0, static_cast<int>(canvasSize.width() * zoom * dps / 100 - viewportSize.width()));
     int maxPanY = qMax(0, static_cast<int>(canvasSize.height() * zoom * dps / 100 - viewportSize.height()));
  
@@ -1232,6 +1238,7 @@ void MainWindow::updateDialDisplay() {
     if (!dialColorPreview) return;
     if (!dialIconView) return;
     dialIconView->show();
+    qreal dpr = initialDpr;
     QColor currentColor = currentCanvas()->getPenColor();
     switch (currentDialMode) {
         case DialMode::PageSwitching:
@@ -1248,7 +1255,7 @@ void MainWindow::updateDialDisplay() {
             dialIconView->setPixmap(QPixmap(":/resources/reversed_icons/thickness_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
             break;
         case DialMode::ZoomControl:
-            dialDisplay->setText(QString(tr("\n\nZoom\n%1%").arg(zoomSlider->value())));
+            dialDisplay->setText(QString(tr("\n\nZoom\n%1%").arg(zoomSlider->value() * initialDpr)));
             dialIconView->setPixmap(QPixmap(":/resources/reversed_icons/zoom_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
             break;
         case DialMode::ColorAdjustment:
@@ -1394,7 +1401,7 @@ void MainWindow::onDialReleased() {
     
 
     if (totalClicks != 0 || grossTotalClicks != 0) {  // ✅ Only switch pages if movement happened
-        saveCurrentPage(); // autosave
+        // saveCurrentPage(); // autosave
 
         int currentPage = getCurrentPageForCanvas(currentCanvas()) + 1;
         int newPage = qBound(1, currentPage + totalClicks * pagesToAdvance, 99999);
@@ -1577,7 +1584,7 @@ void MainWindow::handleDialZoom(int angle) {
     }
 
     // ✅ Apply zoom dynamically (instead of waiting for release)
-    int newZoom = qBound(20, zoomSlider->value() + (delta / 4), 250);  
+    int newZoom = qBound(10, zoomSlider->value() + (delta / 4), 400);  
     zoomSlider->setValue(newZoom);
     updateZoom();  // ✅ Ensure zoom updates immediately
     updateDialDisplay(); 
@@ -1648,7 +1655,7 @@ void MainWindow::handleDialPanScroll(int angle) {
 void MainWindow::onPanScrollReleased() {
     // ✅ Perform page flip only when dial released and flip is pending
     if (pendingPageFlip != 0) {
-        saveCurrentPage();
+        // saveCurrentPage();
 
         int currentPage = getCurrentPageForCanvas(currentCanvas());
         int newPage = qBound(1, currentPage + pendingPageFlip + 1, 99999);
