@@ -107,9 +107,9 @@ public:
 
     bool isEdited() const { return edited; }  // ✅ Check if the canvas has been edited
 
-    
+    void setPDFRenderDPI(int dpi) { pdfRenderDPI = dpi; }  // ✅ Set PDF render DPI
 
-    
+    void clearPdfCache() { pdfCache.clear(); }
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -169,6 +169,8 @@ private:
 
     void loadNotebookId();
     void saveNotebookId();
+
+    int pdfRenderDPI = 288;  // Default to 288 DPI
 
 
 };

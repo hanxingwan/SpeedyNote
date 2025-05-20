@@ -139,7 +139,7 @@ void InkCanvas::loadPdfPage(int pageNumber) {
     if (pageNumber >= 0 && pageNumber < pdfDocument->numPages()) {
         std::unique_ptr<Poppler::Page> page(pdfDocument->page(pageNumber));
         if (page) {
-            QImage pdfImage = page->renderToImage(288, 288);
+            QImage pdfImage = page->renderToImage(pdfRenderDPI, pdfRenderDPI);
             if (!pdfImage.isNull()) {
                 QPixmap cachedPixmap = QPixmap::fromImage(pdfImage);
                 pdfCache.insert(pageNumber, new QPixmap(cachedPixmap));
@@ -176,8 +176,11 @@ void InkCanvas::loadPdfPreviewAsync(int pageNumber) {
         QImage pdfImage = page->renderToImage(96, 96);
         if (pdfImage.isNull()) return QPixmap();
 
-        QImage upscaled = pdfImage.scaled(pdfImage.width() * 3, pdfImage.height() * 3,
-                                          Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        QImage upscaled = pdfImage.scaled(pdfImage.width() * (pdfRenderDPI / 96),
+                                  pdfImage.height() * (pdfRenderDPI / 96),
+                                  Qt::KeepAspectRatio,
+                                  Qt::SmoothTransformation);
+
         return QPixmap::fromImage(upscaled);
     });
 

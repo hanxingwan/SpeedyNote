@@ -47,6 +47,9 @@ MainWindow::MainWindow(QWidget *parent)
 
     // ✅ Create the first tab (default canvas)
     // addNewTab();
+    QSettings settings("SpeedyNote", "App");
+    pdfRenderDPI = settings.value("pdfRenderDPI", 288).toInt();
+    setPdfDPI(pdfRenderDPI);
     setupUi();    // ✅ Move all UI setup here
 
     controllerManager = new SDLControllerManager();
@@ -65,12 +68,12 @@ MainWindow::MainWindow(QWidget *parent)
     // toggleDial(); // ✅ Toggle dial to adjust layout
    
     // zoomSlider->setValue(100 / initialDpr); // Set initial zoom level based on DPR
-
-    QSettings settings("SpeedyNote", "App");
-    lowResPreviewEnabled = settings.value("lowResPreviewEnabled", true).toBool();
+    // setColorButtonsVisible(false); // ✅ Show color buttons by default
+    
+    loadUserSettings();
 
     setBenchmarkControlsVisible(false);
-    // setColorButtonsVisible(false);
+    
 
 }
 
@@ -84,7 +87,7 @@ void MainWindow::setupUi() {
             border: none; /* Remove default button borders */
             padding: 6px; /* Ensure padding remains */
         }
-
+E
         QPushButton:hover {
             background: rgba(255, 255, 255, 50); /* Subtle highlight on hover */
         }
@@ -718,7 +721,7 @@ void MainWindow::changeTool(int index) {
 }
 
 void MainWindow::selectFolder() {
-    QString folder = QFileDialog::getExistingDirectory(this, "Select Save Folder");
+    QString folder = QFileDialog::getExistingDirectory(this, tr("Select Save Folder"));
     if (!folder.isEmpty()) {
         currentCanvas()->setSaveFolder(folder);
         switchPage(1);
@@ -766,7 +769,7 @@ void MainWindow::saveCurrentPage() {
 }
 
 void MainWindow::selectBackground() {
-    QString filePath = QFileDialog::getOpenFileName(this, "Select Background Image", "", "Images (*.png *.jpg *.jpeg)");
+    QString filePath = QFileDialog::getOpenFileName(this, tr("Select Background Image"), "", "Images (*.png *.jpg *.jpeg)");
     if (!filePath.isEmpty()) {
         currentCanvas()->setBackground(filePath, getCurrentPageForCanvas(currentCanvas()));
     }
@@ -841,7 +844,7 @@ void MainWindow::forceUIRefresh() {
 }
 
 void MainWindow::loadPdf() {
-    QString filePath = QFileDialog::getOpenFileName(this, "Select PDF", "", "PDF Files (*.pdf)");
+    QString filePath = QFileDialog::getOpenFileName(this, tr("Select PDF"), "", "PDF Files (*.pdf)");
     if (!filePath.isEmpty()) {
         currentCanvas()->loadPdf(filePath);
 
@@ -931,6 +934,8 @@ void MainWindow::addNewTab() {
             return;
         }
 
+        ensureTabHasUniqueSaveFolder(currentCanvas()); // ✅ Ensure unique save folder
+
         // Find the item associated with this button's parent (tabWidget)
         for (int i = 0; i < tabList->count(); ++i) {
             QListWidgetItem *item = tabList->item(i);
@@ -973,7 +978,7 @@ void MainWindow::addNewTab() {
     newCanvas->setBackgroundStyle(BackgroundStyle::Grid);
     newCanvas->setBackgroundColor(Qt::white);
     newCanvas->setBackgroundDensity(30);  // The default bg settings are here
-    
+    newCanvas->setPDFRenderDPI(getPdfDPI());
 }
 
 
@@ -987,6 +992,9 @@ void MainWindow::removeTabAt(int index) {
 
     // ✅ Remove and delete the canvas safely
     QWidget *canvas = canvasStack->widget(index);
+
+    ensureTabHasUniqueSaveFolder(currentCanvas());
+
     if (canvas) {
         canvasStack->removeWidget(canvas);
         delete canvas;
@@ -999,6 +1007,56 @@ void MainWindow::removeTabAt(int index) {
         canvasStack->setCurrentWidget(canvasStack->widget(newIndex));
     }
 }
+
+void MainWindow::ensureTabHasUniqueSaveFolder(InkCanvas* canvas) {
+    if (!canvas) return;
+
+    if (canvasStack->count() == 0) return;
+
+    QString currentFolder = canvas->getSaveFolder();
+    QString tempFolder = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/temp_session";
+
+    if (currentFolder.isEmpty() || currentFolder == tempFolder) {
+
+        QDir sourceDir(tempFolder);
+        QStringList pageFiles = sourceDir.entryList(QStringList() << "*.png", QDir::Files);
+
+        // No pages to save → skip prompting
+        if (pageFiles.isEmpty()) {
+            return;
+        }
+
+        QMessageBox::warning(this, tr("Unsaved Notebook"),
+                             tr("This notebook is still using a temporary session folder.\nPlease select a permanent folder to avoid data loss."));
+
+        QString selectedFolder = QFileDialog::getExistingDirectory(this, tr("Select Save Folder"));
+        if (selectedFolder.isEmpty()) return;
+
+        QDir destDir(selectedFolder);
+        if (!destDir.exists()) {
+            QDir().mkpath(selectedFolder);
+        }
+
+        // Copy contents from temp to selected folder
+        for (const QString &file : sourceDir.entryList(QDir::Files)) {
+            QString srcFilePath = tempFolder + "/" + file;
+            QString dstFilePath = selectedFolder + "/" + file;
+
+            // If file already exists at destination, remove it to avoid rename failure
+            if (QFile::exists(dstFilePath)) {
+                QFile::remove(dstFilePath);
+            }
+
+            QFile::rename(srcFilePath, dstFilePath);  // This moves the file
+        }
+
+        canvas->setSaveFolder(selectedFolder);
+        updateTabLabel();
+    }
+
+    return;
+}
+
 
 
 InkCanvas* MainWindow::currentCanvas() {
@@ -1849,7 +1907,7 @@ void MainWindow::setBenchmarkControlsVisible(bool visible) {
 }
 
 bool MainWindow::areColorButtonsVisible() const {
-    return redButton->isVisible();
+    return colorButtonsVisible;
 }
 
 void MainWindow::setColorButtonsVisible(bool visible) {
@@ -1859,6 +1917,9 @@ void MainWindow::setColorButtonsVisible(bool visible) {
     greenButton->setVisible(visible);
     // blackButton->setVisible(visible);
     whiteButton->setVisible(visible);
+
+    QSettings settings("SpeedyNote", "App");
+    settings.setValue("colorButtonsVisible", visible);
 }
 
 
@@ -1869,6 +1930,9 @@ bool MainWindow::isScrollOnTopEnabled() const {
 
 void MainWindow::setScrollOnTopEnabled(bool enabled) {
     scrollOnTopEnabled = enabled;
+
+    QSettings settings("SpeedyNote", "App");
+    settings.setValue("scrollOnTopEnabled", enabled);
 }
 
 
@@ -2050,4 +2114,41 @@ void MainWindow::importNotebookFromFile(const QString &packageFile) {
     // Change saveFolder in InkCanvas
     canvas->setSaveFolder(destDir);
     canvas->loadPage(0);
+}
+
+void MainWindow::setPdfDPI(int dpi) {
+    if (dpi != pdfRenderDPI) {
+        pdfRenderDPI = dpi;
+        savePdfDPI(dpi);
+
+        // Apply immediately to current canvas if needed
+        if (currentCanvas()) {
+            currentCanvas()->setPDFRenderDPI(dpi);
+            currentCanvas()->clearPdfCache();
+            currentCanvas()->loadPdfPage(getCurrentPageForCanvas(currentCanvas()));  // Optional: add this if needed
+            updateZoom();
+            updatePanRange();
+        }
+    }
+}
+
+void MainWindow::savePdfDPI(int dpi) {
+    QSettings settings("SpeedyNote", "App");
+    settings.setValue("pdfRenderDPI", dpi);
+}
+
+void MainWindow::loadUserSettings() {
+    QSettings settings("SpeedyNote", "App");
+
+    // Load low-res toggle
+    lowResPreviewEnabled = settings.value("lowResPreviewEnabled", true).toBool();
+    setLowResPreviewEnabled(lowResPreviewEnabled);
+
+    
+    colorButtonsVisible = settings.value("colorButtonsVisible", true).toBool();
+    setColorButtonsVisible(colorButtonsVisible);
+
+    scrollOnTopEnabled = settings.value("scrollOnTopEnabled", true).toBool();
+    setScrollOnTopEnabled(scrollOnTopEnabled);
+
 }

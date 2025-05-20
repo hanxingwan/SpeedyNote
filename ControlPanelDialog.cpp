@@ -150,8 +150,26 @@ void ControlPanelDialog::createPerformanceTab() {
     note->setWordWrap(true);
     note->setStyleSheet("color: gray; font-size: 10px;");
 
+    QLabel *dpiLabel = new QLabel(tr("PDF Rendering DPI:"));
+    QComboBox *dpiSelector = new QComboBox();
+    dpiSelector->addItems({"96", "192", "288", "384", "480"});
+    dpiSelector->setCurrentText(QString::number(mainWindowRef->getPdfDPI()));
+
+    connect(dpiSelector, &QComboBox::currentTextChanged, this, [=](const QString &value) {
+        mainWindowRef->setPdfDPI(value.toInt());
+    });
+
+    QLabel *notePDF = new QLabel(tr("Adjust how the PDF is rendered. Higher DPI means better quality but slower performance. DO NOT CHANGE THIS OPTION WHEN MULTIPLE TABS ARE OPEN. THIS MAY LEAD TO UNDEFINED BEHAVIOR!"));
+    notePDF->setWordWrap(true);
+    notePDF->setStyleSheet("color: gray; font-size: 10px;");
+
+
     layout->addWidget(previewToggle);
     layout->addWidget(note);
+    layout->addWidget(dpiLabel);
+    layout->addWidget(dpiSelector);
+    layout->addWidget(notePDF);
+
     layout->addStretch();
 
     // return performanceTab;

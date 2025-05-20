@@ -18,6 +18,7 @@
 #include <QFont>
 #include <QQueue>
 #include "SDLControllerManager.h"
+
 // #include "HandwritingLineEdit.h"
 
 enum DialMode {
@@ -109,12 +110,15 @@ public:
     bool areBenchmarkControlsVisible() const;
     void setBenchmarkControlsVisible(bool visible);
 
+    bool colorButtonsVisible = true;
     bool areColorButtonsVisible() const;
     void setColorButtonsVisible(bool visible);
 
     bool scrollOnTopEnabled = false;
     bool isScrollOnTopEnabled() const;
     void setScrollOnTopEnabled(bool enabled);
+
+    
 
     SDLControllerManager *controllerManager = nullptr;
     QThread *controllerThread = nullptr;
@@ -130,6 +134,12 @@ public:
     DialMode dialModeFromString(const QString &mode);
 
     void importNotebookFromFile(const QString &packageFile);
+
+    int getPdfDPI() const { return pdfRenderDPI; }
+    void setPdfDPI(int dpi);
+
+    // void loadUserSettings();  // New
+    void savePdfDPI(int dpi); // New
 
 
     
@@ -353,12 +363,13 @@ private:
 
     void handleControllerButton(const QString &buttonName);
 
+    void ensureTabHasUniqueSaveFolder(InkCanvas* canvas);
 
-    
-
-
+    int pdfRenderDPI = 288;  // Default to 288 DPI
 
     void setupUi();
+
+    void loadUserSettings();
 
     
 };
