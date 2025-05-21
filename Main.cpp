@@ -4,7 +4,7 @@
 
 #include <QApplication>
 #include <QGuiApplication>
-#include <QQmlApplicationEngine>
+// #include <QQmlApplicationEngine>
 #include <QLoggingCategory>
 #include <QInputMethod>
 #include <QTranslator>
@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
     
 
 
-    qputenv("QT_IM_MODULE", QByteArray("qtvirtualkeyboard"));  // ✅ Enable Virtual Keyboard
+    // qputenv("QT_IM_MODULE", QByteArray("qtvirtualkeyboard"));  // ✅ Enable Virtual Keyboard
     QApplication app(argc, argv);
 
     

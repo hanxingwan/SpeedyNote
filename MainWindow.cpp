@@ -327,7 +327,7 @@ E
   
 
     zoom50Button = new QPushButton("0.5x", this);
-    zoom50Button->setFixedSize(35, 30);
+    zoom50Button->setFixedSize(40, 30);
     zoom50Button->setStyleSheet(buttonStyle);
     zoom50Button->setToolTip(tr("Set Zoom to 50%"));
     connect(zoom50Button, &QPushButton::clicked, [this]() { zoomSlider->setValue(50 / initialDpr); updateDialDisplay(); });

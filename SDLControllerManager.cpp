@@ -61,38 +61,40 @@ SDLControllerManager::SDLControllerManager(QObject *parent)
         SDL_Event e;
 
         /*
-        for (int i = SDL_CONTROLLER_BUTTON_A; i < SDL_CONTROLLER_BUTTON_MAX; ++i) {
-            SDL_GameControllerButton button = static_cast<SDL_GameControllerButton>(i);
-            const char* name = SDL_GameControllerGetStringForButton(button);
-            if (SDL_GameControllerGetButton(controller, button)) {
-                qDebug() << "Button" << name << "is pressed";
+        SDL_Joystick* joystick = SDL_GameControllerGetJoystick(controller);
+        int numButtons = SDL_JoystickNumButtons(joystick);
+        for (int i = 0; i < numButtons; ++i) {
+            if (SDL_JoystickGetButton(joystick, i)) {
+                qDebug() << "Raw button" << i << "is pressed";
             }
         }
-        This is for testing button mappings. 
         */
+        
+
+        // This is for testing button mappings. 
+        
 
         
 
         while (SDL_PollEvent(&e)) {
-            if (e.type == SDL_CONTROLLERBUTTONDOWN) {
-                QString btnName = getButtonName(e.cbutton.button);
+            if (e.type == SDL_JOYBUTTONDOWN && controller) {
+                QString btnName = getButtonName(e.jbutton.button);
                 buttonPressTime[btnName] = SDL_GetTicks();
                 buttonHeldEmitted[btnName] = false;
             }
-        
-            if (e.type == SDL_CONTROLLERBUTTONUP) {
-                QString btnName = getButtonName(e.cbutton.button);
-        
+
+            if (e.type == SDL_JOYBUTTONUP && controller) {
+                QString btnName = getButtonName(e.jbutton.button);
                 quint32 pressTime = buttonPressTime.value(btnName, 0);
                 quint32 now = SDL_GetTicks();
                 quint32 duration = now - pressTime;
-        
+
                 if (duration < HOLD_THRESHOLD) {
                     emit buttonSinglePress(btnName);
                 } else {
                     emit buttonReleased(btnName);
                 }
-        
+
                 buttonPressTime.remove(btnName);
                 buttonHeldEmitted.remove(btnName);
             }
@@ -100,6 +102,7 @@ SDLControllerManager::SDLControllerManager(QObject *parent)
     });
 }
 
+/*
 QString SDLControllerManager::getButtonName(Uint8 sdlButton) {
     switch (sdlButton) {
         case SDL_CONTROLLER_BUTTON_LEFTSHOULDER: return "LEFTSHOULDER";
@@ -116,6 +119,33 @@ QString SDLControllerManager::getButtonName(Uint8 sdlButton) {
     }
     return "UNKNOWN";
 }
+*/
+
+QString SDLControllerManager::getButtonName(Uint8 sdlButton) {
+    SDL_Joystick* joystick = SDL_GameControllerGetJoystick(controller);
+    if (!joystick) return "UNKNOWN";
+
+    int numButtons = SDL_JoystickNumButtons(joystick);
+    if (sdlButton >= numButtons) return "UNKNOWN";
+
+    // Custom Joy-Con Left raw button mapping
+    static const QMap<int, QString> joyconLeftMap = {
+        {0, "GUIDE"},        // D-pad Down
+        {1, "PADDLE2"},        // D-pad Left
+        {2, "LEFTSHOULDER"},          // D-pad Up
+        {3, "PADDLE4"},       // D-pad Right
+        {4, "RIGHTSHOULDER"},          // SL button
+        {5, "START"},          // SR button
+        {6, "LEFTSTICK"},       // Minus
+        {7, "Y"},     // Screenshot button
+        {8, "A"},           // L (shoulder)
+        {9, "B"},          // ZL (trigger)
+        {10, "X"}      // Stick press
+    };
+
+    return joyconLeftMap.value(sdlButton, QString("RAW_%1").arg(sdlButton));
+}
+
 
 
 SDLControllerManager::~SDLControllerManager() {
