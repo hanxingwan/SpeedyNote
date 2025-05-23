@@ -1,4 +1,5 @@
 #include "ControlPanelDialog.h"
+#include "ButtonMappingTypes.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -100,13 +101,17 @@ void ControlPanelDialog::applyChanges() {
     canvas->update();
     canvas->saveBackgroundMetadata();
 
-    // ✅ Apply button mappings back to MainWindow
+    // ✅ Apply button mappings back to MainWindow with internal keys
     if (mainWindowRef) {
-        for (const QString &button : holdMappingCombos.keys()) {
-            mainWindowRef->setHoldMapping(button, holdMappingCombos[button]->currentText());
+        for (const QString &buttonKey : holdMappingCombos.keys()) {
+            QString displayString = holdMappingCombos[buttonKey]->currentText();
+            QString internalKey = ButtonMappingHelper::displayToInternalKey(displayString, true);  // true = isDialMode
+            mainWindowRef->setHoldMapping(buttonKey, internalKey);
         }
-        for (const QString &button : pressMappingCombos.keys()) {
-            mainWindowRef->setPressMapping(button, pressMappingCombos[button]->currentText());
+        for (const QString &buttonKey : pressMappingCombos.keys()) {
+            QString displayString = pressMappingCombos[buttonKey]->currentText();
+            QString internalKey = ButtonMappingHelper::displayToInternalKey(displayString, false);  // false = isAction
+            mainWindowRef->setPressMapping(buttonKey, internalKey);
         }
 
         // ✅ Save to persistent settings
@@ -122,16 +127,18 @@ void ControlPanelDialog::loadFromCanvas() {
     colorButton->setStyleSheet(QString("background-color: %1").arg(selectedColor.name()));
 
     if (mainWindowRef) {
-        for (const QString &button : holdMappingCombos.keys()) {
-            QString mode = mainWindowRef->getHoldMapping(button);
-            int index = holdMappingCombos[button]->findText(mode);
-            if (index >= 0) holdMappingCombos[button]->setCurrentIndex(index);
+        for (const QString &buttonKey : holdMappingCombos.keys()) {
+            QString internalKey = mainWindowRef->getHoldMapping(buttonKey);
+            QString displayString = ButtonMappingHelper::internalKeyToDisplay(internalKey, true);  // true = isDialMode
+            int index = holdMappingCombos[buttonKey]->findText(displayString);
+            if (index >= 0) holdMappingCombos[buttonKey]->setCurrentIndex(index);
         }
 
-        for (const QString &button : pressMappingCombos.keys()) {
-            QString action = mainWindowRef->getPressMapping(button);
-            int index = pressMappingCombos[button]->findText(action);
-            if (index >= 0) pressMappingCombos[button]->setCurrentIndex(index);
+        for (const QString &buttonKey : pressMappingCombos.keys()) {
+            QString internalKey = mainWindowRef->getPressMapping(buttonKey);
+            QString displayString = ButtonMappingHelper::internalKeyToDisplay(internalKey, false);  // false = isAction
+            int index = pressMappingCombos[buttonKey]->findText(displayString);
+            if (index >= 0) pressMappingCombos[buttonKey]->setCurrentIndex(index);
         }
     }
 }
@@ -222,27 +229,27 @@ void ControlPanelDialog::createButtonMappingTab() {
     QWidget *buttonTab = new QWidget(this);
     QVBoxLayout *layout = new QVBoxLayout(buttonTab);
 
-    QStringList buttons = {"LEFTSHOULDER", "RIGHTSHOULDER", "PADDLE2", "PADDLE4", "Y", "A", "B", "X", "LEFTSTICK", "START", "GUIDE"};
-    QStringList dialModes = {"None", "PageSwitching", "ZoomControl", "ThicknessControl", "ColorAdjustment", "ToolSwitching", "PresetSelection", "PanAndPageScroll"};
-    QStringList actions = {
-        "None", "Toggle Fullscreen", "Toggle Dial", "Zoom 50%", "Zoom Out", "Zoom 200%",
-        "Add Preset", "Delete Page", "Fast Forward", "Open Control Panel",
-        "Red", "Blue", "Yellow", "Green", "Black", "White", "Custom Color"
-    };
+    QStringList buttonKeys = ButtonMappingHelper::getInternalButtonKeys();
+    QStringList buttonDisplayNames = ButtonMappingHelper::getTranslatedButtons();
+    QStringList dialModes = ButtonMappingHelper::getTranslatedDialModes();
+    QStringList actions = ButtonMappingHelper::getTranslatedActions();
 
-    for (const QString &button : buttons) {
+    for (int i = 0; i < buttonKeys.size(); ++i) {
+        const QString &buttonKey = buttonKeys[i];
+        const QString &buttonDisplayName = buttonDisplayNames[i];
+        
         QHBoxLayout *h = new QHBoxLayout();
-        h->addWidget(new QLabel(button));
+        h->addWidget(new QLabel(buttonDisplayName));  // Use translated button name
 
         QComboBox *holdCombo = new QComboBox();
-        holdCombo->addItems(dialModes);
-        holdMappingCombos[button] = holdCombo;
+        holdCombo->addItems(dialModes);  // Add translated dial mode names
+        holdMappingCombos[buttonKey] = holdCombo;
         h->addWidget(new QLabel(tr("Hold:")));
         h->addWidget(holdCombo);
 
         QComboBox *pressCombo = new QComboBox();
-        pressCombo->addItems(actions);
-        pressMappingCombos[button] = pressCombo;
+        pressCombo->addItems(actions);  // Add translated action names
+        pressMappingCombos[buttonKey] = pressCombo;
         h->addWidget(new QLabel(tr("Press:")));
         h->addWidget(pressCombo);
 

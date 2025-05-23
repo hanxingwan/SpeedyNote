@@ -1,6 +1,6 @@
-
 #include "MainWindow.h"
 #include "InkCanvas.h"
+#include "ButtonMappingTypes.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QScreen>
@@ -30,6 +30,8 @@ MainWindow::MainWindow(QWidget *parent)
 
     setWindowTitle(tr("SpeedyNote Beta 0.4.3"));
 
+    // Initialize DPR early
+    initialDpr = getDevicePixelRatio();
 
     // QString iconPath = QCoreApplication::applicationDirPath() + "/icon.ico";
     setWindowIcon(QIcon(":/resources/icons/mainicon.png"));
@@ -612,7 +614,7 @@ E
     
     
 
-    QWidget *controlBar = new QWidget;
+    controlBar = new QWidget;  // Use member variable instead of local
     controlBar->setObjectName("controlBar");
     controlBar->setLayout(controlLayout);
     controlBar->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
@@ -1247,10 +1249,7 @@ void MainWindow::toggleDial() {
         dialHiddenButton->setFocusPolicy(Qt::NoFocus); // ✅ Prevents accidental focus issues
         dialHiddenButton->setEnabled(false);  // ✅ Disabled by default
 
-        // ✅ Connect to channel switching function
-        connect(dialHiddenButton, &QPushButton::clicked, this, &MainWindow::cycleColorChannel);
-
-
+        // ✅ Connection will be set in changeDialMode() based on current mode
 
         dialColorPreview->raise();  // ✅ Ensure it's on top
         dialIconView->raise();
@@ -1361,7 +1360,8 @@ void MainWindow::updateDialDisplay() {
             break;
         case DialMode::PanAndPageScroll:
             dialIconView->setPixmap(QPixmap(":/resources/icons/scroll_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-            dialDisplay->setText(QString(tr("\n\nPage\n%1").arg(getCurrentPageForCanvas(currentCanvas()) + 1)));
+            QString barStatus = controlBarVisible ? tr("Hide") : tr("Show");
+            dialDisplay->setText(QString(tr("\n\nPage %1\nTap: %2 Bar")).arg(getCurrentPageForCanvas(currentCanvas()) + 1).arg(barStatus));
             break;
     }
 }
@@ -1575,11 +1575,22 @@ void MainWindow::changeDialMode(DialMode mode) {
     currentDialMode = mode; // ✅ Set new mode
     updateDialDisplay();
 
-    dialHiddenButton->setEnabled(currentDialMode == ColorAdjustment);
+    // ✅ Enable dialHiddenButton for ColorAdjustment and PanAndPageScroll modes
+    dialHiddenButton->setEnabled(currentDialMode == ColorAdjustment || currentDialMode == PanAndPageScroll);
 
     // ✅ Disconnect previous slots
     disconnect(pageDial, &QDial::valueChanged, nullptr, nullptr);
     disconnect(pageDial, &QDial::sliderReleased, nullptr, nullptr);
+    
+    // ✅ Disconnect dialHiddenButton to reconnect with appropriate function
+    disconnect(dialHiddenButton, &QPushButton::clicked, nullptr, nullptr);
+    
+    // ✅ Connect dialHiddenButton to appropriate function based on mode
+    if (currentDialMode == ColorAdjustment) {
+        connect(dialHiddenButton, &QPushButton::clicked, this, &MainWindow::cycleColorChannel);
+    } else if (currentDialMode == PanAndPageScroll) {
+        connect(dialHiddenButton, &QPushButton::clicked, this, &MainWindow::toggleControlBar);
+    }
 
     dialColorPreview->hide();
     dialDisplay->setStyleSheet("background-color: black; color: white; font-size: 14px; border-radius: 40px;");
@@ -1980,14 +1991,20 @@ void MainWindow::setPressMapping(const QString &buttonName, const QString &actio
 
 
 DialMode MainWindow::dialModeFromString(const QString &mode) {
-    if (mode == "PageSwitching") return PageSwitching;
-    if (mode == "ZoomControl") return ZoomControl;
-    if (mode == "ThicknessControl") return ThicknessControl;
-    if (mode == "ColorAdjustment") return ColorAdjustment;
-    if (mode == "ToolSwitching") return ToolSwitching;
-    if (mode == "PresetSelection") return PresetSelection;
-    if (mode == "PanAndPageScroll") return PanAndPageScroll;
-    return PanAndPageScroll;
+    // Convert internal key to our existing DialMode enum
+    InternalDialMode internalMode = ButtonMappingHelper::internalKeyToDialMode(mode);
+    
+    switch (internalMode) {
+        case InternalDialMode::None: return PageSwitching; // Default fallback
+        case InternalDialMode::PageSwitching: return PageSwitching;
+        case InternalDialMode::ZoomControl: return ZoomControl;
+        case InternalDialMode::ThicknessControl: return ThicknessControl;
+        case InternalDialMode::ColorAdjustment: return ColorAdjustment;
+        case InternalDialMode::ToolSwitching: return ToolSwitching;
+        case InternalDialMode::PresetSelection: return PresetSelection;
+        case InternalDialMode::PanAndPageScroll: return PanAndPageScroll;
+    }
+    return PanAndPageScroll;  // Default fallback
 }
 
 // MainWindow.cpp
@@ -2019,25 +2036,130 @@ void MainWindow::saveButtonMappings() {
 void MainWindow::loadButtonMappings() {
     QSettings settings("SpeedyNote", "App");
 
+    // First, check if we need to migrate old settings
+    migrateOldButtonMappings();
+
     settings.beginGroup("ButtonHoldMappings");
     QStringList holdKeys = settings.allKeys();
     for (const QString &key : holdKeys) {
-        buttonHoldMapping[key] = settings.value(key, "None").toString();
+        buttonHoldMapping[key] = settings.value(key, "none").toString();
     }
     settings.endGroup();
 
     settings.beginGroup("ButtonPressMappings");
     QStringList pressKeys = settings.allKeys();
     for (const QString &key : pressKeys) {
-        QString value = settings.value(key, "None").toString();
+        QString value = settings.value(key, "none").toString();
         buttonPressMapping[key] = value;
 
-        // ✅ ADD THIS LINE
+        // ✅ Convert internal key to action enum
         buttonPressActionMapping[key] = stringToAction(value);
     }
     settings.endGroup();
 }
 
+void MainWindow::migrateOldButtonMappings() {
+    QSettings settings("SpeedyNote", "App");
+    
+    // Check if migration is needed by looking for old format strings
+    settings.beginGroup("ButtonHoldMappings");
+    QStringList holdKeys = settings.allKeys();
+    bool needsMigration = false;
+    
+    for (const QString &key : holdKeys) {
+        QString value = settings.value(key).toString();
+        // If we find old English strings, we need to migrate
+        if (value == "PageSwitching" || value == "ZoomControl" || value == "ThicknessControl" ||
+            value == "ColorAdjustment" || value == "ToolSwitching" || value == "PresetSelection" ||
+            value == "PanAndPageScroll") {
+            needsMigration = true;
+            break;
+        }
+    }
+    settings.endGroup();
+    
+    if (!needsMigration) {
+        settings.beginGroup("ButtonPressMappings");
+        QStringList pressKeys = settings.allKeys();
+        for (const QString &key : pressKeys) {
+            QString value = settings.value(key).toString();
+            // Check for old English action strings
+            if (value == "Toggle Fullscreen" || value == "Toggle Dial" || value == "Zoom 50%" ||
+                value == "Add Preset" || value == "Delete Page" || value == "Fast Forward" ||
+                value == "Open Control Panel" || value == "Custom Color") {
+                needsMigration = true;
+                break;
+            }
+        }
+        settings.endGroup();
+    }
+    
+    if (!needsMigration) return;
+    
+    // Perform migration
+    qDebug() << "Migrating old button mappings to new format...";
+    
+    // Migrate hold mappings
+    settings.beginGroup("ButtonHoldMappings");
+    holdKeys = settings.allKeys();
+    for (const QString &key : holdKeys) {
+        QString oldValue = settings.value(key).toString();
+        QString newValue = migrateOldDialModeString(oldValue);
+        if (newValue != oldValue) {
+            settings.setValue(key, newValue);
+        }
+    }
+    settings.endGroup();
+    
+    // Migrate press mappings
+    settings.beginGroup("ButtonPressMappings");
+    QStringList pressKeys = settings.allKeys();
+    for (const QString &key : pressKeys) {
+        QString oldValue = settings.value(key).toString();
+        QString newValue = migrateOldActionString(oldValue);
+        if (newValue != oldValue) {
+            settings.setValue(key, newValue);
+        }
+    }
+    settings.endGroup();
+    
+    qDebug() << "Button mapping migration completed.";
+}
+
+QString MainWindow::migrateOldDialModeString(const QString &oldString) {
+    // Convert old English strings to new internal keys
+    if (oldString == "None") return "none";
+    if (oldString == "PageSwitching") return "page_switching";
+    if (oldString == "ZoomControl") return "zoom_control";
+    if (oldString == "ThicknessControl") return "thickness_control";
+    if (oldString == "ColorAdjustment") return "color_adjustment";
+    if (oldString == "ToolSwitching") return "tool_switching";
+    if (oldString == "PresetSelection") return "preset_selection";
+    if (oldString == "PanAndPageScroll") return "pan_and_page_scroll";
+    return oldString; // Return as-is if not found (might already be new format)
+}
+
+QString MainWindow::migrateOldActionString(const QString &oldString) {
+    // Convert old English strings to new internal keys
+    if (oldString == "None") return "none";
+    if (oldString == "Toggle Fullscreen") return "toggle_fullscreen";
+    if (oldString == "Toggle Dial") return "toggle_dial";
+    if (oldString == "Zoom 50%") return "zoom_50";
+    if (oldString == "Zoom Out") return "zoom_out";
+    if (oldString == "Zoom 200%") return "zoom_200";
+    if (oldString == "Add Preset") return "add_preset";
+    if (oldString == "Delete Page") return "delete_page";
+    if (oldString == "Fast Forward") return "fast_forward";
+    if (oldString == "Open Control Panel") return "open_control_panel";
+    if (oldString == "Red") return "red_color";
+    if (oldString == "Blue") return "blue_color";
+    if (oldString == "Yellow") return "yellow_color";
+    if (oldString == "Green") return "green_color";
+    if (oldString == "Black") return "black_color";
+    if (oldString == "White") return "white_color";
+    if (oldString == "Custom Color") return "custom_color";
+    return oldString; // Return as-is if not found (might already be new format)
+}
 
 void MainWindow::handleControllerButton(const QString &buttonName) {  // This is for single press functions
     ControllerAction action = buttonPressActionMapping.value(buttonName, ControllerAction::None);
@@ -2151,4 +2273,49 @@ void MainWindow::loadUserSettings() {
     scrollOnTopEnabled = settings.value("scrollOnTopEnabled", true).toBool();
     setScrollOnTopEnabled(scrollOnTopEnabled);
 
+}
+
+void MainWindow::toggleControlBar() {
+    controlBarVisible = !controlBarVisible;
+    controlBar->setVisible(controlBarVisible);
+    
+    // Hide floating popup widgets when control bar is hidden to prevent stacking
+    if (!controlBarVisible) {
+        if (zoomFrame && zoomFrame->isVisible()) zoomFrame->hide();
+        if (thicknessFrame && thicknessFrame->isVisible()) thicknessFrame->hide();
+        
+        // Hide orphaned widgets that are not added to any layout
+        if (colorPreview) colorPreview->hide();
+        if (thicknessButton) thicknessButton->hide();
+        if (jumpToPageButton) jumpToPageButton->hide();
+        if (channelSelector) channelSelector->hide();
+        if (toolSelector) toolSelector->hide();
+        if (zoomButton) zoomButton->hide();
+        if (customColorInput) customColorInput->hide();
+        
+        // Find and hide local widgets that might be orphaned
+        QList<QComboBox*> comboBoxes = findChildren<QComboBox*>();
+        for (QComboBox* combo : comboBoxes) {
+            if (combo->parent() == this && !combo->isVisible()) {
+                // Already hidden, keep it hidden
+            } else if (combo->parent() == this) {
+                // This might be the orphaned dialModeSelector or similar
+                combo->hide();
+            }
+        }
+    } else {
+        // Show orphaned widgets when control bar is visible
+        // Note: These are kept hidden normally since they're not in the layout
+        // Only show them if they were specifically intended to be visible
+    }
+    
+    // Update dial display to reflect new status
+    updateDialDisplay();
+    
+    // Force layout update to recalculate space
+    if (auto *canvas = currentCanvas()) {
+        QTimer::singleShot(0, this, [this, canvas]() {
+            canvas->setMaximumSize(canvas->getCanvasSize());
+        });
+    }
 }
