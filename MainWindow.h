@@ -233,6 +233,7 @@ private slots:
     // Color button state management
     void updateColorButtonStates();
     void selectColorButton(QPushButton* selectedButton);
+    void updateStraightLineButtonState();
 
     QColor getContrastingTextColor(const QColor &backgroundColor);
     void updateCustomColorButtonStyle(const QColor &color);
@@ -276,7 +277,8 @@ private:
 
     QSpinBox *pageInput;
     QPushButton *backgroundButton; // New button to set background
-
+    QPushButton *straightLineToggleButton; // Button to toggle straight line mode
+    
     QSlider *zoomSlider;
     QPushButton *zoomButton;
     QFrame *zoomFrame;

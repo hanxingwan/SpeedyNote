@@ -301,6 +301,54 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
     // ✅ Draw user's strokes from the buffer (transparent overlay)
     painter.drawPixmap(0, 0, buffer);
     
+    // Draw straight line preview if in straight line mode and drawing
+    // Skip preview for eraser tool
+    if (straightLineMode && drawing && currentTool != ToolType::Eraser) {
+        // Save the current state before applying the eraser mode
+        painter.save();
+        
+        // Store current pressure - ensure minimum is 0.5 for consistent preview
+        qreal pressure = qMax(0.5, painter.device()->devicePixelRatioF() > 1.0 ? 0.8 : 1.0);
+        
+        // Set up the pen based on tool type
+        if (currentTool == ToolType::Marker) {
+            qreal thickness = penThickness * 8.0;
+            QColor markerColor = penColor;
+            // Increase alpha for better visibility in straight line mode
+            // Using a higher value (80) instead of the regular 4 to compensate for single-pass drawing
+            markerColor.setAlpha(80);
+            QPen pen(markerColor, thickness, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+            painter.setPen(pen);
+        } else { // Default Pen
+            // Match the exact same thickness calculation as in drawStroke
+            qreal scaledThickness = penThickness * pressure;
+            QPen pen(penColor, scaledThickness, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+            painter.setPen(pen);
+        }
+        
+        // Use the same coordinate transformation logic as in drawStroke
+        // to ensure the preview line appears at the exact same position
+        QPointF bufferStart, bufferEnd;
+        
+        // Convert screen coordinates to buffer coordinates using the same calculations as drawStroke
+        qreal scaledCanvasWidth = buffer.width() * (zoomFactor / 100.0);
+        qreal scaledCanvasHeight = buffer.height() * (zoomFactor / 100.0);
+        qreal centerOffsetX = (scaledCanvasWidth < width()) ? (width() - scaledCanvasWidth) / 2.0 : 0;
+        qreal centerOffsetY = (scaledCanvasHeight < height()) ? (height() - scaledCanvasHeight) / 2.0 : 0;
+        
+        QPointF adjustedStart = straightLineStartPoint - QPointF(centerOffsetX, centerOffsetY);
+        QPointF adjustedEnd = lastPoint - QPointF(centerOffsetX, centerOffsetY);
+        
+        bufferStart = (adjustedStart / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
+        bufferEnd = (adjustedEnd / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
+        
+        // Draw the preview line using the same coordinates that will be used for the final line
+        painter.drawLine(bufferStart, bufferEnd);
+        
+        // Restore the original painter state
+        painter.restore();
+    }
+    
     // Restore the painter state
     painter.restore();
     
@@ -323,32 +371,191 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
 }
 
 void InkCanvas::tabletEvent(QTabletEvent *event) {
-
-
+    // Hardware eraser detection
+    static bool hardwareEraserActive = false;
+    bool wasUsingHardwareEraser = false;
+    
+    // Track hardware eraser state
     if (event->pointerType() == QPointingDevice::PointerType::Eraser) {
+        // Hardware eraser is being used
+        wasUsingHardwareEraser = true;
+        
         if (event->type() == QEvent::TabletPress) {
+            // Start of eraser stroke - save current tool and switch to eraser
+            hardwareEraserActive = true;
             previousTool = currentTool;
             currentTool = ToolType::Eraser;
-        } else if (event->type() == QEvent::TabletRelease) {
-            currentTool = previousTool;
         }
     }
+    
+    // Maintain hardware eraser state across move events
+    if (hardwareEraserActive && event->type() != QEvent::TabletRelease) {
+        wasUsingHardwareEraser = true;
+    }
+
+    // Determine if we're in eraser mode (either hardware eraser or tool set to eraser)
+    bool isErasing = (currentTool == ToolType::Eraser);
 
     if (event->type() == QEvent::TabletPress) {
         drawing = true;
         lastPoint = event->posF();
-    } else if (event->type() == QEvent::TabletMove && drawing) {
-        if (currentTool == ToolType::Eraser) {
-            eraseStroke(lastPoint, event->posF(), event->pressure());
-        } else {
-            drawStroke(lastPoint, event->posF(), event->pressure());
+        // Always store start point if in straight line mode, regardless of tool
+        if (straightLineMode) {
+            straightLineStartPoint = lastPoint;
         }
-        lastPoint = event->posF();
-        processedTimestamps.push_back(benchmarkTimer.elapsed());
+    } else if (event->type() == QEvent::TabletMove && drawing) {
+        if (straightLineMode && !isErasing) {
+            // For straight line mode with non-eraser tools, just update the last position
+            // and trigger a repaint of only the affected area for preview
+            static QElapsedTimer updateTimer;
+            static bool timerInitialized = false;
+            
+            if (!timerInitialized) {
+                updateTimer.start();
+                timerInitialized = true;
+            }
+            
+            // Throttle updates based on time for high CPU usage tools
+            bool shouldUpdate = true;
+            
+            // Apply throttling for marker which can be CPU intensive
+            if (currentTool == ToolType::Marker) {
+                shouldUpdate = updateTimer.elapsed() > 16; // Only update every 16ms (approx 60fps)
+            }
+            
+            if (shouldUpdate) {
+                QPointF oldLastPoint = lastPoint;
+                lastPoint = event->posF();
+                
+                // Calculate affected rectangle that needs updating
+                QRectF updateRect = calculatePreviewRect(straightLineStartPoint, oldLastPoint, lastPoint);
+                update(updateRect.toRect());
+                
+                // Reset timer
+                updateTimer.restart();
+            } else {
+                // Just update the last point without redrawing
+                lastPoint = event->posF();
+            }
+        } else if (straightLineMode && isErasing) {
+            // For eraser in straight line mode, continuously erase from start to current point
+            // This gives immediate visual feedback and smoother erasing experience
+            
+            // Store current point
+            QPointF currentPoint = event->posF();
+            
+            // Clear previous stroke by redrawing with transparency
+            QRectF updateRect = QRectF(straightLineStartPoint, lastPoint).normalized().adjusted(-20, -20, 20, 20);
+            update(updateRect.toRect());
+            
+            // Erase from start point to current position
+            eraseStroke(straightLineStartPoint, currentPoint, event->pressure());
+            
+            // Update last point
+            lastPoint = currentPoint;
+            
+            // Only track benchmarking when enabled
+            if (benchmarking) {
+                processedTimestamps.push_back(benchmarkTimer.elapsed());
+            }
+        } else {
+            // Normal drawing mode OR eraser regardless of straight line mode
+            if (isErasing) {
+                eraseStroke(lastPoint, event->posF(), event->pressure());
+            } else {
+                drawStroke(lastPoint, event->posF(), event->pressure());
+            }
+            lastPoint = event->posF();
+            
+            // Only track benchmarking when enabled
+            if (benchmarking) {
+                processedTimestamps.push_back(benchmarkTimer.elapsed());
+            }
+        }
     } else if (event->type() == QEvent::TabletRelease) {
+        if (straightLineMode && !isErasing) {
+            // Draw the final line on release with the current pressure
+            qreal pressure = event->pressure();
+            
+            // Always use at least a minimum pressure
+            pressure = qMax(pressure, 0.5);
+            
+            drawStroke(straightLineStartPoint, event->posF(), pressure);
+            
+            // Only track benchmarking when enabled
+            if (benchmarking) {
+                processedTimestamps.push_back(benchmarkTimer.elapsed());
+            }
+            
+            // Force repaint to clear the preview line
+            update();
+        } else if (straightLineMode && isErasing) {
+            // For erasing in straight line mode, most of the work is done during movement
+            // Just ensure one final erasing pass from start to end point
+            qreal pressure = qMax(event->pressure(), 0.5);
+            
+            // Final pass to ensure the entire line is erased
+            eraseStroke(straightLineStartPoint, event->posF(), pressure);
+            
+            // Force update to clear any remaining artifacts
+            update();
+        }
+        
         drawing = false;
+        
+        // Reset tool state if we were using the hardware eraser
+        if (wasUsingHardwareEraser) {
+            currentTool = previousTool;
+            hardwareEraserActive = false;  // Reset hardware eraser tracking
+        }
     }
     event->accept();
+}
+
+// Helper function to calculate area that needs updating for preview
+QRectF InkCanvas::calculatePreviewRect(const QPointF &start, const QPointF &oldEnd, const QPointF &newEnd) {
+    // Calculate centering offsets - use the same calculation as in paintEvent
+    qreal scaledCanvasWidth = buffer.width() * (zoomFactor / 100.0);
+    qreal scaledCanvasHeight = buffer.height() * (zoomFactor / 100.0);
+    qreal centerOffsetX = (scaledCanvasWidth < width()) ? (width() - scaledCanvasWidth) / 2.0 : 0;
+    qreal centerOffsetY = (scaledCanvasHeight < height()) ? (height() - scaledCanvasHeight) / 2.0 : 0;
+    
+    // Calculate the buffer coordinates for our points (same as in drawStroke)
+    QPointF adjustedStart = start - QPointF(centerOffsetX, centerOffsetY);
+    QPointF adjustedOldEnd = oldEnd - QPointF(centerOffsetX, centerOffsetY);
+    QPointF adjustedNewEnd = newEnd - QPointF(centerOffsetX, centerOffsetY);
+    
+    QPointF bufferStart = (adjustedStart / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
+    QPointF bufferOldEnd = (adjustedOldEnd / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
+    QPointF bufferNewEnd = (adjustedNewEnd / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
+    
+    // Now convert from buffer coordinates to screen coordinates
+    QPointF screenStart = (bufferStart - QPointF(panOffsetX, panOffsetY)) * (zoomFactor / 100.0) + QPointF(centerOffsetX, centerOffsetY);
+    QPointF screenOldEnd = (bufferOldEnd - QPointF(panOffsetX, panOffsetY)) * (zoomFactor / 100.0) + QPointF(centerOffsetX, centerOffsetY);
+    QPointF screenNewEnd = (bufferNewEnd - QPointF(panOffsetX, panOffsetY)) * (zoomFactor / 100.0) + QPointF(centerOffsetX, centerOffsetY);
+    
+    // Create rectangles for both the old and new lines
+    QRectF oldLineRect = QRectF(screenStart, screenOldEnd).normalized();
+    QRectF newLineRect = QRectF(screenStart, screenNewEnd).normalized();
+    
+    // Calculate padding based on pen thickness and device pixel ratio
+    qreal dpr = devicePixelRatioF();
+    qreal padding;
+    
+    if (currentTool == ToolType::Eraser) {
+        padding = penThickness * 6.0 * dpr;
+    } else if (currentTool == ToolType::Marker) {
+        padding = penThickness * 8.0 * dpr;
+    } else {
+        padding = penThickness * dpr;
+    }
+    
+    // Ensure minimum padding
+    padding = qMax(padding, 15.0);
+    
+    // Combine rectangles with appropriate padding
+    QRectF combinedRect = oldLineRect.united(newLineRect);
+    return combinedRect.adjusted(-padding, -padding, padding, padding);
 }
 
 void InkCanvas::mousePressEvent(QMouseEvent *event) {
@@ -385,7 +592,14 @@ void InkCanvas::drawStroke(const QPointF &start, const QPointF &end, qreal press
     if (currentTool == ToolType::Marker) {
         thickness *= 8.0;
         QColor markerColor = penColor;
-        markerColor.setAlpha(4); // Semi-transparent for marker effect
+        // Adjust alpha based on whether we're in straight line mode
+        if (straightLineMode) {
+            // For straight line mode, use higher alpha to make it more visible
+            markerColor.setAlpha(40);
+        } else {
+            // For regular drawing, use lower alpha for the usual marker effect
+            markerColor.setAlpha(4);
+        }
         QPen pen(markerColor, thickness, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
         painter.setPen(pen);
     } else { // Default Pen
@@ -1141,4 +1355,4 @@ bool InkCanvas::event(QEvent *event) {
     }
     
     return QWidget::event(event);
-}
+    }

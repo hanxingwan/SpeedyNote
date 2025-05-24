@@ -82,6 +82,10 @@ public:
     qreal getPenThickness(); // Added getter for pen thickness
     ToolType getCurrentTool(); // Added getter for tool type
 
+    // Straight line mode toggle
+    void setStraightLineMode(bool enabled) { straightLineMode = enabled; }
+    bool isStraightLineMode() const { return straightLineMode; }
+
     void loadPdfPreviewAsync(int pageNumber);  // ✅ Load a quick preview of the PDF page
     // for notebook background below
     void setBackgroundStyle(BackgroundStyle style);
@@ -126,6 +130,7 @@ private:
     QPixmap buffer;            // Off-screen buffer
     QImage background;
     QPointF lastPoint;
+    QPointF straightLineStartPoint;  // Stores the start point for straight line mode
     bool drawing;
     QColor penColor; // Added pen color property
     qreal penThickness; // Added pen thickness property
@@ -133,6 +138,7 @@ private:
     ToolType previousTool; // To restore tool after erasing
     QString saveFolder; // Folder to save images
     QPixmap backgroundImage;
+    bool straightLineMode = false;  // Flag for straight line mode
 
     int zoomFactor;     // Zoom percentage (100 = normal)
     int panOffsetX;     // Horizontal pan offset
@@ -144,6 +150,7 @@ private:
     void initializeBuffer();   // Helper to initialize the buffer
     void drawStroke(const QPointF &start, const QPointF &end, qreal pressure);    
     void eraseStroke(const QPointF &start, const QPointF &end, qreal pressure);
+    QRectF calculatePreviewRect(const QPointF &start, const QPointF &oldEnd, const QPointF &newEnd);
     
 
     QCache<int, QPixmap> pdfCache; // Caches 5 pages of the PDF

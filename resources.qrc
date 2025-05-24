@@ -27,6 +27,8 @@
     <file>resources/icons/pdfdelete_reversed.png</file>
     <file>resources/icons/folder.png</file>
     <file>resources/icons/folder_reversed.png</file>
+    <file>resources/icons/straightLine.png</file>
+     <file>resources/icons/straightLine_reversed.png</file>
     <file>resources/icons/trash.png</file>
     <file>resources/icons/trash_reversed.png</file>
     <file>resources/icons/addtab.png</file>

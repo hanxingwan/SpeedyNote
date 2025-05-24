@@ -327,7 +327,19 @@ void MainWindow::setupUi() {
     backgroundButton->setToolTip(tr("Set Background Pic"));
     connect(backgroundButton, &QPushButton::clicked, this, &MainWindow::selectBackground);
 
-    
+    // Initialize straight line toggle button
+    straightLineToggleButton = new QPushButton(this);
+    straightLineToggleButton->setFixedSize(30, 30);
+    QIcon straightLineIcon(loadThemedIcon("straightLine"));  // Make sure this icon exists or use a different one
+    straightLineToggleButton->setIcon(straightLineIcon);
+    straightLineToggleButton->setStyleSheet(buttonStyle);
+    straightLineToggleButton->setToolTip(tr("Toggle Straight Line Mode"));
+    connect(straightLineToggleButton, &QPushButton::clicked, this, [this]() {
+        if (!currentCanvas()) return;
+        bool newMode = !currentCanvas()->isStraightLineMode();
+        currentCanvas()->setStraightLineMode(newMode);
+        updateStraightLineButtonState();
+    });
     
     deletePageButton = new QPushButton(this);
     deletePageButton->setFixedSize(30, 30);
@@ -619,6 +631,7 @@ void MainWindow::setupUi() {
     controlLayout->addWidget(blackButton);
     controlLayout->addWidget(whiteButton);
     controlLayout->addWidget(customColorButton);
+    controlLayout->addWidget(straightLineToggleButton);
     // controlLayout->addWidget(colorPreview);
     // controlLayout->addWidget(thicknessButton);
     // controlLayout->addWidget(jumpToPageButton);
@@ -955,6 +968,7 @@ void MainWindow::switchTab(int index) {
             }
             updateDialDisplay();
             updateColorButtonStates();  // Update button states when switching tabs
+            updateStraightLineButtonState();  // Update straight line button state when switching tabs
         }
     }
 }
@@ -1038,6 +1052,7 @@ void MainWindow::addNewTab() {
 
     zoomSlider->setValue(100 / initialDpr); // Set initial zoom level based on DPR
     updateDialDisplay();
+    updateStraightLineButtonState();  // Initialize straight line button state for the new tab
 
     QString tempDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/temp_session";
     newCanvas->setSaveFolder(tempDir);
@@ -2518,4 +2533,21 @@ void MainWindow::updateCustomColorButtonStyle(const QColor &color) {
         .arg(color.name())
         .arg(textColor.name()));
     customColorButton->setText(QString("%1").arg(color.name()).toUpper());
+}
+
+void MainWindow::updateStraightLineButtonState() {
+    // Check if there's a current canvas
+    if (!currentCanvas()) return;
+    
+    // Update the button state to match the canvas straight line mode
+    bool isEnabled = currentCanvas()->isStraightLineMode();
+    
+    // Set visual indicator that the button is active/inactive
+    if (straightLineToggleButton) {
+        straightLineToggleButton->setProperty("selected", isEnabled);
+        
+        // Force style update
+        straightLineToggleButton->style()->unpolish(straightLineToggleButton);
+        straightLineToggleButton->style()->polish(straightLineToggleButton);
+    }
 }
