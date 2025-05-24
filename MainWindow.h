@@ -125,7 +125,9 @@ public:
     bool isScrollOnTopEnabled() const;
     void setScrollOnTopEnabled(bool enabled);
 
-    
+    bool touchGesturesEnabled = false;
+    bool areTouchGesturesEnabled() const;
+    void setTouchGesturesEnabled(bool enabled);
 
     SDLControllerManager *controllerManager = nullptr;
     QThread *controllerThread = nullptr;
@@ -224,15 +226,16 @@ private slots:
     void handleDialPanScroll(int angle);  // Add missing function declaration
     void onPanScrollReleased();           // Add missing function declaration
 
+    // Touch gesture handlers
+    void handleTouchZoomChange(int newZoom);
+    void handleTouchPanChange(int panX, int panY);
     
+    // Color button state management
+    void updateColorButtonStates();
+    void selectColorButton(QPushButton* selectedButton);
 
-
-
-    
-
-    
-
-    
+    QColor getContrastingTextColor(const QColor &backgroundColor);
+    void updateCustomColorButtonStyle(const QColor &color);
 
 private:
     InkCanvas *canvas;

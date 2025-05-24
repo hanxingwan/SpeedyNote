@@ -18,6 +18,8 @@
 #include "MainWindow.h"
 #include <QInputDevice>
 #include <QTabletEvent>
+#include <QTouchEvent>
+#include <QtMath>
 
 #include <QtConcurrent/QtConcurrentRun>
 #include <QFuture>
@@ -38,8 +40,11 @@ InkCanvas::InkCanvas(QWidget *parent)
     : QWidget(parent), drawing(false), penColor(Qt::black), penThickness(5.0), zoomFactor(100), panOffsetX(0), panOffsetY(0), currentTool(ToolType::Pen) {    
     setAttribute(Qt::WA_StaticContents);
     setTabletTracking(true);
+    setAttribute(Qt::WA_AcceptTouchEvents);  // Enable touch events
 
-    
+    // Enable immediate updates for smoother animation
+    setAttribute(Qt::WA_OpaquePaintEvent);
+    setAttribute(Qt::WA_NoSystemBackground);
     
     // Detect screen resolution and set canvas size
     QScreen *screen = QGuiApplication::primaryScreen();
@@ -224,11 +229,38 @@ void InkCanvas::resizeEvent(QResizeEvent *event) {
 void InkCanvas::paintEvent(QPaintEvent *event) {
     QPainter painter(this);
     
-    // Scale the painter to match zoom factor
-    painter.scale(zoomFactor / 100.0, zoomFactor / 100.0);
+    // Save the painter state before transformations
+    painter.save();
+    
+    // Calculate the scaled canvas size
+    qreal scaledCanvasWidth = buffer.width() * (internalZoomFactor / 100.0);
+    qreal scaledCanvasHeight = buffer.height() * (internalZoomFactor / 100.0);
+    
+    // Calculate centering offsets
+    qreal centerOffsetX = 0;
+    qreal centerOffsetY = 0;
+    
+    // Center horizontally if canvas is smaller than widget
+    if (scaledCanvasWidth < width()) {
+        centerOffsetX = (width() - scaledCanvasWidth) / 2.0;
+    }
+    
+    // Center vertically if canvas is smaller than widget
+    if (scaledCanvasHeight < height()) {
+        centerOffsetY = (height() - scaledCanvasHeight) / 2.0;
+    }
+    
+    // Apply centering offset first
+    painter.translate(centerOffsetX, centerOffsetY);
+    
+    // Use internal zoom factor for smoother animation
+    painter.scale(internalZoomFactor / 100.0, internalZoomFactor / 100.0);
 
     // Pan offset needs to be reversed because painter works in transformed coordinates
     painter.translate(-panOffsetX, -panOffsetY);
+    
+    // Set clipping rectangle to canvas bounds to prevent painting outside
+    painter.setClipRect(0, 0, buffer.width(), buffer.height());
 
     // 🟨 Optional notebook-style background rendering
     if (backgroundImage.isNull() && backgroundStyle != BackgroundStyle::None) {
@@ -268,6 +300,26 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
 
     // ✅ Draw user's strokes from the buffer (transparent overlay)
     painter.drawPixmap(0, 0, buffer);
+    
+    // Restore the painter state
+    painter.restore();
+    
+    // Fill the area outside the canvas with the widget's background color
+    QRect widgetRect = rect();
+    QRectF canvasRect(
+        centerOffsetX - panOffsetX * (internalZoomFactor / 100.0),
+        centerOffsetY - panOffsetY * (internalZoomFactor / 100.0),
+        buffer.width() * (internalZoomFactor / 100.0),
+        buffer.height() * (internalZoomFactor / 100.0)
+    );
+    
+    // Create regions for areas outside the canvas
+    QRegion outsideRegion(widgetRect);
+    outsideRegion -= QRegion(canvasRect.toRect());
+    
+    // Fill the outside region with the background color
+    painter.setClipRegion(outsideRegion);
+    painter.fillRect(widgetRect, palette().window().color());
 }
 
 void InkCanvas::tabletEvent(QTabletEvent *event) {
@@ -342,9 +394,18 @@ void InkCanvas::drawStroke(const QPointF &start, const QPointF &end, qreal press
         painter.setPen(pen);
     }
 
-    // Convert screen position to buffer position
-    QPointF bufferStart = ((start) / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
-    QPointF bufferEnd = ((end) / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
+    // Calculate centering offsets
+    qreal scaledCanvasWidth = buffer.width() * (zoomFactor / 100.0);
+    qreal scaledCanvasHeight = buffer.height() * (zoomFactor / 100.0);
+    qreal centerOffsetX = (scaledCanvasWidth < width()) ? (width() - scaledCanvasWidth) / 2.0 : 0;
+    qreal centerOffsetY = (scaledCanvasHeight < height()) ? (height() - scaledCanvasHeight) / 2.0 : 0;
+    
+    // Convert screen position to buffer position, accounting for centering
+    QPointF adjustedStart = start - QPointF(centerOffsetX, centerOffsetY);
+    QPointF adjustedEnd = end - QPointF(centerOffsetX, centerOffsetY);
+    
+    QPointF bufferStart = (adjustedStart / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
+    QPointF bufferEnd = (adjustedEnd / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
 
     painter.drawLine(bufferStart, bufferEnd);
 
@@ -353,8 +414,8 @@ void InkCanvas::drawStroke(const QPointF &start, const QPointF &end, qreal press
                         .adjusted(-updatePadding, -updatePadding, updatePadding, updatePadding);
 
     QRect scaledUpdateRect = QRect(
-        ((updateRect.topLeft() - QPointF(panOffsetX, panOffsetY)) * (zoomFactor / 100.0)).toPoint(),
-        ((updateRect.bottomRight() - QPointF(panOffsetX, panOffsetY)) * (zoomFactor / 100.0)).toPoint()
+        ((updateRect.topLeft() - QPointF(panOffsetX, panOffsetY)) * (zoomFactor / 100.0) + QPointF(centerOffsetX, centerOffsetY)).toPoint(),
+        ((updateRect.bottomRight() - QPointF(panOffsetX, panOffsetY)) * (zoomFactor / 100.0) + QPointF(centerOffsetX, centerOffsetY)).toPoint()
     );
     update(scaledUpdateRect);
 }
@@ -375,9 +436,18 @@ void InkCanvas::eraseStroke(const QPointF &start, const QPointF &end, qreal pres
     QPen eraserPen(Qt::transparent, eraserThickness, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
     painter.setPen(eraserPen);
 
-    // Convert screen position to buffer position
-    QPointF bufferStart = ((start) / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
-    QPointF bufferEnd = ((end) / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
+    // Calculate centering offsets
+    qreal scaledCanvasWidth = buffer.width() * (zoomFactor / 100.0);
+    qreal scaledCanvasHeight = buffer.height() * (zoomFactor / 100.0);
+    qreal centerOffsetX = (scaledCanvasWidth < width()) ? (width() - scaledCanvasWidth) / 2.0 : 0;
+    qreal centerOffsetY = (scaledCanvasHeight < height()) ? (height() - scaledCanvasHeight) / 2.0 : 0;
+    
+    // Convert screen position to buffer position, accounting for centering
+    QPointF adjustedStart = start - QPointF(centerOffsetX, centerOffsetY);
+    QPointF adjustedEnd = end - QPointF(centerOffsetX, centerOffsetY);
+    
+    QPointF bufferStart = (adjustedStart / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
+    QPointF bufferEnd = (adjustedEnd / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
 
     painter.drawLine(bufferStart, bufferEnd);
 
@@ -386,8 +456,8 @@ void InkCanvas::eraseStroke(const QPointF &start, const QPointF &end, qreal pres
                         .adjusted(-10, -10, 10, 10);
 
     QRect scaledUpdateRect = QRect(
-        ((updateRect.topLeft() - QPointF(panOffsetX, panOffsetY)) * (zoomFactor / 100.0)).toPoint(),
-        ((updateRect.bottomRight() - QPointF(panOffsetX, panOffsetY)) * (zoomFactor / 100.0)).toPoint()
+        ((updateRect.topLeft() - QPointF(panOffsetX, panOffsetY)) * (zoomFactor / 100.0) + QPointF(centerOffsetX, centerOffsetY)).toPoint(),
+        ((updateRect.bottomRight() - QPointF(panOffsetX, panOffsetY)) * (zoomFactor / 100.0) + QPointF(centerOffsetX, centerOffsetY)).toPoint()
     );
     update(scaledUpdateRect);
 }
@@ -661,6 +731,7 @@ void InkCanvas::setBackground(const QString &filePath, int pageNumber) {
 
 void InkCanvas::setZoom(int zoomLevel) {
     zoomFactor = qMax(10, qMin(zoomLevel, 400)); // Limit zoom to 10%-400%
+    internalZoomFactor = zoomFactor; // Sync internal zoom
     update();
 }
 
@@ -930,3 +1001,144 @@ void InkCanvas::importNotebookTo(const QString &packageFile, const QString &dest
 
         QMessageBox::information(nullptr, tr("Import"), tr("Notebook imported successfully."));
     }
+
+bool InkCanvas::event(QEvent *event) {
+    if (!touchGesturesEnabled) {
+        return QWidget::event(event);
+    }
+
+    if (event->type() == QEvent::TouchBegin || 
+        event->type() == QEvent::TouchUpdate || 
+        event->type() == QEvent::TouchEnd) {
+        
+        QTouchEvent *touchEvent = static_cast<QTouchEvent*>(event);
+        const QList<QTouchEvent::TouchPoint> touchPoints = touchEvent->points();
+        
+        activeTouchPoints = touchPoints.count();
+
+        if (activeTouchPoints == 1) {
+            // Single finger pan
+            const QTouchEvent::TouchPoint &touchPoint = touchPoints.first();
+            
+            if (event->type() == QEvent::TouchBegin) {
+                isPanning = true;
+                lastTouchPos = touchPoint.position();
+            } else if (event->type() == QEvent::TouchUpdate && isPanning) {
+                QPointF delta = touchPoint.position() - lastTouchPos;
+                
+                // Make panning more responsive by using floating-point calculations
+                qreal scaledDeltaX = delta.x() / (internalZoomFactor / 100.0);
+                qreal scaledDeltaY = delta.y() / (internalZoomFactor / 100.0);
+                
+                // Calculate new pan positions with sub-pixel precision
+                qreal newPanX = panOffsetX - scaledDeltaX;
+                qreal newPanY = panOffsetY - scaledDeltaY;
+                
+                // Clamp pan values when canvas is smaller than viewport
+                qreal scaledCanvasWidth = buffer.width() * (internalZoomFactor / 100.0);
+                qreal scaledCanvasHeight = buffer.height() * (internalZoomFactor / 100.0);
+                
+                // If canvas is smaller than widget, lock pan to 0 (centered)
+                if (scaledCanvasWidth < width()) {
+                    newPanX = 0;
+                }
+                if (scaledCanvasHeight < height()) {
+                    newPanY = 0;
+                }
+                
+                // Emit signal with integer values for compatibility
+                emit panChanged(qRound(newPanX), qRound(newPanY));
+                
+                lastTouchPos = touchPoint.position();
+            }
+        } else if (activeTouchPoints == 2) {
+            // Two finger pinch zoom
+            isPanning = false;
+            
+            const QTouchEvent::TouchPoint &touch1 = touchPoints[0];
+            const QTouchEvent::TouchPoint &touch2 = touchPoints[1];
+            
+            // Calculate distance between touch points with higher precision
+            qreal currentDist = QLineF(touch1.position(), touch2.position()).length();
+            qreal startDist = QLineF(touch1.pressPosition(), touch2.pressPosition()).length();
+            
+            if (event->type() == QEvent::TouchBegin) {
+                lastPinchScale = 1.0;
+                // Store the starting internal zoom
+                internalZoomFactor = zoomFactor;
+            } else if (event->type() == QEvent::TouchUpdate && startDist > 0) {
+                qreal scale = currentDist / startDist;
+                
+                // Use exponential scaling for more natural feel
+                qreal scaleChange = scale / lastPinchScale;
+                
+                // Apply scale with higher sensitivity
+                internalZoomFactor *= scaleChange;
+                internalZoomFactor = qBound(10.0, internalZoomFactor, 400.0);
+                
+                // Calculate zoom center (midpoint between two fingers)
+                QPointF center = (touch1.position() + touch2.position()) / 2.0;
+                
+                // Account for centering offset
+                qreal scaledCanvasWidth = buffer.width() * (zoomFactor / 100.0);
+                qreal scaledCanvasHeight = buffer.height() * (zoomFactor / 100.0);
+                qreal centerOffsetX = (scaledCanvasWidth < width()) ? (width() - scaledCanvasWidth) / 2.0 : 0;
+                qreal centerOffsetY = (scaledCanvasHeight < height()) ? (height() - scaledCanvasHeight) / 2.0 : 0;
+                
+                // Adjust center point for centering offset
+                QPointF adjustedCenter = center - QPointF(centerOffsetX, centerOffsetY);
+                
+                // Always update zoom for smooth animation
+                int newZoom = qRound(internalZoomFactor);
+                
+                // Calculate pan adjustment to keep the zoom centered at pinch point
+                QPointF bufferCenter = adjustedCenter / (zoomFactor / 100.0) + QPointF(panOffsetX, panOffsetY);
+                
+                // Update zoom factor before emitting
+                qreal oldZoomFactor = zoomFactor;
+                zoomFactor = newZoom;
+                
+                // Emit zoom change even for small changes
+                emit zoomChanged(newZoom);
+                
+                // Adjust pan to keep center point fixed with sub-pixel precision
+                qreal newPanX = bufferCenter.x() - adjustedCenter.x() / (internalZoomFactor / 100.0);
+                qreal newPanY = bufferCenter.y() - adjustedCenter.y() / (internalZoomFactor / 100.0);
+                
+                // After zoom, check if we need to center
+                qreal newScaledCanvasWidth = buffer.width() * (internalZoomFactor / 100.0);
+                qreal newScaledCanvasHeight = buffer.height() * (internalZoomFactor / 100.0);
+                
+                if (newScaledCanvasWidth < width()) {
+                    newPanX = 0;
+                }
+                if (newScaledCanvasHeight < height()) {
+                    newPanY = 0;
+                }
+                
+                emit panChanged(qRound(newPanX), qRound(newPanY));
+                
+                lastPinchScale = scale;
+                
+                // Request update only for visible area
+                update();
+            }
+        } else {
+            // More than 2 fingers - ignore
+            isPanning = false;
+        }
+        
+        if (event->type() == QEvent::TouchEnd) {
+            isPanning = false;
+            lastPinchScale = 1.0;
+            activeTouchPoints = 0;
+            // Sync internal zoom with actual zoom
+            internalZoomFactor = zoomFactor;
+        }
+        
+        event->accept();
+        return true;
+    }
+    
+    return QWidget::event(event);
+}

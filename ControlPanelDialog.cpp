@@ -211,6 +211,16 @@ void ControlPanelDialog::createToolbarTab(){
     scrollNote->setWordWrap(true);
     scrollNote->setStyleSheet("color: gray; font-size: 10px;");
     toolbarLayout->addWidget(scrollNote);
+    
+    // ✅ Checkbox to enable/disable touch gestures
+    QCheckBox *touchGesturesCheckbox = new QCheckBox(tr("Enable Touch Gestures"), toolbarTab);
+    touchGesturesCheckbox->setChecked(mainWindowRef->areTouchGesturesEnabled());
+    toolbarLayout->addWidget(touchGesturesCheckbox);
+    QLabel *touchGesturesNote = new QLabel(tr("Enable pinch to zoom and touch panning on the canvas. When disabled, only pen input is accepted."));
+    touchGesturesNote->setWordWrap(true);
+    touchGesturesNote->setStyleSheet("color: gray; font-size: 10px;");
+    toolbarLayout->addWidget(touchGesturesNote);
+    
     toolbarLayout->addStretch();
     toolbarTab->setLayout(toolbarLayout);
     tabWidget->addTab(toolbarTab, tr("Features"));
@@ -220,8 +230,7 @@ void ControlPanelDialog::createToolbarTab(){
     connect(benchmarkVisibilityCheckbox, &QCheckBox::toggled, mainWindowRef, &MainWindow::setBenchmarkControlsVisible);
     connect(colorButtonsVisibilityCheckbox, &QCheckBox::toggled, mainWindowRef, &MainWindow::setColorButtonsVisible);
     connect(scrollOnTopCheckBox, &QCheckBox::toggled, mainWindowRef, &MainWindow::setScrollOnTopEnabled);
-
-    
+    connect(touchGesturesCheckbox, &QCheckBox::toggled, mainWindowRef, &MainWindow::setTouchGesturesEnabled);
 }
 
 

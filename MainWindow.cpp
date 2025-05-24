@@ -28,7 +28,7 @@
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false) {
 
-    setWindowTitle(tr("SpeedyNote Beta 0.4.3"));
+    setWindowTitle(tr("SpeedyNote Beta 0.4.6"));
 
     // Initialize DPR early
     initialDpr = getDevicePixelRatio();
@@ -89,13 +89,28 @@ void MainWindow::setupUi() {
             border: none; /* Remove default button borders */
             padding: 6px; /* Ensure padding remains */
         }
-E
+
         QPushButton:hover {
             background: rgba(255, 255, 255, 50); /* Subtle highlight on hover */
         }
 
         QPushButton:pressed {
             background: rgba(0, 0, 0, 50); /* Darken on click */
+        }
+
+        QPushButton[selected="true"] {
+            background: rgba(255, 255, 255, 100);
+            border: 2px solid rgba(255, 255, 255, 150);
+            padding: 4px;
+            border-radius: 4px;
+        }
+
+        QPushButton[selected="true"]:hover {
+            background: rgba(255, 255, 255, 120);
+        }
+
+        QPushButton[selected="true"]:pressed {
+            background: rgba(0, 0, 0, 50);
         }
     )";
 
@@ -197,21 +212,33 @@ E
     QIcon redIcon(":/resources/icons/red.png");  // Path to your icon in resources
     redButton->setIcon(redIcon);
     redButton->setStyleSheet(buttonStyle);
-    connect(redButton, &QPushButton::clicked, [this]() { currentCanvas()->setPenColor(QColor("#EE0000")); updateDialDisplay(); });
+    connect(redButton, &QPushButton::clicked, [this]() { 
+        currentCanvas()->setPenColor(QColor("#EE0000")); 
+        updateDialDisplay(); 
+        updateColorButtonStates();
+    });
     
     blueButton = new QPushButton(this);
     blueButton->setFixedSize(30, 30);
     QIcon blueIcon(":/resources/icons/blue.png");  // Path to your icon in resources
     blueButton->setIcon(blueIcon);
     blueButton->setStyleSheet(buttonStyle);
-    connect(blueButton, &QPushButton::clicked, [this]() { currentCanvas()->setPenColor(QColor("#0033FF")); updateDialDisplay(); });
+    connect(blueButton, &QPushButton::clicked, [this]() { 
+        currentCanvas()->setPenColor(QColor("#0033FF")); 
+        updateDialDisplay(); 
+        updateColorButtonStates();
+    });
 
     yellowButton = new QPushButton(this);
     yellowButton->setFixedSize(30, 30);
     QIcon yellowIcon(":/resources/icons/yellow.png");  // Path to your icon in resources
     yellowButton->setIcon(yellowIcon);
     yellowButton->setStyleSheet(buttonStyle);
-    connect(yellowButton, &QPushButton::clicked, [this]() { currentCanvas()->setPenColor(QColor("#FFEE00")); updateDialDisplay(); });
+    connect(yellowButton, &QPushButton::clicked, [this]() { 
+        currentCanvas()->setPenColor(QColor("#FFEE00")); 
+        updateDialDisplay(); 
+        updateColorButtonStates();
+    });
 
 
     greenButton = new QPushButton(this);
@@ -219,7 +246,11 @@ E
     QIcon greenIcon(":/resources/icons/green.png");  // Path to your icon in resources
     greenButton->setIcon(greenIcon);
     greenButton->setStyleSheet(buttonStyle);
-    connect(greenButton, &QPushButton::clicked, [this]() { currentCanvas()->setPenColor(QColor("#33EE00")); updateDialDisplay(); });
+    connect(greenButton, &QPushButton::clicked, [this]() { 
+        currentCanvas()->setPenColor(QColor("#33EE00")); 
+        updateDialDisplay(); 
+        updateColorButtonStates();
+    });
     
 
     blackButton = new QPushButton(this);
@@ -227,14 +258,22 @@ E
     QIcon blackIcon(":/resources/icons/black.png");  // Path to your icon in resources
     blackButton->setIcon(blackIcon);
     blackButton->setStyleSheet(buttonStyle);
-    connect(blackButton, &QPushButton::clicked, [this]() { currentCanvas()->setPenColor(QColor("#000000")); updateDialDisplay(); });
+    connect(blackButton, &QPushButton::clicked, [this]() { 
+        currentCanvas()->setPenColor(QColor("#000000")); 
+        updateDialDisplay(); 
+        updateColorButtonStates();
+    });
 
     whiteButton = new QPushButton(this);
     whiteButton->setFixedSize(30, 30);
     QIcon whiteIcon(":/resources/icons/white.png");  // Path to your icon in resources
     whiteButton->setIcon(whiteIcon);
     whiteButton->setStyleSheet(buttonStyle);
-    connect(whiteButton, &QPushButton::clicked, [this]() { currentCanvas()->setPenColor(QColor("#FFFFFF")); updateDialDisplay(); });
+    connect(whiteButton, &QPushButton::clicked, [this]() { 
+        currentCanvas()->setPenColor(QColor("#FFFFFF")); 
+        updateDialDisplay(); 
+        updateColorButtonStates();
+    });
     
     customColorInput = new QLineEdit(this);
     customColorInput->setPlaceholderText("Custom HEX");
@@ -545,7 +584,7 @@ E
         initialColor = currentCanvas()->getPenColor();
     }
 
-    customColorButton->setStyleSheet(QString("background-color: %1").arg(initialColor.name()));
+    updateCustomColorButtonStyle(initialColor);
 
     QTimer::singleShot(0, this, [=]() {
         connect(customColorButton, &QPushButton::clicked, this, [=]() {
@@ -553,9 +592,9 @@ E
             QColor chosen = QColorDialog::getColor(currentCanvas()->getPenColor(), this, "Select Pen Color");
             if (chosen.isValid()) {
                 currentCanvas()->setPenColor(chosen);
-                customColorButton->setStyleSheet(QString("background-color: %1").arg(chosen.name()));
-                customColorButton->setText(QString("%1").arg(chosen.name()).toUpper());
+                updateCustomColorButtonStyle(chosen);
                 updateDialDisplay();
+                updateColorButtonStates();
             }
         });
     });
@@ -805,15 +844,32 @@ void MainWindow::updatePanRange() {
     QSize canvasSize = currentCanvas()->getCanvasSize();
     QSize viewportSize = QGuiApplication::primaryScreen()->size() * QGuiApplication::primaryScreen()->devicePixelRatio();
     qreal dps = initialDpr;
-    int maxPanX = qMax(0, static_cast<int>(canvasSize.width() * zoom * dps / 100 - viewportSize.width()));
-    int maxPanY = qMax(0, static_cast<int>(canvasSize.height() * zoom * dps / 100 - viewportSize.height()));
- 
+    
+    // Calculate scaled canvas size
+    int scaledCanvasWidth = canvasSize.width() * zoom * dps / 100;
+    int scaledCanvasHeight = canvasSize.height() * zoom * dps / 100;
+    
+    // Calculate max pan values - if canvas is smaller than viewport, pan should be 0
+    int maxPanX = qMax(0, scaledCanvasWidth - viewportSize.width());
+    int maxPanY = qMax(0, scaledCanvasHeight - viewportSize.height());
 
     int maxPanX_scaled = maxPanX * 110 / dps / zoom;
     int maxPanY_scaled = maxPanY * 110 / dps / zoom;  // Here I intentionally changed 100 to 110. 
 
+    // Set range to 0 when canvas is smaller than viewport (centered)
+    if (scaledCanvasWidth <= viewportSize.width()) {
+        panXSlider->setRange(0, 0);
+        panXSlider->setValue(0);
+    } else {
     panXSlider->setRange(0, maxPanX_scaled);
+    }
+    
+    if (scaledCanvasHeight <= viewportSize.height()) {
+        panYSlider->setRange(0, 0);
+        panYSlider->setValue(0);
+    } else {
     panYSlider->setRange(0, maxPanY_scaled);
+    }
 }
 
 void MainWindow::updatePanX(int value) {
@@ -898,6 +954,7 @@ void MainWindow::switchTab(int index) {
                 updatePanRange();
             }
             updateDialDisplay();
+            updateColorButtonStates();  // Update button states when switching tabs
         }
     }
 }
@@ -966,6 +1023,13 @@ void MainWindow::addNewTab() {
     InkCanvas *newCanvas = new InkCanvas(this);
     canvasStack->addWidget(newCanvas);
 
+    // ✅ Connect touch gesture signals
+    connect(newCanvas, &InkCanvas::zoomChanged, this, &MainWindow::handleTouchZoomChange);
+    connect(newCanvas, &InkCanvas::panChanged, this, &MainWindow::handleTouchPanChange);
+    
+    // ✅ Apply touch gesture setting
+    newCanvas->setTouchGesturesEnabled(touchGesturesEnabled);
+
     pageMap[newCanvas] = 0;
 
     // ✅ Select the new tab
@@ -981,6 +1045,9 @@ void MainWindow::addNewTab() {
     newCanvas->setBackgroundColor(Qt::white);
     newCanvas->setBackgroundDensity(30);  // The default bg settings are here
     newCanvas->setPDFRenderDPI(getPdfDPI());
+    
+    // Update color button states for the new tab
+    updateColorButtonStates();
 }
 
 
@@ -1361,7 +1428,7 @@ void MainWindow::updateDialDisplay() {
         case DialMode::PanAndPageScroll:
             dialIconView->setPixmap(QPixmap(":/resources/icons/scroll_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
             QString barStatus = controlBarVisible ? tr("Hide") : tr("Show");
-            dialDisplay->setText(QString(tr("\n\nPage %1\nTap: %2 Bar")).arg(getCurrentPageForCanvas(currentCanvas()) + 1).arg(barStatus));
+            dialDisplay->setText(QString(tr("\n\nPage %1\n%2 Bar")).arg(getCurrentPageForCanvas(currentCanvas()) + 1).arg(barStatus));
             break;
     }
 }
@@ -1792,9 +1859,9 @@ void MainWindow::handlePresetSelection(int angle) {
         
         QColor selectedColor = colorPresets[currentPresetIndex];
         currentCanvas()->setPenColor(selectedColor);
-        customColorButton->setText(selectedColor.name().toUpper());
-        customColorButton->setStyleSheet(QString("background-color: %1").arg(selectedColor.name()));
+        updateCustomColorButtonStyle(selectedColor);
         updateDialDisplay();
+        updateColorButtonStates();  // Update button states when preset is selected
         
         if (dialClickSound) dialClickSound->play();  // ✅ Provide feedback
         SDL_GameController *controller = controllerManager->getController();
@@ -1842,9 +1909,9 @@ void MainWindow::handleDialColor(int angle) {
     }
 
     currentCanvas()->setPenColor(color);
-    customColorButton->setText(color.name().toUpper());
-    customColorButton->setStyleSheet(QString("background-color: %1").arg(color.name()));
+    updateCustomColorButtonStyle(color);
     updateDialDisplay(); 
+    updateColorButtonStates();  // Update button states when color is adjusted
 
     colorPreview->setStyleSheet(QString("border-radius: 15px; border: 1px solid black; background-color: %1;").arg(color.name()));
     
@@ -1946,8 +2013,24 @@ void MainWindow::setScrollOnTopEnabled(bool enabled) {
     settings.setValue("scrollOnTopEnabled", enabled);
 }
 
+bool MainWindow::areTouchGesturesEnabled() const {
+    return touchGesturesEnabled;
+}
 
-
+void MainWindow::setTouchGesturesEnabled(bool enabled) {
+    touchGesturesEnabled = enabled;
+    
+    // Apply to all canvases
+    for (int i = 0; i < canvasStack->count(); ++i) {
+        InkCanvas *canvas = qobject_cast<InkCanvas*>(canvasStack->widget(i));
+        if (canvas) {
+            canvas->setTouchGesturesEnabled(enabled);
+        }
+    }
+    
+    QSettings settings("SpeedyNote", "App");
+    settings.setValue("touchGesturesEnabled", enabled);
+}
 
 void MainWindow::setTemporaryDialMode(DialMode mode) {
     if (temporaryDialMode == None) {
@@ -2273,6 +2356,8 @@ void MainWindow::loadUserSettings() {
     scrollOnTopEnabled = settings.value("scrollOnTopEnabled", true).toBool();
     setScrollOnTopEnabled(scrollOnTopEnabled);
 
+    touchGesturesEnabled = settings.value("touchGesturesEnabled", false).toBool();
+    setTouchGesturesEnabled(touchGesturesEnabled);
 }
 
 void MainWindow::toggleControlBar() {
@@ -2318,4 +2403,119 @@ void MainWindow::toggleControlBar() {
             canvas->setMaximumSize(canvas->getCanvasSize());
         });
     }
+}
+
+void MainWindow::handleTouchZoomChange(int newZoom) {
+    // Update zoom slider without triggering updateZoom again
+    zoomSlider->blockSignals(true);
+    zoomSlider->setValue(newZoom);
+    zoomSlider->blockSignals(false);
+    
+    // Update canvas zoom directly
+    InkCanvas *canvas = currentCanvas();
+    if (canvas) {
+        canvas->setZoom(newZoom);
+        canvas->setLastZoomLevel(newZoom);
+        updatePanRange();
+        updateThickness(thicknessSlider->value());
+        updateDialDisplay();
+    }
+}
+
+void MainWindow::handleTouchPanChange(int panX, int panY) {
+    // Clamp values to valid ranges
+    panX = qBound(panXSlider->minimum(), panX, panXSlider->maximum());
+    panY = qBound(panYSlider->minimum(), panY, panYSlider->maximum());
+    
+    // Update sliders without triggering their valueChanged signals
+    panXSlider->blockSignals(true);
+    panYSlider->blockSignals(true);
+    panXSlider->setValue(panX);
+    panYSlider->setValue(panY);
+    panXSlider->blockSignals(false);
+    panYSlider->blockSignals(false);
+    
+    // Update canvas pan directly
+    InkCanvas *canvas = currentCanvas();
+    if (canvas) {
+        canvas->setPanX(panX);
+        canvas->setPanY(panY);
+        canvas->setLastPanX(panX);
+        canvas->setLastPanY(panY);
+    }
+}
+
+void MainWindow::updateColorButtonStates() {
+    // Check if there's a current canvas
+    if (!currentCanvas()) return;
+    
+    // Get current pen color
+    QColor currentColor = currentCanvas()->getPenColor();
+    
+    // Reset all color buttons to original style
+    redButton->setProperty("selected", false);
+    blueButton->setProperty("selected", false);
+    yellowButton->setProperty("selected", false);
+    greenButton->setProperty("selected", false);
+    blackButton->setProperty("selected", false);
+    whiteButton->setProperty("selected", false);
+    
+    // Set the selected property for the matching color button
+    if (currentColor == QColor("#EE0000")) {
+        redButton->setProperty("selected", true);
+    } else if (currentColor == QColor("#0033FF")) {
+        blueButton->setProperty("selected", true);
+    } else if (currentColor == QColor("#FFEE00")) {
+        yellowButton->setProperty("selected", true);
+    } else if (currentColor == QColor("#33EE00")) {
+        greenButton->setProperty("selected", true);
+    } else if (currentColor == QColor("#000000")) {
+        blackButton->setProperty("selected", true);
+    } else if (currentColor == QColor("#FFFFFF")) {
+        whiteButton->setProperty("selected", true);
+    }
+    
+    // Force style update
+    redButton->style()->unpolish(redButton);
+    redButton->style()->polish(redButton);
+    blueButton->style()->unpolish(blueButton);
+    blueButton->style()->polish(blueButton);
+    yellowButton->style()->unpolish(yellowButton);
+    yellowButton->style()->polish(yellowButton);
+    greenButton->style()->unpolish(greenButton);
+    greenButton->style()->polish(greenButton);
+    blackButton->style()->unpolish(blackButton);
+    blackButton->style()->polish(blackButton);
+    whiteButton->style()->unpolish(whiteButton);
+    whiteButton->style()->polish(whiteButton);
+}
+
+void MainWindow::selectColorButton(QPushButton* selectedButton) {
+    updateColorButtonStates();
+}
+
+QColor MainWindow::getContrastingTextColor(const QColor &backgroundColor) {
+    // Calculate relative luminance using the formula from WCAG 2.0
+    double r = backgroundColor.redF();
+    double g = backgroundColor.greenF();
+    double b = backgroundColor.blueF();
+    
+    // Gamma correction
+    r = (r <= 0.03928) ? r/12.92 : pow((r + 0.055)/1.055, 2.4);
+    g = (g <= 0.03928) ? g/12.92 : pow((g + 0.055)/1.055, 2.4);
+    b = (b <= 0.03928) ? b/12.92 : pow((b + 0.055)/1.055, 2.4);
+    
+    // Calculate luminance
+    double luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    
+    // Use white text for darker backgrounds
+    return (luminance < 0.5) ? Qt::white : Qt::black;
+}
+
+void MainWindow::updateCustomColorButtonStyle(const QColor &color) {
+    QColor textColor = getContrastingTextColor(color);
+    customColorButton->setStyleSheet(QString("background-color: %1; color: %2")
+        .arg(color.name())
+        .arg(textColor.name()));
+    customColorButton->setText(QString("%1").arg(color.name()).toUpper());
 }

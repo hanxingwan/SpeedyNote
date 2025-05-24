@@ -20,16 +20,12 @@ enum class BackgroundStyle {
     Lines
 };
 
-
-
 class InkCanvas : public QWidget {
     Q_OBJECT
 
-
-    BackgroundStyle backgroundStyle = BackgroundStyle::None;
-    QColor backgroundColor = Qt::transparent;
-    int backgroundDensity = 40;  // pixels between lines
-
+signals:
+    void zoomChanged(int newZoom);
+    void panChanged(int panX, int panY);
 
 public:
     explicit InkCanvas(QWidget *parent = nullptr);
@@ -111,6 +107,10 @@ public:
 
     void clearPdfCache() { pdfCache.clear(); }
 
+    // Touch gesture support
+    void setTouchGesturesEnabled(bool enabled) { touchGesturesEnabled = enabled; }
+    bool areTouchGesturesEnabled() const { return touchGesturesEnabled; }
+
 protected:
     void paintEvent(QPaintEvent *event) override;
     void tabletEvent(QTabletEvent *event) override;
@@ -119,6 +119,8 @@ protected:
     void mouseReleaseEvent(QMouseEvent *event) override;
     void resizeEvent(QResizeEvent *event) override; // Handle resizing
     
+    // Touch event handling
+    bool event(QEvent *event) override;
 
 private:
     QPixmap buffer;            // Off-screen buffer
@@ -135,6 +137,9 @@ private:
     int zoomFactor;     // Zoom percentage (100 = normal)
     int panOffsetX;     // Horizontal pan offset
     int panOffsetY;     // Vertical pan offset
+    
+    // Internal floating-point zoom for smoother gestures
+    qreal internalZoomFactor = 100.0;
 
     void initializeBuffer();   // Helper to initialize the buffer
     void drawStroke(const QPointF &start, const QPointF &end, qreal pressure);    
@@ -156,11 +161,6 @@ private:
 
     bool edited = false;  // ✅ Track if the canvas has been edited
 
-    
-    
-
-
-
     bool benchmarking;
     std::deque<qint64> processedTimestamps;
     QElapsedTimer benchmarkTimer;
@@ -172,7 +172,17 @@ private:
 
     int pdfRenderDPI = 288;  // Default to 288 DPI
 
+    // Touch gesture support
+    bool touchGesturesEnabled = false;
+    QPointF lastTouchPos;
+    qreal lastPinchScale = 1.0;
+    bool isPanning = false;
+    int activeTouchPoints = 0;
 
+    // Background style members
+    BackgroundStyle backgroundStyle = BackgroundStyle::None;
+    QColor backgroundColor = Qt::transparent;
+    int backgroundDensity = 40;  // pixels between lines
 };
 
 #endif // INKCANVAS_H
