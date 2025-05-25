@@ -8,6 +8,7 @@
 #include <QTimer>
 #include <QLineEdit>
 #include <QSlider>
+#include <QScrollBar>
 #include <QComboBox>
 #include <QSpinBox>
 #include <QFileDialog>
@@ -196,7 +197,6 @@ private slots:
     void handleDialInput(int angle);  // ✅ Handle touch input
     void onDialReleased();
     // void processPageSwitch();
-    bool eventFilter(QObject *watched, QEvent *event) override;
     void initializeDialSound();
 
     void changeDialMode(DialMode mode);
@@ -229,6 +229,7 @@ private slots:
     // Touch gesture handlers
     void handleTouchZoomChange(int newZoom);
     void handleTouchPanChange(int panX, int panY);
+    void handleTouchGestureEnd(); // Add handler for touch gesture completion
     
     // Color button state management
     void updateColorButtonStates();
@@ -287,8 +288,8 @@ private:
     QPushButton *zoom200Button;
     QWidget *zoomContainer;
     QLineEdit *zoomInput;
-    QSlider *panXSlider;
-    QSlider *panYSlider;
+    QScrollBar *panXSlider;
+    QScrollBar *panYSlider;
 
 
     QListWidget *tabList;          // Sidebar for tabs
@@ -390,7 +391,17 @@ private:
 
     void loadUserSettings();
 
+    bool scrollbarsVisible = false;
+    QTimer *scrollbarHideTimer = nullptr;
     
+    // Event filter for scrollbar hover detection and dial container drag
+    bool eventFilter(QObject *obj, QEvent *event) override;
+    
+    // Update scrollbar positions based on container size
+    void updateScrollbarPositions();
+    
+    // Handle edge proximity detection for scrollbar visibility
+    void handleEdgeProximity(InkCanvas* canvas, const QPoint& pos);
 };
 
 #endif // MAINWINDOW_H

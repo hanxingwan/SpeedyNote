@@ -397,15 +397,83 @@ void MainWindow::setupUi() {
     zoom200Button->setToolTip(tr("Set Zoom to 200%"));
     connect(zoom200Button, &QPushButton::clicked, [this]() { zoomSlider->setValue(200 / initialDpr); updateDialDisplay(); });
 
-    panXSlider = new QSlider(Qt::Horizontal, this);
-    panYSlider = new QSlider(Qt::Vertical, this);
+    panXSlider = new QScrollBar(Qt::Horizontal, this);
+    panYSlider = new QScrollBar(Qt::Vertical, this);
     panYSlider->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+    
+    // Set scrollbar styling
+    QString scrollBarStyle = R"(
+        QScrollBar {
+            background: rgba(200, 200, 200, 80);
+            border: none;
+            margin: 0px;
+        }
+        QScrollBar:hover {
+            background: rgba(200, 200, 200, 120);
+        }
+        QScrollBar:horizontal {
+            height: 16px !important;  /* Force narrow height */
+            max-height: 16px !important;
+        }
+        QScrollBar:vertical {
+            width: 16px !important;   /* Force narrow width */
+            max-width: 16px !important;
+        }
+        QScrollBar::handle {
+            background: rgba(100, 100, 100, 150);
+            border-radius: 2px;
+            min-height: 120px;  /* Longer handle for vertical scrollbar */
+            min-width: 120px;   /* Longer handle for horizontal scrollbar */
+        }
+        QScrollBar::handle:hover {
+            background: rgba(80, 80, 80, 210);
+        }
+        /* Hide scroll buttons */
+        QScrollBar::add-line, 
+        QScrollBar::sub-line {
+            width: 0px;
+            height: 0px;
+            background: none;
+            border: none;
+        }
+        /* Disable scroll page buttons */
+        QScrollBar::add-page, 
+        QScrollBar::sub-page {
+            background: transparent;
+        }
+    )";
+    
+    panXSlider->setStyleSheet(scrollBarStyle);
+    panYSlider->setStyleSheet(scrollBarStyle);
+    
+    // Force fixed dimensions programmatically
+    panXSlider->setFixedHeight(16);
+    panYSlider->setFixedWidth(16);
+    
+    // Set up auto-hiding
+    panXSlider->setMouseTracking(true);
+    panYSlider->setMouseTracking(true);
+    panXSlider->installEventFilter(this);
+    panYSlider->installEventFilter(this);
+    panXSlider->setVisible(false);
+    panYSlider->setVisible(false);
+    
+    // Create timer for auto-hiding
+    scrollbarHideTimer = new QTimer(this);
+    scrollbarHideTimer->setSingleShot(true);
+    scrollbarHideTimer->setInterval(200); // Hide after 0.2 seconds
+    connect(scrollbarHideTimer, &QTimer::timeout, this, [this]() {
+        panXSlider->setVisible(false);
+        panYSlider->setVisible(false);
+        scrollbarsVisible = false;
+    });
+    
     // panXSlider->setFixedHeight(30);
     // panYSlider->setFixedWidth(30);
 
-    connect(panXSlider, &QSlider::valueChanged, this, &MainWindow::updatePanX);
+    connect(panXSlider, &QScrollBar::valueChanged, this, &MainWindow::updatePanX);
     
-    connect(panYSlider, &QSlider::valueChanged, this, &MainWindow::updatePanY);
+    connect(panYSlider, &QScrollBar::valueChanged, this, &MainWindow::updatePanY);
 
 
 
@@ -685,19 +753,41 @@ void MainWindow::setupUi() {
     canvasStack = new QStackedWidget();
     canvasStack->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
-    QVBoxLayout *canvasLayout = new QVBoxLayout;
-    canvasLayout->addWidget(panXSlider);
+    // Create a container for the canvas and scrollbars with relative positioning
+    QWidget *canvasContainer = new QWidget;
+    QVBoxLayout *canvasLayout = new QVBoxLayout(canvasContainer);
+    canvasLayout->setContentsMargins(0, 0, 0, 0);
     canvasLayout->addWidget(canvasStack);
+    
+    // Enable context menu for the workaround
+    canvasContainer->setContextMenuPolicy(Qt::CustomContextMenu);
+    
+    // Set up the scrollbars to overlay the canvas
+    panXSlider->setParent(canvasContainer);
+    panYSlider->setParent(canvasContainer);
+    
+    // Raise scrollbars to ensure they're visible above the canvas
+    panXSlider->raise();
+    panYSlider->raise();
+    
+    // Handle scrollbar intersection
+    connect(canvasContainer, &QWidget::customContextMenuRequested, this, [this]() {
+        // This connection is just to make sure the container exists
+        // and can receive signals - a workaround for some Qt versions
+    });
+    
+    // Position the scrollbars at the bottom and right edges
+    canvasContainer->installEventFilter(this);
+    
+    // Update scrollbar positions initially
+    QTimer::singleShot(0, this, [this, canvasContainer]() {
+        updateScrollbarPositions();
+    });
 
     QHBoxLayout *content_layout = new QHBoxLayout;
-    content_layout->setContentsMargins(5, 0, 5, 5); 
+    content_layout->setContentsMargins(0, 0, 0, 0); 
     content_layout->addWidget(sidebarContainer); 
-    content_layout->addWidget(panYSlider);
-    content_layout->addLayout(canvasLayout);
-
-    
-
-
+    content_layout->addWidget(canvasContainer, 1); // Add stretch factor to expand canvas
 
     QWidget *container = new QWidget;
     container->setObjectName("container");
@@ -873,15 +963,27 @@ void MainWindow::updatePanRange() {
     if (scaledCanvasWidth <= viewportSize.width()) {
         panXSlider->setRange(0, 0);
         panXSlider->setValue(0);
+        // No need for horizontal scrollbar
+        panXSlider->setVisible(false);
     } else {
-    panXSlider->setRange(0, maxPanX_scaled);
+        panXSlider->setRange(0, maxPanX_scaled);
+        // Show scrollbar only if mouse is near and timeout hasn't occurred
+        if (scrollbarsVisible && !scrollbarHideTimer->isActive()) {
+            scrollbarHideTimer->start();
+        }
     }
     
     if (scaledCanvasHeight <= viewportSize.height()) {
         panYSlider->setRange(0, 0);
         panYSlider->setValue(0);
+        // No need for vertical scrollbar
+        panYSlider->setVisible(false);
     } else {
-    panYSlider->setRange(0, maxPanY_scaled);
+        panYSlider->setRange(0, maxPanY_scaled);
+        // Show scrollbar only if mouse is near and timeout hasn't occurred
+        if (scrollbarsVisible && !scrollbarHideTimer->isActive()) {
+            scrollbarHideTimer->start();
+        }
     }
 }
 
@@ -890,6 +992,24 @@ void MainWindow::updatePanX(int value) {
     if (canvas) {
         canvas->setPanX(value);
         canvas->setLastPanX(value);  // ✅ Store panX per tab
+        
+        // Show horizontal scrollbar temporarily
+        if (panXSlider->maximum() > 0) {
+            panXSlider->setVisible(true);
+            scrollbarsVisible = true;
+            
+            // Make sure scrollbar position matches the canvas position
+            if (panXSlider->value() != value) {
+                panXSlider->blockSignals(true);
+                panXSlider->setValue(value);
+                panXSlider->blockSignals(false);
+            }
+            
+            if (scrollbarHideTimer->isActive()) {
+                scrollbarHideTimer->stop();
+            }
+            scrollbarHideTimer->start();
+        }
     }
 }
 
@@ -898,6 +1018,24 @@ void MainWindow::updatePanY(int value) {
     if (canvas) {
         canvas->setPanY(value);
         canvas->setLastPanY(value);  // ✅ Store panY per tab
+        
+        // Show vertical scrollbar temporarily
+        if (panYSlider->maximum() > 0) {
+            panYSlider->setVisible(true);
+            scrollbarsVisible = true;
+            
+            // Make sure scrollbar position matches the canvas position
+            if (panYSlider->value() != value) {
+                panYSlider->blockSignals(true);
+                panYSlider->setValue(value);
+                panYSlider->blockSignals(false);
+            }
+            
+            if (scrollbarHideTimer->isActive()) {
+                scrollbarHideTimer->stop();
+            }
+            scrollbarHideTimer->start();
+        }
     }
 }
 void MainWindow::applyZoom() {
@@ -915,16 +1053,31 @@ void MainWindow::forceUIRefresh() {
 }
 
 void MainWindow::loadPdf() {
+    InkCanvas *canvas = currentCanvas();
+    if (!canvas) return;
+
+    QString saveFolder = canvas->getSaveFolder();
+    QString tempDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/temp_session";
+    
+    // Check if no save folder is set or if it's the temporary directory
+    if (saveFolder.isEmpty() || saveFolder == tempDir) {
+        QMessageBox::warning(this, tr("Cannot Load PDF"), 
+            tr("Please select a permanent save folder before loading a PDF.\n\nClick the folder icon to choose a location for your notebook."));
+        return;
+    }
+
     QString filePath = QFileDialog::getOpenFileName(this, tr("Select PDF"), "", "PDF Files (*.pdf)");
     if (!filePath.isEmpty()) {
         currentCanvas()->loadPdf(filePath);
-
         updateTabLabel(); // ✅ Update the tab name after assigning a PDF
     }
 }
 
 void MainWindow::clearPdf() {
-    currentCanvas()->clearPdf();
+    InkCanvas *canvas = currentCanvas();
+    if (!canvas) return;
+    
+    canvas->clearPdf();
 }
 
 
@@ -1040,6 +1193,12 @@ void MainWindow::addNewTab() {
     // ✅ Connect touch gesture signals
     connect(newCanvas, &InkCanvas::zoomChanged, this, &MainWindow::handleTouchZoomChange);
     connect(newCanvas, &InkCanvas::panChanged, this, &MainWindow::handleTouchPanChange);
+    connect(newCanvas, &InkCanvas::touchGestureEnded, this, &MainWindow::handleTouchGestureEnd);
+    
+    // Install event filter to detect mouse movement for scrollbar visibility
+    newCanvas->setMouseTracking(true);
+    newCanvas->setAttribute(Qt::WA_TabletTracking, true); // Enable tablet tracking
+    newCanvas->installEventFilter(this);
     
     // ✅ Apply touch gesture setting
     newCanvas->setTouchGesturesEnabled(touchGesturesEnabled);
@@ -1607,6 +1766,76 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
     static QPoint lastMousePos;
     static QTimer *longPressTimer = nullptr;
 
+    // Handle resize events for canvas container
+    QWidget *container = canvasStack ? canvasStack->parentWidget() : nullptr;
+    if (obj == container && event->type() == QEvent::Resize) {
+        updateScrollbarPositions();
+        return false; // Let the event propagate
+    }
+
+    // Handle scrollbar visibility
+    if (obj == panXSlider || obj == panYSlider) {
+        if (event->type() == QEvent::Enter) {
+            // Mouse entered scrollbar area
+            if (scrollbarHideTimer->isActive()) {
+                scrollbarHideTimer->stop();
+            }
+            return false;
+        } 
+        else if (event->type() == QEvent::Leave) {
+            // Mouse left scrollbar area - start timer to hide
+            if (!scrollbarHideTimer->isActive()) {
+                scrollbarHideTimer->start();
+            }
+            return false;
+        }
+    }
+
+    // Check if this is a canvas event for scrollbar handling
+    InkCanvas* canvas = qobject_cast<InkCanvas*>(obj);
+    if (canvas) {
+        // Handle mouse movement for scrollbar visibility
+        if (event->type() == QEvent::MouseMove) {
+            QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
+            handleEdgeProximity(canvas, mouseEvent->pos());
+        }
+        // Handle tablet events for stylus hover
+        else if (event->type() == QEvent::TabletMove) {
+            QTabletEvent* tabletEvent = static_cast<QTabletEvent*>(event);
+            handleEdgeProximity(canvas, tabletEvent->position().toPoint());
+        }
+        // Handle wheel events for scrolling
+        else if (event->type() == QEvent::Wheel) {
+            QWheelEvent* wheelEvent = static_cast<QWheelEvent*>(event);
+            
+            // Show scrollbars when mouse wheel is used
+            bool needHorizontalScroll = panXSlider->maximum() > 0;
+            bool needVerticalScroll = panYSlider->maximum() > 0;
+            
+            if (wheelEvent->angleDelta().y() != 0 && needVerticalScroll) {
+                panYSlider->setVisible(true);
+                scrollbarsVisible = true;
+                if (scrollbarHideTimer->isActive()) {
+                    scrollbarHideTimer->stop();
+                }
+                scrollbarHideTimer->start();
+            }
+            
+            if (wheelEvent->angleDelta().x() != 0 && needHorizontalScroll) {
+                panXSlider->setVisible(true);
+                scrollbarsVisible = true;
+                if (scrollbarHideTimer->isActive()) {
+                    scrollbarHideTimer->stop();
+                }
+                scrollbarHideTimer->start();
+            }
+            
+            // Let the event propagate for normal scrolling
+            return false;
+        }
+    }
+
+    // Handle dial container drag events
     if (obj == dialContainer) {
         if (event->type() == QEvent::MouseButtonPress) {
             QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
@@ -2426,6 +2655,15 @@ void MainWindow::handleTouchZoomChange(int newZoom) {
     zoomSlider->setValue(newZoom);
     zoomSlider->blockSignals(false);
     
+    // Show both scrollbars during gesture
+    if (panXSlider->maximum() > 0) {
+        panXSlider->setVisible(true);
+    }
+    if (panYSlider->maximum() > 0) {
+        panYSlider->setVisible(true);
+    }
+    scrollbarsVisible = true;
+    
     // Update canvas zoom directly
     InkCanvas *canvas = currentCanvas();
     if (canvas) {
@@ -2441,6 +2679,15 @@ void MainWindow::handleTouchPanChange(int panX, int panY) {
     // Clamp values to valid ranges
     panX = qBound(panXSlider->minimum(), panX, panXSlider->maximum());
     panY = qBound(panYSlider->minimum(), panY, panYSlider->maximum());
+    
+    // Show both scrollbars during gesture
+    if (panXSlider->maximum() > 0) {
+        panXSlider->setVisible(true);
+    }
+    if (panYSlider->maximum() > 0) {
+        panYSlider->setVisible(true);
+    }
+    scrollbarsVisible = true;
     
     // Update sliders without triggering their valueChanged signals
     panXSlider->blockSignals(true);
@@ -2458,6 +2705,14 @@ void MainWindow::handleTouchPanChange(int panX, int panY) {
         canvas->setLastPanX(panX);
         canvas->setLastPanY(panY);
     }
+}
+
+// Now add two new slots to handle gesture end events
+void MainWindow::handleTouchGestureEnd() {
+    // Hide scrollbars immediately when touch gesture ends
+    panXSlider->setVisible(false);
+    panYSlider->setVisible(false);
+    scrollbarsVisible = false;
 }
 
 void MainWindow::updateColorButtonStates() {
@@ -2549,5 +2804,77 @@ void MainWindow::updateStraightLineButtonState() {
         // Force style update
         straightLineToggleButton->style()->unpolish(straightLineToggleButton);
         straightLineToggleButton->style()->polish(straightLineToggleButton);
+    }
+}
+
+// Add this new method
+void MainWindow::updateScrollbarPositions() {
+    QWidget *container = canvasStack->parentWidget();
+    if (!container || !panXSlider || !panYSlider) return;
+    
+    // Add small margins for better visibility
+    const int margin = 3;
+    
+    // Get scrollbar dimensions
+    const int scrollbarWidth = panYSlider->width();
+    const int scrollbarHeight = panXSlider->height();
+    
+    // Calculate sizes based on container
+    int containerWidth = container->width();
+    int containerHeight = container->height();
+    
+    // Leave a bit of space for the corner
+    int cornerOffset = 15;
+    
+    // Position horizontal scrollbar at top
+    panXSlider->setGeometry(
+        cornerOffset + margin,  // Leave space at left corner
+        margin,
+        containerWidth - cornerOffset - margin*2,  // Full width minus corner and right margin
+        scrollbarHeight
+    );
+    
+    // Position vertical scrollbar at left
+    panYSlider->setGeometry(
+        margin,
+        cornerOffset + margin,  // Leave space at top corner
+        scrollbarWidth,
+        containerHeight - cornerOffset - margin*2  // Full height minus corner and bottom margin
+    );
+}
+
+// Add the new helper method for edge detection
+void MainWindow::handleEdgeProximity(InkCanvas* canvas, const QPoint& pos) {
+    if (!canvas) return;
+    
+    // Get canvas dimensions
+    int canvasWidth = canvas->width();
+    int canvasHeight = canvas->height();
+    
+    // Edge detection zones - show scrollbars when pointer is within 50px of edges
+    bool nearLeftEdge = pos.x() < 25;  // For vertical scrollbar
+    bool nearTopEdge = pos.y() < 25;   // For horizontal scrollbar - entire top edge
+    
+    // Only show scrollbars if canvas is larger than viewport
+    bool needHorizontalScroll = panXSlider->maximum() > 0;
+    bool needVerticalScroll = panYSlider->maximum() > 0;
+    
+    // Show/hide scrollbars based on pointer position
+    if (nearLeftEdge && needVerticalScroll) {
+        panYSlider->setVisible(true);
+        scrollbarsVisible = true;
+        if (scrollbarHideTimer->isActive()) {
+            scrollbarHideTimer->stop();
+        }
+        scrollbarHideTimer->start();
+    }
+    
+    if (nearTopEdge && needHorizontalScroll) {
+        panXSlider->setVisible(true);
+        scrollbarsVisible = true;
+        if (scrollbarHideTimer->isActive()) {
+            scrollbarHideTimer->stop();
+        }
+        scrollbarHideTimer->start();
     }
 }

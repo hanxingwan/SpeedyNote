@@ -26,6 +26,7 @@ class InkCanvas : public QWidget {
 signals:
     void zoomChanged(int newZoom);
     void panChanged(int panX, int panY);
+    void touchGestureEnded(); // Signal emitted when touch gestures end
 
 public:
     explicit InkCanvas(QWidget *parent = nullptr);

@@ -69,6 +69,7 @@ endforeach()
 # add_custom_target(translations ALL DEPENDS ${QM_FILES})
 
 #
+add_compile_definitions(QT_NO_DEPRECATED_WARNINGS)
 
 
 # ✅ Link libraries

@@ -461,15 +461,15 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
         } else {
             // Normal drawing mode OR eraser regardless of straight line mode
             if (isErasing) {
-                eraseStroke(lastPoint, event->posF(), event->pressure());
-            } else {
-                drawStroke(lastPoint, event->posF(), event->pressure());
-            }
-            lastPoint = event->posF();
+            eraseStroke(lastPoint, event->posF(), event->pressure());
+        } else {
+            drawStroke(lastPoint, event->posF(), event->pressure());
+        }
+        lastPoint = event->posF();
             
             // Only track benchmarking when enabled
             if (benchmarking) {
-                processedTimestamps.push_back(benchmarkTimer.elapsed());
+        processedTimestamps.push_back(benchmarkTimer.elapsed());
             }
         }
     } else if (event->type() == QEvent::TabletRelease) {
@@ -1348,6 +1348,9 @@ bool InkCanvas::event(QEvent *event) {
             activeTouchPoints = 0;
             // Sync internal zoom with actual zoom
             internalZoomFactor = zoomFactor;
+            
+            // Emit signal that touch gesture has ended
+            emit touchGestureEnded();
         }
         
         event->accept();
