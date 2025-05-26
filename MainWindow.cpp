@@ -24,6 +24,7 @@
 // #include "HandwritingLineEdit.h"
 #include "ControlPanelDialog.h"
 #include "SDLControllerManager.h"
+#include "RecentNotebooksDialog.h" // Added
 
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false) {
@@ -76,6 +77,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     setBenchmarkControlsVisible(false);
     
+    recentNotebooksManager = new RecentNotebooksManager(this); // Initialize manager
 
 }
 
@@ -655,6 +657,13 @@ void MainWindow::setupUi() {
         }
     });
 
+    openRecentNotebooksButton = new QPushButton(this); // Create button
+    openRecentNotebooksButton->setIcon(loadThemedIcon("recent")); // Replace with actual icon if available
+    openRecentNotebooksButton->setStyleSheet(buttonStyle);
+    openRecentNotebooksButton->setToolTip(tr("Open Recent Notebooks"));
+    openRecentNotebooksButton->setFixedSize(30, 30);
+    connect(openRecentNotebooksButton, &QPushButton::clicked, this, &MainWindow::openRecentNotebooksDialog);
+
     customColorButton = new QPushButton(this);
     customColorButton->setFixedSize(62, 30);
     customColorButton->setText("#000000");
@@ -692,6 +701,7 @@ void MainWindow::setupUi() {
     controlLayout->addWidget(saveButton);
     controlLayout->addWidget(saveAnnotatedButton);
     controlLayout->addWidget(openControlPanelButton);
+    controlLayout->addWidget(openRecentNotebooksButton); // Add button to layout
     controlLayout->addWidget(redButton);
     controlLayout->addWidget(blueButton);
     controlLayout->addWidget(yellowButton);
@@ -758,7 +768,7 @@ void MainWindow::setupUi() {
     QVBoxLayout *canvasLayout = new QVBoxLayout(canvasContainer);
     canvasLayout->setContentsMargins(0, 0, 0, 0);
     canvasLayout->addWidget(canvasStack);
-    
+
     // Enable context menu for the workaround
     canvasContainer->setContextMenuPolicy(Qt::CustomContextMenu);
     
@@ -867,11 +877,17 @@ void MainWindow::changeTool(int index) {
 void MainWindow::selectFolder() {
     QString folder = QFileDialog::getExistingDirectory(this, tr("Select Save Folder"));
     if (!folder.isEmpty()) {
-        currentCanvas()->setSaveFolder(folder);
-        switchPage(1);
-        pageInput->setValue(1);
-
-        updateTabLabel();
+        InkCanvas *canvas = currentCanvas();
+        if (canvas) {
+            if (canvas->isEdited()){
+                saveCurrentPage();
+            }
+            canvas->setSaveFolder(folder);
+            switchPage(1);
+            pageInput->setValue(1);
+            updateTabLabel();
+            recentNotebooksManager->addRecentNotebook(folder, canvas); // Track when folder is selected
+        }
     }
 }
 
@@ -899,8 +915,11 @@ void MainWindow::switchPage(int pageNumber) {
 
     canvas->setLastActivePage(newPage);
     updateZoom();
-    canvas->setLastPanX(panXSlider->maximum());
-    canvas->setLastPanY(panYSlider->maximum());
+    // It seems panXSlider and panYSlider can be null here during startup.
+    if(panXSlider && panYSlider){
+        canvas->setLastPanX(panXSlider->maximum());
+        canvas->setLastPanY(panYSlider->maximum());
+    }
     updateDialDisplay();
 }
 
@@ -966,7 +985,7 @@ void MainWindow::updatePanRange() {
         // No need for horizontal scrollbar
         panXSlider->setVisible(false);
     } else {
-        panXSlider->setRange(0, maxPanX_scaled);
+    panXSlider->setRange(0, maxPanX_scaled);
         // Show scrollbar only if mouse is near and timeout hasn't occurred
         if (scrollbarsVisible && !scrollbarHideTimer->isActive()) {
             scrollbarHideTimer->start();
@@ -979,7 +998,7 @@ void MainWindow::updatePanRange() {
         // No need for vertical scrollbar
         panYSlider->setVisible(false);
     } else {
-        panYSlider->setRange(0, maxPanY_scaled);
+    panYSlider->setRange(0, maxPanY_scaled);
         // Show scrollbar only if mouse is near and timeout hasn't occurred
         if (scrollbarsVisible && !scrollbarHideTimer->isActive()) {
             scrollbarHideTimer->start();
@@ -1149,8 +1168,11 @@ void MainWindow::addNewTab() {
     closeButton->setIcon(QIcon(":/resources/icons/cross.png")); // Set icon
     closeButton->setStyleSheet("QPushButton { border: none; background: transparent; }"); // Hide button border
     
+    // ✅ Create new InkCanvas instance EARLIER so it can be captured by the lambda
+    InkCanvas *newCanvas = new InkCanvas(this);
+
     // ✅ Handle tab closing when the button is clicked
-    connect(closeButton, &QPushButton::clicked, this, [=]() {
+    connect(closeButton, &QPushButton::clicked, this, [=]() { // newCanvas is now captured
 
         // Prevent closing if it's the last remaining tab
         if (tabList->count() <= 1) {
@@ -1160,17 +1182,81 @@ void MainWindow::addNewTab() {
             return;
         }
 
-        ensureTabHasUniqueSaveFolder(currentCanvas()); // ✅ Ensure unique save folder
-
-        // Find the item associated with this button's parent (tabWidget)
+        // Find the index of the tab associated with this button's parent (tabWidget)
+        int indexToRemove = -1;
+        // newCanvas is captured by the lambda, representing the canvas of the tab being closed.
+        // tabWidget is also captured.
         for (int i = 0; i < tabList->count(); ++i) {
-            QListWidgetItem *item = tabList->item(i);
-            QWidget *widget = tabList->itemWidget(item);
-            if (widget == tabWidget) {
-                removeTabAt(i);
-                return;
+            if (tabList->itemWidget(tabList->item(i)) == tabWidget) {
+                indexToRemove = i;
+                break;
             }
         }
+
+        if (indexToRemove == -1) {
+            qWarning() << "Could not find tab to remove based on tabWidget.";
+            // Fallback or error handling if needed, though this shouldn't happen if tabWidget is valid.
+            // As a fallback, try to find the index based on newCanvas if lists are in sync.
+            for (int i = 0; i < canvasStack->count(); ++i) {
+                if (canvasStack->widget(i) == newCanvas) {
+                    indexToRemove = i;
+                    break;
+                }
+            }
+            if (indexToRemove == -1) {
+                 qWarning() << "Could not find tab to remove based on newCanvas either.";
+                 return; // Critical error, cannot proceed.
+            }
+        }
+        
+        // At this point, newCanvas is the InkCanvas instance for the tab being closed.
+        // And indexToRemove is its index in tabList and canvasStack.
+
+        // 1. Ensure the notebook has a unique save folder if it's temporary/edited
+        ensureTabHasUniqueSaveFolder(newCanvas); // Pass the specific canvas
+
+        // 2. Get the final save folder path
+        QString folderPath = newCanvas->getSaveFolder();
+        QString tempDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/temp_session";
+
+        // 3. Update cover preview and recent list if it's a permanent notebook
+        if (!folderPath.isEmpty() && folderPath != tempDir && recentNotebooksManager) {
+            recentNotebooksManager->generateAndSaveCoverPreview(folderPath, newCanvas);
+            // Add/update in recent list. This also moves it to the top.
+            recentNotebooksManager->addRecentNotebook(folderPath, newCanvas);
+        }
+        
+        // 4. Update the tab's label directly as folderPath might have changed
+        QLabel *label = tabWidget->findChild<QLabel*>("tabLabel");
+        if (label) {
+            QString tabNameText;
+            if (!folderPath.isEmpty() && folderPath != tempDir) { // Only for permanent notebooks
+                QString metadataFile = folderPath + "/.pdf_path.txt";
+                if (QFile::exists(metadataFile)) {
+                    QFile file(metadataFile);
+                    if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                        QTextStream in(&file);
+                        QString pdfPath = in.readLine().trimmed();
+                        file.close();
+                        if (QFile::exists(pdfPath)) { // Check if PDF file actually exists
+                            tabNameText = QFileInfo(pdfPath).fileName();
+                        }
+                    }
+                }
+                // Fallback to folder name if no PDF or PDF path invalid
+                if (tabNameText.isEmpty()) {
+                    tabNameText = QFileInfo(folderPath).fileName();
+                }
+            }
+            // Only update the label if a new valid name was determined.
+            // If it's still a temp folder, the original "Tab X" label remains appropriate.
+            if (!tabNameText.isEmpty()) {
+                label->setText(tabNameText);
+            }
+        }
+
+        // 5. Remove the tab
+        removeTabAt(indexToRemove);
     });
 
 
@@ -1186,8 +1272,6 @@ void MainWindow::addNewTab() {
     tabList->addItem(tabItem);
     tabList->setItemWidget(tabItem, tabWidget);  // Attach tab layout
 
-    // ✅ Create new InkCanvas instance
-    InkCanvas *newCanvas = new InkCanvas(this);
     canvasStack->addWidget(newCanvas);
 
     // ✅ Connect touch gesture signals
@@ -1234,13 +1318,20 @@ void MainWindow::removeTabAt(int index) {
     delete item;
 
     // ✅ Remove and delete the canvas safely
-    QWidget *canvas = canvasStack->widget(index);
+    QWidget *canvasWidget = canvasStack->widget(index); // Get widget before removal
+    // ensureTabHasUniqueSaveFolder(currentCanvas()); // Moved to the close button lambda
 
-    ensureTabHasUniqueSaveFolder(currentCanvas());
-
-    if (canvas) {
-        canvasStack->removeWidget(canvas);
-        delete canvas;
+    if (canvasWidget) {
+        canvasStack->removeWidget(canvasWidget); // Remove from stack
+        // InkCanvas *canvasInstance = qobject_cast<InkCanvas*>(canvasWidget);
+        // if (canvasInstance) {
+        //     QString folderPath = canvasInstance->getSaveFolder();
+        //     QString tempDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/temp_session";
+        //     if (!folderPath.isEmpty() && folderPath != tempDir && recentNotebooksManager) {
+        //         recentNotebooksManager->addRecentNotebook(folderPath, canvasInstance); // Moved to close button lambda
+        //     }
+        // }
+        delete canvasWidget; // Now delete the widget (and its InkCanvas)
     }
 
     // ✅ Select the previous tab (or first tab if none left)
@@ -1249,6 +1340,16 @@ void MainWindow::removeTabAt(int index) {
         tabList->setCurrentRow(newIndex);
         canvasStack->setCurrentWidget(canvasStack->widget(newIndex));
     }
+
+    // QWidget *canvasWidget = canvasStack->widget(index); // Redeclaration - remove this block
+    // InkCanvas *canvasInstance = qobject_cast<InkCanvas*>(canvasWidget);
+    //
+    // if (canvasInstance) {
+    //     QString folderPath = canvasInstance->getSaveFolder();
+    //     if (!folderPath.isEmpty() && folderPath != QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/temp_session") {
+    //         // recentNotebooksManager->addRecentNotebook(folderPath, canvasInstance); // Moved to close button lambda
+    //     }
+    // }
 }
 
 void MainWindow::ensureTabHasUniqueSaveFolder(InkCanvas* canvas) {
@@ -1294,7 +1395,7 @@ void MainWindow::ensureTabHasUniqueSaveFolder(InkCanvas* canvas) {
         }
 
         canvas->setSaveFolder(selectedFolder);
-        updateTabLabel();
+        // updateTabLabel(); // No longer needed here, handled by the close button lambda
     }
 
     return;
@@ -2877,4 +2978,9 @@ void MainWindow::handleEdgeProximity(InkCanvas* canvas, const QPoint& pos) {
         }
         scrollbarHideTimer->start();
     }
+}
+
+void MainWindow::openRecentNotebooksDialog() {
+    RecentNotebooksDialog dialog(this, recentNotebooksManager, this);
+    dialog.exec();
 }

@@ -20,6 +20,7 @@
 #include <QQueue>
 #include "SDLControllerManager.h"
 #include "ButtonMappingTypes.h"
+#include "RecentNotebooksManager.h"
 
 // #include "HandwritingLineEdit.h"
 
@@ -156,6 +157,12 @@ public:
     QString migrateOldDialModeString(const QString &oldString);
     QString migrateOldActionString(const QString &oldString);
 
+    InkCanvas* currentCanvas(); // Made public for RecentNotebooksDialog
+    void saveCurrentPage(); // Made public for RecentNotebooksDialog
+    void switchPage(int pageNumber); // Made public for RecentNotebooksDialog
+    void updateTabLabel(); // Made public for RecentNotebooksDialog
+    QSpinBox *pageInput; // Made public for RecentNotebooksDialog
+
 private slots:
     void toggleBenchmark();
     void updateBenchmarkDisplay();
@@ -170,24 +177,19 @@ private slots:
     void loadPdf();
     void clearPdf();
 
-    void saveCurrentPage();
-    void switchPage(int pageNumber);
-    void selectBackground();
-
     void updateZoom();
     void applyZoom();
     void updatePanRange();
     void updatePanX(int value);
     void updatePanY(int value);
 
+    void selectBackground(); // Added back
 
     void forceUIRefresh();
-
 
     void switchTab(int index);
     void addNewTab();
     void removeTabAt(int index);
-    void updateTabLabel();
     void toggleZoomSlider();
     void toggleThicknessSlider(); // Added function to toggle thickness slider
     void toggleFullscreen();
@@ -239,9 +241,10 @@ private slots:
     QColor getContrastingTextColor(const QColor &backgroundColor);
     void updateCustomColorButtonStyle(const QColor &color);
 
+    void openRecentNotebooksDialog(); // Added slot
+
 private:
     InkCanvas *canvas;
-    InkCanvas* currentCanvas();
     QPushButton *benchmarkButton;
     QLabel *benchmarkLabel;
     QTimer *benchmarkTimer;
@@ -268,6 +271,7 @@ private:
     QPushButton *saveAnnotatedButton;
     QPushButton *fullscreenButton;
     QPushButton *openControlPanelButton;
+    QPushButton *openRecentNotebooksButton; // Added button
 
     QPushButton *loadPdfButton;
     QPushButton *clearPdfButton;
@@ -276,10 +280,9 @@ private:
     QMap<InkCanvas*, int> pageMap;
     
 
-    QSpinBox *pageInput;
     QPushButton *backgroundButton; // New button to set background
     QPushButton *straightLineToggleButton; // Button to toggle straight line mode
-    
+
     QSlider *zoomSlider;
     QPushButton *zoomButton;
     QFrame *zoomFrame;
@@ -384,6 +387,8 @@ private:
     void handleControllerButton(const QString &buttonName);
 
     void ensureTabHasUniqueSaveFolder(InkCanvas* canvas);
+
+    RecentNotebooksManager *recentNotebooksManager; // Added manager instance
 
     int pdfRenderDPI = 288;  // Default to 288 DPI
 

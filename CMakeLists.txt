@@ -47,6 +47,8 @@ set(CMAKE_AUTORCC ON)
 # ✅ Build target
 add_executable(NoteApp
     Main.cpp MainWindow.cpp InkCanvas.cpp ControlPanelDialog.cpp SDLControllerManager.cpp ButtonMappingTypes.cpp ${QRCC_FILES}
+    RecentNotebooksManager.cpp
+    RecentNotebooksDialog.cpp
 )
 
 # ✅ Compile .ts → .qm using Qt's lrelease
