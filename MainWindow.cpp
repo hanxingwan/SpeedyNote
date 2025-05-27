@@ -29,7 +29,7 @@
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false) {
 
-    setWindowTitle(tr("SpeedyNote Beta 0.4.6"));
+    setWindowTitle(tr("SpeedyNote Beta 0.4.8"));
 
     // Initialize DPR early
     initialDpr = getDevicePixelRatio();
@@ -341,6 +341,19 @@ void MainWindow::setupUi() {
         bool newMode = !currentCanvas()->isStraightLineMode();
         currentCanvas()->setStraightLineMode(newMode);
         updateStraightLineButtonState();
+    });
+    
+    ropeToolButton = new QPushButton(this);
+    ropeToolButton->setFixedSize(30, 30);
+    QIcon ropeToolIcon(loadThemedIcon("rope")); // Make sure this icon exists
+    ropeToolButton->setIcon(ropeToolIcon);
+    ropeToolButton->setStyleSheet(buttonStyle);
+    ropeToolButton->setToolTip(tr("Toggle Rope Tool Mode"));
+    connect(ropeToolButton, &QPushButton::clicked, this, [this]() {
+        if (!currentCanvas()) return;
+        bool newMode = !currentCanvas()->isRopeToolMode();
+        currentCanvas()->setRopeToolMode(newMode);
+        updateRopeToolButtonState();
     });
     
     deletePageButton = new QPushButton(this);
@@ -710,6 +723,7 @@ void MainWindow::setupUi() {
     controlLayout->addWidget(whiteButton);
     controlLayout->addWidget(customColorButton);
     controlLayout->addWidget(straightLineToggleButton);
+    controlLayout->addWidget(ropeToolButton); // Add rope tool button to layout
     // controlLayout->addWidget(colorPreview);
     // controlLayout->addWidget(thicknessButton);
     // controlLayout->addWidget(jumpToPageButton);
@@ -883,9 +897,9 @@ void MainWindow::selectFolder() {
                 saveCurrentPage();
             }
             canvas->setSaveFolder(folder);
-            switchPage(1);
-            pageInput->setValue(1);
-            updateTabLabel();
+        switchPage(1);
+        pageInput->setValue(1);
+        updateTabLabel();
             recentNotebooksManager->addRecentNotebook(folder, canvas); // Track when folder is selected
         }
     }
@@ -917,8 +931,8 @@ void MainWindow::switchPage(int pageNumber) {
     updateZoom();
     // It seems panXSlider and panYSlider can be null here during startup.
     if(panXSlider && panYSlider){
-        canvas->setLastPanX(panXSlider->maximum());
-        canvas->setLastPanY(panYSlider->maximum());
+    canvas->setLastPanX(panXSlider->maximum());
+    canvas->setLastPanY(panYSlider->maximum());
     }
     updateDialDisplay();
 }
@@ -1141,6 +1155,7 @@ void MainWindow::switchTab(int index) {
             updateDialDisplay();
             updateColorButtonStates();  // Update button states when switching tabs
             updateStraightLineButtonState();  // Update straight line button state when switching tabs
+            updateRopeToolButtonState(); // Update rope tool button state when switching tabs
         }
     }
 }
@@ -1170,7 +1185,7 @@ void MainWindow::addNewTab() {
     
     // ✅ Create new InkCanvas instance EARLIER so it can be captured by the lambda
     InkCanvas *newCanvas = new InkCanvas(this);
-
+    
     // ✅ Handle tab closing when the button is clicked
     connect(closeButton, &QPushButton::clicked, this, [=]() { // newCanvas is now captured
 
@@ -1296,6 +1311,7 @@ void MainWindow::addNewTab() {
     zoomSlider->setValue(100 / initialDpr); // Set initial zoom level based on DPR
     updateDialDisplay();
     updateStraightLineButtonState();  // Initialize straight line button state for the new tab
+    updateRopeToolButtonState(); // Initialize rope tool button state for the new tab
 
     QString tempDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/temp_session";
     newCanvas->setSaveFolder(tempDir);
@@ -2905,6 +2921,23 @@ void MainWindow::updateStraightLineButtonState() {
         // Force style update
         straightLineToggleButton->style()->unpolish(straightLineToggleButton);
         straightLineToggleButton->style()->polish(straightLineToggleButton);
+    }
+}
+
+void MainWindow::updateRopeToolButtonState() {
+    // Check if there's a current canvas
+    if (!currentCanvas()) return;
+
+    // Update the button state to match the canvas rope tool mode
+    bool isEnabled = currentCanvas()->isRopeToolMode();
+
+    // Set visual indicator that the button is active/inactive
+    if (ropeToolButton) {
+        ropeToolButton->setProperty("selected", isEnabled);
+
+        // Force style update
+        ropeToolButton->style()->unpolish(ropeToolButton);
+        ropeToolButton->style()->polish(ropeToolButton);
     }
 }
 

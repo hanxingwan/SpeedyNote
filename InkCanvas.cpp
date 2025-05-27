@@ -20,6 +20,7 @@
 #include <QTabletEvent>
 #include <QTouchEvent>
 #include <QtMath>
+#include <QPainterPath>
 
 #include <QtConcurrent/QtConcurrentRun>
 #include <QFuture>
@@ -348,6 +349,46 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
         // Restore the original painter state
         painter.restore();
     }
+
+    // Draw selection rectangle if in rope tool mode and selecting or moving
+    if (ropeToolMode && (selectingWithRope || movingSelection)) {
+        painter.save(); // Save painter state for overlays
+        painter.resetTransform(); // Reset transform to draw directly in logical widget coordinates
+        
+        if (selectingWithRope && !lassoPathPoints.isEmpty()) {
+            QPen selectionPen(Qt::DashLine);
+            selectionPen.setColor(Qt::blue);
+            selectionPen.setWidthF(1.5); // Width in logical pixels
+            painter.setPen(selectionPen);
+            painter.drawPolygon(lassoPathPoints); // lassoPathPoints are logical widget coordinates
+        } else if (movingSelection && !selectionBuffer.isNull() && !selectionRect.isEmpty()) {
+            // selectionRect is in logical widget coordinates.
+            // selectionBuffer is in physical pixels, we need to handle DPR correctly
+            QPixmap scaledBuffer = selectionBuffer;
+            
+            // Set the device pixel ratio on the buffer to ensure correct scaling
+            // This removes any automatic upscaling Qt would do
+            scaledBuffer.setDevicePixelRatio(devicePixelRatioF());
+            
+            // Now draw it at the logical position
+            // Use exactSelectionRectF for smoother movement if available
+            QPointF topLeft = exactSelectionRectF.isEmpty() ? selectionRect.topLeft() : exactSelectionRectF.topLeft();
+            painter.drawPixmap(topLeft, scaledBuffer);
+
+            QPen selectionBorderPen(Qt::DashLine);
+            selectionBorderPen.setColor(Qt::darkCyan);
+            selectionBorderPen.setWidthF(1.5); // Width in logical pixels
+            painter.setPen(selectionBorderPen);
+            
+            // Use exactSelectionRectF for drawing the selection border if available
+            if (!exactSelectionRectF.isEmpty()) {
+                painter.drawRect(exactSelectionRectF);
+            } else {
+                painter.drawRect(selectionRect);
+            }
+        }
+        painter.restore(); // Restore painter state to what it was for drawing the main buffer
+    }
     
     // Restore the painter state
     painter.restore();
@@ -398,13 +439,80 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
 
     if (event->type() == QEvent::TabletPress) {
         drawing = true;
-        lastPoint = event->posF();
-        // Always store start point if in straight line mode, regardless of tool
+        lastPoint = event->posF(); // Logical widget coordinates
         if (straightLineMode) {
             straightLineStartPoint = lastPoint;
         }
+        if (ropeToolMode) {
+            if (movingSelection && selectionRect.contains(lastPoint.toPoint())) { // lastPoint is QPointF
+                // Already moving, do nothing on press (movement handled by move events)
+                 lastMovePoint = lastPoint; // Update lastMovePoint
+            } else if (!selectionBuffer.isNull() && selectionRect.contains(lastPoint.toPoint())) {
+                // Start moving an existing selection
+                movingSelection = true;
+                selectingWithRope = false;
+                lastMovePoint = lastPoint;
+                // Initialize the exact floating-point rect if it's empty
+                if (exactSelectionRectF.isEmpty()) {
+                    exactSelectionRectF = QRectF(selectionRect);
+                }
+                // selectionBuffer already has the content.
+                // The original area in 'buffer' was already cleared when selection was made.
+            } else {
+                // Start a new selection or cancel existing one
+                if (!selectionBuffer.isNull()) { // If there's an active selection, a tap outside cancels it
+                    selectionBuffer = QPixmap();
+                    selectionRect = QRect();
+                    lassoPathPoints.clear();
+                    movingSelection = false;
+                    selectingWithRope = false;
+                    update(); // Full update to remove old selection visuals
+                    drawing = false; // Consumed this press for cancel
+                    return;
+                }
+                selectingWithRope = true;
+                movingSelection = false;
+                lassoPathPoints.clear();
+                lassoPathPoints << lastPoint; // Start the lasso path
+                selectionRect = QRect();
+                selectionBuffer = QPixmap();
+            }
+        }
     } else if (event->type() == QEvent::TabletMove && drawing) {
-        if (straightLineMode && !isErasing) {
+        if (ropeToolMode) {
+            if (selectingWithRope) {
+                QRectF oldPreviewBoundingRect = lassoPathPoints.boundingRect();
+                lassoPathPoints << event->posF();
+                lastPoint = event->posF();
+                QRectF newPreviewBoundingRect = lassoPathPoints.boundingRect();
+                // Update the area of the selection rectangle preview (logical widget coordinates)
+                update(oldPreviewBoundingRect.united(newPreviewBoundingRect).toRect().adjusted(-5,-5,5,5));
+            } else if (movingSelection) {
+                QPointF delta = event->posF() - lastMovePoint; // Delta in logical widget coordinates
+                QRect oldWidgetSelectionRect = selectionRect;
+                
+                // Update the exact floating-point rectangle first
+                exactSelectionRectF.translate(delta);
+                
+                // Convert back to integer rect, but only when the position actually changes
+                QRect newRect = exactSelectionRectF.toRect();
+                if (newRect != selectionRect) {
+                    selectionRect = newRect;
+                    // Update the combined area of the old and new selection positions (logical widget coordinates)
+                    update(oldWidgetSelectionRect.united(selectionRect).adjusted(-2,-2,2,2));
+                } else {
+                    // Even if the integer position didn't change, we still need to update
+                    // to make movement feel smoother, especially with slow movements
+                    update(selectionRect.adjusted(-2,-2,2,2));
+                }
+                
+                lastMovePoint = event->posF();
+
+                if (!edited){
+                    edited = true;
+                }
+            }
+        } else if (straightLineMode && !isErasing) {
             // For straight line mode with non-eraser tools, just update the last position
             // and trigger a repaint of only the affected area for preview
             static QElapsedTimer updateTimer;
@@ -489,6 +597,9 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
             
             // Force repaint to clear the preview line
             update();
+            if (!edited){
+                edited = true;
+            }
         } else if (straightLineMode && isErasing) {
             // For erasing in straight line mode, most of the work is done during movement
             // Just ensure one final erasing pass from start to end point
@@ -499,6 +610,9 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
             
             // Force update to clear any remaining artifacts
             update();
+            if (!edited){
+                edited = true;
+            }
         }
         
         drawing = false;
@@ -507,6 +621,78 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
         if (wasUsingHardwareEraser) {
             currentTool = previousTool;
             hardwareEraserActive = false;  // Reset hardware eraser tracking
+        }
+
+        if (ropeToolMode) {
+            if (selectingWithRope) {
+                if (lassoPathPoints.size() > 2) { // Need at least 3 points for a polygon
+                    lassoPathPoints << lassoPathPoints.first(); // Close the polygon
+                    selectionRect = lassoPathPoints.boundingRect().toRect(); // Bounding rect in logical widget coords
+                    exactSelectionRectF = lassoPathPoints.boundingRect(); // Store exact floating-point rect too
+
+                    if (!selectionRect.isEmpty()) {
+                        qreal dpr = devicePixelRatioF();
+                        // 1. Create a QPolygonF in physical buffer coordinates (multiply by dpr)
+                        QPolygonF bufferLassoPathPhysical;
+                        for (const QPointF& p_widget_logical : qAsConst(lassoPathPoints)) {
+                            bufferLassoPathPhysical << (p_widget_logical * dpr);
+                        }
+
+                        // 2. Get the bounding box of this physical path on the buffer
+                        QRectF physicalPathBoundingRect = bufferLassoPathPhysical.boundingRect();
+
+                        // 3. Copy that part of the main buffer (physical coordinates)
+                        QPixmap originalPiece = buffer.copy(physicalPathBoundingRect.toRect());
+
+                        // 4. Create the selectionBuffer (same size as originalPiece) and fill transparent
+                        selectionBuffer = QPixmap(originalPiece.size());
+                        selectionBuffer.fill(Qt::transparent);
+                        
+                        // 5. Create a mask from the lasso path
+                        QPainterPath maskPath;
+                        // The lasso path for the mask needs to be relative to originalPiece.topLeft()
+                        maskPath.addPolygon(bufferLassoPathPhysical.translated(-physicalPathBoundingRect.topLeft()));
+                        
+                        // 6. Paint the originalPiece onto selectionBuffer, using the mask
+                        QPainter selectionPainter(&selectionBuffer);
+                        selectionPainter.setClipPath(maskPath);
+                        selectionPainter.drawPixmap(0,0, originalPiece);
+                        selectionPainter.end();
+
+                        // 7. Clear the selected area from the main buffer using the physical path
+                        QPainter mainBufferPainter(&buffer);
+                        mainBufferPainter.setCompositionMode(QPainter::CompositionMode_Clear);
+                        mainBufferPainter.fillPath(maskPath.translated(physicalPathBoundingRect.topLeft()), Qt::transparent); // Path needs to be in full buffer coords
+                        mainBufferPainter.end();
+                        
+                        // Update the area of the selection on screen (map buffer rect to widget coords)
+                        update(mapRectBufferToWidgetLogical(physicalPathBoundingRect).adjusted(-2,-2,2,2));
+                    }
+                }
+                lassoPathPoints.clear(); // Ready for next selection, or move
+                selectingWithRope = false; 
+                // Now, if the user presses inside selectionRect, movingSelection will become true.
+            } else if (movingSelection) {
+                if (!selectionBuffer.isNull() && !selectionRect.isEmpty()) {
+                    QPainter painter(&buffer);
+                    // Use exact floating-point position if available for more precise placement
+                    QPointF topLeft = exactSelectionRectF.isEmpty() ? selectionRect.topLeft() : exactSelectionRectF.topLeft();
+                    // Multiply by devicePixelRatioF() to get physical buffer coordinates
+                    QPointF physicalDest = topLeft * devicePixelRatioF();
+                    painter.drawPixmap(physicalDest.toPoint(), selectionBuffer);
+                    painter.end();
+                    
+                    // Update the pasted area (map buffer rect to widget coords)
+                    QRectF physicalPasteRect(physicalDest, selectionBuffer.size());
+                    update(mapRectBufferToWidgetLogical(physicalPasteRect).adjusted(-2,-2,2,2));
+                    
+                    // Clear selection after pasting, making it permanent
+                    selectionBuffer = QPixmap();
+                    selectionRect = QRect();
+                    exactSelectionRectF = QRectF();
+                    movingSelection = false;
+                }
+            }
         }
     }
     event->accept();
@@ -1358,4 +1544,57 @@ bool InkCanvas::event(QEvent *event) {
     }
     
     return QWidget::event(event);
-    }
+}
+
+// Helper function to map LOGICAL widget coordinates to PHYSICAL buffer coordinates
+QPointF InkCanvas::mapLogicalWidgetToPhysicalBuffer(const QPointF& logicalWidgetPoint) {
+    qreal dpr = devicePixelRatioF();
+    qreal currentZoom = internalZoomFactor / 100.0;
+
+    // 1. Account for centering of the canvas within the widget
+    qreal currentScaledBufferWidthLogical = buffer.width() / dpr * currentZoom;
+    qreal currentScaledBufferHeightLogical = buffer.height() / dpr * currentZoom;
+
+    qreal centerOffsetXLogical = (currentScaledBufferWidthLogical < width()) ? (width() - currentScaledBufferWidthLogical) / 2.0 : 0;
+    qreal centerOffsetYLogical = (currentScaledBufferHeightLogical < height()) ? (height() - currentScaledBufferHeightLogical) / 2.0 : 0;
+
+    // Point relative to the top-left of the (potentially centered) scaled buffer, in logical pixels
+    QPointF pointRelativeToScaledBufferLogical = logicalWidgetPoint - QPointF(centerOffsetXLogical, centerOffsetYLogical);
+
+    // Point relative to the top-left of the unscaled buffer, in logical pixels (buffer at 100% zoom)
+    QPointF pointRelativeToUnscaledBufferLogical = pointRelativeToScaledBufferLogical / currentZoom;
+
+    // panOffsetX/Y are logical offsets for a 100% zoomed view, based on MainWindow::updatePanRange calculation.
+    QPointF physicalBufferPoint = (pointRelativeToUnscaledBufferLogical + QPointF(panOffsetX, panOffsetY)) * dpr;
+    
+    return physicalBufferPoint;
+}
+
+// Helper function to map a PHYSICAL buffer RECT to LOGICAL widget RECT for updates
+QRect InkCanvas::mapRectBufferToWidgetLogical(const QRectF& physicalBufferRect) {
+    qreal dpr = devicePixelRatioF();
+    qreal currentZoom = internalZoomFactor / 100.0;
+
+    // panOffsetX/Y are logical offsets for a 100% zoomed view.
+    QPointF topLeftLogicalUnzoomed = physicalBufferRect.topLeft() / dpr - QPointF(panOffsetX, panOffsetY);
+    QSizeF sizeLogicalUnzoomed = physicalBufferRect.size() / dpr;
+    
+    QRectF logicalBufferRectUnzoomed(topLeftLogicalUnzoomed, sizeLogicalUnzoomed);
+
+    // Scale this logical buffer rect by the current zoom
+    QRectF logicalBufferRectZoomed = QRectF(
+        logicalBufferRectUnzoomed.topLeft() * currentZoom,
+        logicalBufferRectUnzoomed.size() * currentZoom
+    );
+
+    // Account for centering of the canvas within the widget
+    qreal currentScaledBufferWidthLogical = buffer.width() / dpr * currentZoom;
+    qreal currentScaledBufferHeightLogical = buffer.height() / dpr * currentZoom;
+    qreal centerOffsetXLogical = (currentScaledBufferWidthLogical < width()) ? (width() - currentScaledBufferWidthLogical) / 2.0 : 0;
+    qreal centerOffsetYLogical = (currentScaledBufferHeightLogical < height()) ? (height() - currentScaledBufferHeightLogical) / 2.0 : 0;
+
+    // Translate to widget coordinates
+    QRectF logicalWidgetRect = logicalBufferRectZoomed.translated(centerOffsetXLogical, centerOffsetYLogical);
+    
+    return logicalWidgetRect.toRect(); // Convert to QRect for update()
+}

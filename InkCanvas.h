@@ -87,6 +87,10 @@ public:
     void setStraightLineMode(bool enabled) { straightLineMode = enabled; }
     bool isStraightLineMode() const { return straightLineMode; }
 
+    // Rope tool mode toggle
+    void setRopeToolMode(bool enabled) { ropeToolMode = enabled; }
+    bool isRopeToolMode() const { return ropeToolMode; }
+
     void loadPdfPreviewAsync(int pageNumber);  // ✅ Load a quick preview of the PDF page
     // for notebook background below
     void setBackgroundStyle(BackgroundStyle style);
@@ -128,6 +132,9 @@ protected:
     bool event(QEvent *event) override;
 
 private:
+    QPointF mapLogicalWidgetToPhysicalBuffer(const QPointF& logicalWidgetPoint);
+    QRect mapRectBufferToWidgetLogical(const QRectF& physicalBufferRect);
+
     QPixmap buffer;            // Off-screen buffer
     QImage background;
     QPointF lastPoint;
@@ -140,6 +147,14 @@ private:
     QString saveFolder; // Folder to save images
     QPixmap backgroundImage;
     bool straightLineMode = false;  // Flag for straight line mode
+    bool ropeToolMode = false; // Flag for rope tool mode
+    QPixmap selectionBuffer; // Buffer for the selected area in rope tool mode (physical pixels, masked)
+    QRect selectionRect; // Bounding rectangle of the current selection in LOGICAL WIDGET coordinates
+    QRectF exactSelectionRectF; // Floating-point version for smoother movement
+    QPolygonF lassoPathPoints; // Points of the lasso selection in LOGICAL WIDGET coordinates
+    bool selectingWithRope = false; // True if currently drawing the lasso
+    bool movingSelection = false; // True if currently moving the selection
+    QPointF lastMovePoint; // Last point during selection movement (logical widget coordinates)
 
     int zoomFactor;     // Zoom percentage (100 = normal)
     int panOffsetX;     // Horizontal pan offset

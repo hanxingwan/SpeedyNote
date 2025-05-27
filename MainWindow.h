@@ -156,7 +156,7 @@ public:
     void migrateOldButtonMappings();
     QString migrateOldDialModeString(const QString &oldString);
     QString migrateOldActionString(const QString &oldString);
-
+    
     InkCanvas* currentCanvas(); // Made public for RecentNotebooksDialog
     void saveCurrentPage(); // Made public for RecentNotebooksDialog
     void switchPage(int pageNumber); // Made public for RecentNotebooksDialog
@@ -237,6 +237,7 @@ private slots:
     void updateColorButtonStates();
     void selectColorButton(QPushButton* selectedButton);
     void updateStraightLineButtonState();
+    void updateRopeToolButtonState(); // New slot for rope tool button
 
     QColor getContrastingTextColor(const QColor &backgroundColor);
     void updateCustomColorButtonStyle(const QColor &color);
@@ -282,6 +283,7 @@ private:
 
     QPushButton *backgroundButton; // New button to set background
     QPushButton *straightLineToggleButton; // Button to toggle straight line mode
+    QPushButton *ropeToolButton; // Button to toggle rope tool mode
 
     QSlider *zoomSlider;
     QPushButton *zoomButton;
