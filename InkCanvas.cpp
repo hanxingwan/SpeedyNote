@@ -363,14 +363,22 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
             painter.drawPolygon(lassoPathPoints); // lassoPathPoints are logical widget coordinates
         } else if (movingSelection && !selectionBuffer.isNull() && !selectionRect.isEmpty()) {
             // selectionRect is in logical widget coordinates.
-            // selectionBuffer is in physical pixels, we need to handle DPR correctly
+            // selectionBuffer is in buffer coordinates, we need to handle scaling correctly
             QPixmap scaledBuffer = selectionBuffer;
             
-            // Set the device pixel ratio on the buffer to ensure correct scaling
-            // This removes any automatic upscaling Qt would do
-            scaledBuffer.setDevicePixelRatio(devicePixelRatioF());
+            // Calculate the current zoom factor
+            qreal currentZoom = internalZoomFactor / 100.0;
             
-            // Now draw it at the logical position
+            // Scale the selection buffer to match the current zoom level
+            if (currentZoom != 1.0) {
+                QSize scaledSize = QSize(
+                    qRound(scaledBuffer.width() * currentZoom),
+                    qRound(scaledBuffer.height() * currentZoom)
+                );
+                scaledBuffer = scaledBuffer.scaled(scaledSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+            }
+            
+            // Draw it at the logical position
             // Use exactSelectionRectF for smoother movement if available
             QPointF topLeft = exactSelectionRectF.isEmpty() ? selectionRect.topLeft() : exactSelectionRectF.topLeft();
             painter.drawPixmap(topLeft, scaledBuffer);
@@ -507,7 +515,6 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
                 }
                 
                 lastMovePoint = event->posF();
-
                 if (!edited){
                     edited = true;
                 }
@@ -627,22 +634,19 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
             if (selectingWithRope) {
                 if (lassoPathPoints.size() > 2) { // Need at least 3 points for a polygon
                     lassoPathPoints << lassoPathPoints.first(); // Close the polygon
-                    selectionRect = lassoPathPoints.boundingRect().toRect(); // Bounding rect in logical widget coords
-                    exactSelectionRectF = lassoPathPoints.boundingRect(); // Store exact floating-point rect too
-
-                    if (!selectionRect.isEmpty()) {
-                        qreal dpr = devicePixelRatioF();
-                        // 1. Create a QPolygonF in physical buffer coordinates (multiply by dpr)
-                        QPolygonF bufferLassoPathPhysical;
+                    
+                    if (!lassoPathPoints.boundingRect().isEmpty()) {
+                        // 1. Create a QPolygonF in buffer coordinates using proper transformation
+                        QPolygonF bufferLassoPath;
                         for (const QPointF& p_widget_logical : qAsConst(lassoPathPoints)) {
-                            bufferLassoPathPhysical << (p_widget_logical * dpr);
+                            bufferLassoPath << mapLogicalWidgetToPhysicalBuffer(p_widget_logical);
                         }
 
-                        // 2. Get the bounding box of this physical path on the buffer
-                        QRectF physicalPathBoundingRect = bufferLassoPathPhysical.boundingRect();
+                        // 2. Get the bounding box of this path on the buffer
+                        QRectF bufferPathBoundingRect = bufferLassoPath.boundingRect();
 
-                        // 3. Copy that part of the main buffer (physical coordinates)
-                        QPixmap originalPiece = buffer.copy(physicalPathBoundingRect.toRect());
+                        // 3. Copy that part of the main buffer
+                        QPixmap originalPiece = buffer.copy(bufferPathBoundingRect.toRect());
 
                         // 4. Create the selectionBuffer (same size as originalPiece) and fill transparent
                         selectionBuffer = QPixmap(originalPiece.size());
@@ -651,7 +655,7 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
                         // 5. Create a mask from the lasso path
                         QPainterPath maskPath;
                         // The lasso path for the mask needs to be relative to originalPiece.topLeft()
-                        maskPath.addPolygon(bufferLassoPathPhysical.translated(-physicalPathBoundingRect.topLeft()));
+                        maskPath.addPolygon(bufferLassoPath.translated(-bufferPathBoundingRect.topLeft()));
                         
                         // 6. Paint the originalPiece onto selectionBuffer, using the mask
                         QPainter selectionPainter(&selectionBuffer);
@@ -659,14 +663,19 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
                         selectionPainter.drawPixmap(0,0, originalPiece);
                         selectionPainter.end();
 
-                        // 7. Clear the selected area from the main buffer using the physical path
+                        // 7. Clear the selected area from the main buffer using the path
                         QPainter mainBufferPainter(&buffer);
                         mainBufferPainter.setCompositionMode(QPainter::CompositionMode_Clear);
-                        mainBufferPainter.fillPath(maskPath.translated(physicalPathBoundingRect.topLeft()), Qt::transparent); // Path needs to be in full buffer coords
+                        mainBufferPainter.fillPath(maskPath.translated(bufferPathBoundingRect.topLeft()), Qt::transparent);
                         mainBufferPainter.end();
                         
-                        // Update the area of the selection on screen (map buffer rect to widget coords)
-                        update(mapRectBufferToWidgetLogical(physicalPathBoundingRect).adjusted(-2,-2,2,2));
+                        // 8. Calculate the correct selectionRect in logical widget coordinates
+                        QRectF logicalSelectionRect = mapRectBufferToWidgetLogical(bufferPathBoundingRect);
+                        selectionRect = logicalSelectionRect.toRect();
+                        exactSelectionRectF = logicalSelectionRect;
+                        
+                        // Update the area of the selection on screen
+                        update(logicalSelectionRect.adjusted(-2,-2,2,2).toRect());
                     }
                 }
                 lassoPathPoints.clear(); // Ready for next selection, or move
@@ -677,14 +686,14 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
                     QPainter painter(&buffer);
                     // Use exact floating-point position if available for more precise placement
                     QPointF topLeft = exactSelectionRectF.isEmpty() ? selectionRect.topLeft() : exactSelectionRectF.topLeft();
-                    // Multiply by devicePixelRatioF() to get physical buffer coordinates
-                    QPointF physicalDest = topLeft * devicePixelRatioF();
-                    painter.drawPixmap(physicalDest.toPoint(), selectionBuffer);
+                    // Use proper coordinate transformation to get buffer coordinates
+                    QPointF bufferDest = mapLogicalWidgetToPhysicalBuffer(topLeft);
+                    painter.drawPixmap(bufferDest.toPoint(), selectionBuffer);
                     painter.end();
                     
-                    // Update the pasted area (map buffer rect to widget coords)
-                    QRectF physicalPasteRect(physicalDest, selectionBuffer.size());
-                    update(mapRectBufferToWidgetLogical(physicalPasteRect).adjusted(-2,-2,2,2));
+                    // Update the pasted area
+                    QRectF bufferPasteRect(bufferDest, selectionBuffer.size());
+                    update(mapRectBufferToWidgetLogical(bufferPasteRect).adjusted(-2,-2,2,2));
                     
                     // Clear selection after pasting, making it permanent
                     selectionBuffer = QPixmap();
@@ -1548,53 +1557,32 @@ bool InkCanvas::event(QEvent *event) {
 
 // Helper function to map LOGICAL widget coordinates to PHYSICAL buffer coordinates
 QPointF InkCanvas::mapLogicalWidgetToPhysicalBuffer(const QPointF& logicalWidgetPoint) {
-    qreal dpr = devicePixelRatioF();
-    qreal currentZoom = internalZoomFactor / 100.0;
-
-    // 1. Account for centering of the canvas within the widget
-    qreal currentScaledBufferWidthLogical = buffer.width() / dpr * currentZoom;
-    qreal currentScaledBufferHeightLogical = buffer.height() / dpr * currentZoom;
-
-    qreal centerOffsetXLogical = (currentScaledBufferWidthLogical < width()) ? (width() - currentScaledBufferWidthLogical) / 2.0 : 0;
-    qreal centerOffsetYLogical = (currentScaledBufferHeightLogical < height()) ? (height() - currentScaledBufferHeightLogical) / 2.0 : 0;
-
-    // Point relative to the top-left of the (potentially centered) scaled buffer, in logical pixels
-    QPointF pointRelativeToScaledBufferLogical = logicalWidgetPoint - QPointF(centerOffsetXLogical, centerOffsetYLogical);
-
-    // Point relative to the top-left of the unscaled buffer, in logical pixels (buffer at 100% zoom)
-    QPointF pointRelativeToUnscaledBufferLogical = pointRelativeToScaledBufferLogical / currentZoom;
-
-    // panOffsetX/Y are logical offsets for a 100% zoomed view, based on MainWindow::updatePanRange calculation.
-    QPointF physicalBufferPoint = (pointRelativeToUnscaledBufferLogical + QPointF(panOffsetX, panOffsetY)) * dpr;
+    // Use the same coordinate transformation logic as drawStroke for consistency
+    qreal scaledCanvasWidth = buffer.width() * (zoomFactor / 100.0);
+    qreal scaledCanvasHeight = buffer.height() * (zoomFactor / 100.0);
+    qreal centerOffsetX = (scaledCanvasWidth < width()) ? (width() - scaledCanvasWidth) / 2.0 : 0;
+    qreal centerOffsetY = (scaledCanvasHeight < height()) ? (height() - scaledCanvasHeight) / 2.0 : 0;
     
-    return physicalBufferPoint;
+    // Convert widget position to buffer position, accounting for centering
+    QPointF adjustedPoint = logicalWidgetPoint - QPointF(centerOffsetX, centerOffsetY);
+    QPointF bufferPoint = (adjustedPoint / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
+    
+    return bufferPoint;
 }
 
 // Helper function to map a PHYSICAL buffer RECT to LOGICAL widget RECT for updates
 QRect InkCanvas::mapRectBufferToWidgetLogical(const QRectF& physicalBufferRect) {
-    qreal dpr = devicePixelRatioF();
-    qreal currentZoom = internalZoomFactor / 100.0;
-
-    // panOffsetX/Y are logical offsets for a 100% zoomed view.
-    QPointF topLeftLogicalUnzoomed = physicalBufferRect.topLeft() / dpr - QPointF(panOffsetX, panOffsetY);
-    QSizeF sizeLogicalUnzoomed = physicalBufferRect.size() / dpr;
+    // Use the same coordinate transformation logic as drawStroke for consistency
+    qreal scaledCanvasWidth = buffer.width() * (zoomFactor / 100.0);
+    qreal scaledCanvasHeight = buffer.height() * (zoomFactor / 100.0);
+    qreal centerOffsetX = (scaledCanvasWidth < width()) ? (width() - scaledCanvasWidth) / 2.0 : 0;
+    qreal centerOffsetY = (scaledCanvasHeight < height()) ? (height() - scaledCanvasHeight) / 2.0 : 0;
     
-    QRectF logicalBufferRectUnzoomed(topLeftLogicalUnzoomed, sizeLogicalUnzoomed);
-
-    // Scale this logical buffer rect by the current zoom
-    QRectF logicalBufferRectZoomed = QRectF(
-        logicalBufferRectUnzoomed.topLeft() * currentZoom,
-        logicalBufferRectUnzoomed.size() * currentZoom
+    // Convert buffer coordinates back to widget coordinates
+    QRectF widgetRect = QRectF(
+        (physicalBufferRect.topLeft() - QPointF(panOffsetX, panOffsetY)) * (zoomFactor / 100.0) + QPointF(centerOffsetX, centerOffsetY),
+        physicalBufferRect.size() * (zoomFactor / 100.0)
     );
-
-    // Account for centering of the canvas within the widget
-    qreal currentScaledBufferWidthLogical = buffer.width() / dpr * currentZoom;
-    qreal currentScaledBufferHeightLogical = buffer.height() / dpr * currentZoom;
-    qreal centerOffsetXLogical = (currentScaledBufferWidthLogical < width()) ? (width() - currentScaledBufferWidthLogical) / 2.0 : 0;
-    qreal centerOffsetYLogical = (currentScaledBufferHeightLogical < height()) ? (height() - currentScaledBufferHeightLogical) / 2.0 : 0;
-
-    // Translate to widget coordinates
-    QRectF logicalWidgetRect = logicalBufferRectZoomed.translated(centerOffsetXLogical, centerOffsetYLogical);
     
-    return logicalWidgetRect.toRect(); // Convert to QRect for update()
+    return widgetRect.toRect();
 }
