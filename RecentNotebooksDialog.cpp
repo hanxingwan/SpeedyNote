@@ -90,6 +90,14 @@ void RecentNotebooksDialog::onNotebookClicked() {
                 mainWindowRef->switchPage(1); // Use MainWindow's switchPage method
                 mainWindowRef->pageInput->setValue(1); // Update pageInput in MainWindow
                 mainWindowRef->updateTabLabel(); // Update tab label in MainWindow
+                
+                // Update recent notebooks list and refresh cover page
+                if (notebookManager) {
+                    // Generate and save fresh cover preview
+                    notebookManager->generateAndSaveCoverPreview(notebookPath, canvas);
+                    // Add/update in recent list (this moves it to the top)
+                    notebookManager->addRecentNotebook(notebookPath, canvas);
+                }
             }
             accept(); // Close the dialog
         }

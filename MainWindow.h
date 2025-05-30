@@ -21,6 +21,9 @@
 #include "SDLControllerManager.h"
 #include "ButtonMappingTypes.h"
 #include "RecentNotebooksManager.h"
+#include <QResizeEvent>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
 
 // #include "HandwritingLineEdit.h"
 
@@ -372,6 +375,7 @@ private:
 
     bool controlBarVisible = true;  // Track controlBar visibility state
     void toggleControlBar();        // Function to toggle controlBar visibility
+    bool sidebarWasVisibleBeforeFullscreen = true;  // Track sidebar state before fullscreen
 
     int accumulatedRotationAfterLimit = 0; 
 
@@ -409,6 +413,25 @@ private:
     
     // Handle edge proximity detection for scrollbar visibility
     void handleEdgeProximity(InkCanvas* canvas, const QPoint& pos);
+    
+    // Responsive toolbar management
+    bool isToolbarTwoRows = false;
+    QVBoxLayout *controlLayoutVertical = nullptr;
+    QHBoxLayout *controlLayoutSingle = nullptr;
+    QHBoxLayout *controlLayoutFirstRow = nullptr;
+    QHBoxLayout *controlLayoutSecondRow = nullptr;
+    void updateToolbarLayout();
+    void createSingleRowLayout();
+    void createTwoRowLayout();
+    
+    // Add timer for delayed layout updates
+    QTimer *layoutUpdateTimer = nullptr;
+    
+    // Separator line for 2-row layout
+    QFrame *separatorLine = nullptr;
+    
+protected:
+    void resizeEvent(QResizeEvent *event) override;
 };
 
 #endif // MAINWINDOW_H

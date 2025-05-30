@@ -21,6 +21,7 @@
 #include <QStandardPaths>
 #include <QSettings>
 #include <QMessageBox>
+#include <QDebug>
 // #include "HandwritingLineEdit.h"
 #include "ControlPanelDialog.h"
 #include "SDLControllerManager.h"
@@ -29,7 +30,7 @@
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false) {
 
-    setWindowTitle(tr("SpeedyNote Beta 0.4.8"));
+    setWindowTitle(tr("SpeedyNote Beta 0.4.9"));
 
     // Initialize DPR early
     initialDpr = getDevicePixelRatio();
@@ -338,6 +339,13 @@ void MainWindow::setupUi() {
     straightLineToggleButton->setToolTip(tr("Toggle Straight Line Mode"));
     connect(straightLineToggleButton, &QPushButton::clicked, this, [this]() {
         if (!currentCanvas()) return;
+        
+        // If we're turning on straight line mode, first disable rope tool
+        if (!currentCanvas()->isStraightLineMode()) {
+            currentCanvas()->setRopeToolMode(false);
+            updateRopeToolButtonState();
+        }
+        
         bool newMode = !currentCanvas()->isStraightLineMode();
         currentCanvas()->setStraightLineMode(newMode);
         updateStraightLineButtonState();
@@ -351,6 +359,13 @@ void MainWindow::setupUi() {
     ropeToolButton->setToolTip(tr("Toggle Rope Tool Mode"));
     connect(ropeToolButton, &QPushButton::clicked, this, [this]() {
         if (!currentCanvas()) return;
+        
+        // If we're turning on rope tool mode, first disable straight line
+        if (!currentCanvas()->isRopeToolMode()) {
+            currentCanvas()->setStraightLineMode(false);
+            updateStraightLineButtonState();
+        }
+        
         bool newMode = !currentCanvas()->isRopeToolMode();
         currentCanvas()->setRopeToolMode(newMode);
         updateRopeToolButtonState();
@@ -515,7 +530,7 @@ void MainWindow::setupUi() {
 
     sidebarContainer = new QWidget(this);  // <-- New container
     sidebarContainer->setObjectName("sidebarContainer");
-    sidebarContainer->setContentsMargins(0, 0, 0, 0);  // <-- Remove margins
+    sidebarContainer->setContentsMargins(5, 0, 5, 5);  // <-- Remove margins
     sidebarContainer->setMaximumWidth(140);  // <-- Set max width
     QVBoxLayout *tabLayout = new QVBoxLayout(sidebarContainer);
     tabLayout->setContentsMargins(0, 0, 1, 0); 
@@ -612,24 +627,31 @@ void MainWindow::setupUi() {
 
     btnPageSwitch = new QPushButton(loadThemedIcon("bookpage"), "", this);
     btnPageSwitch->setStyleSheet(buttonStyle);
+    btnPageSwitch->setFixedSize(30, 30);
     btnPageSwitch->setToolTip(tr("Set Dial Mode to Page Switching"));
     btnZoom = new QPushButton(loadThemedIcon("zoom"), "", this);
     btnZoom->setStyleSheet(buttonStyle);
+    btnZoom->setFixedSize(30, 30);
     btnZoom->setToolTip(tr("Set Dial Mode to Zoom Ctrl"));
     btnThickness = new QPushButton(loadThemedIcon("thickness"), "", this);
     btnThickness->setStyleSheet(buttonStyle);
+    btnThickness->setFixedSize(30, 30);
     btnThickness->setToolTip(tr("Set Dial Mode to Pen Tip Thickness Ctrl"));
     btnColor = new QPushButton(loadThemedIcon("color"), "", this);
     btnColor->setStyleSheet(buttonStyle);
+    btnColor->setFixedSize(30, 30);
     btnColor->setToolTip(tr("Set Dial Mode to Color Adjustment"));
     btnTool = new QPushButton(loadThemedIcon("pen"), "", this);
     btnTool->setStyleSheet(buttonStyle);
+    btnTool->setFixedSize(30, 30);
     btnTool->setToolTip(tr("Set Dial Mode to Tool Switching"));
     btnPresets = new QPushButton(loadThemedIcon("preset"), "", this);
     btnPresets->setStyleSheet(buttonStyle);
+    btnPresets->setFixedSize(30, 30);
     btnPresets->setToolTip(tr("Set Dial Mode to Color Preset Selection"));
     btnPannScroll = new QPushButton(loadThemedIcon("scroll"), "", this);
     btnPannScroll->setStyleSheet(buttonStyle);
+    btnPannScroll->setFixedSize(30, 30);
     btnPannScroll->setToolTip(tr("Slide and turn pages with the dial"));
 
     connect(btnPageSwitch, &QPushButton::clicked, this, [this]() { changeDialMode(PageSwitching); });
@@ -756,11 +778,10 @@ void MainWindow::setupUi() {
     controlLayout->addWidget(deletePageButton);
     
     
-    
 
     controlBar = new QWidget;  // Use member variable instead of local
     controlBar->setObjectName("controlBar");
-    controlBar->setLayout(controlLayout);
+    // controlBar->setLayout(controlLayout);  // Commented out - responsive layout will handle this
     controlBar->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
 
     QPalette palette = QGuiApplication::palette();
@@ -837,6 +858,9 @@ void MainWindow::setupUi() {
     QDir().mkpath(tempDir);  // Recreate clean directory
 
     addNewTab();
+
+    // Initialize responsive toolbar layout
+    createSingleRowLayout();  // Start with single row layout
 
 }
 
@@ -981,19 +1005,26 @@ void MainWindow::updatePanRange() {
     QSize viewportSize = QGuiApplication::primaryScreen()->size() * QGuiApplication::primaryScreen()->devicePixelRatio();
     qreal dps = initialDpr;
     
+    // Adjust viewport size for 2-row toolbar layout
+    QSize effectiveViewportSize = viewportSize;
+    if (isToolbarTwoRows) {
+        // In 2-row mode, treat the viewport width as half size to unlock pan earlier
+        effectiveViewportSize.setWidth(viewportSize.width() / 2);
+    }
+    
     // Calculate scaled canvas size
     int scaledCanvasWidth = canvasSize.width() * zoom * dps / 100;
     int scaledCanvasHeight = canvasSize.height() * zoom * dps / 100;
     
     // Calculate max pan values - if canvas is smaller than viewport, pan should be 0
-    int maxPanX = qMax(0, scaledCanvasWidth - viewportSize.width());
-    int maxPanY = qMax(0, scaledCanvasHeight - viewportSize.height());
+    int maxPanX = qMax(0, scaledCanvasWidth - effectiveViewportSize.width());
+    int maxPanY = qMax(0, scaledCanvasHeight - effectiveViewportSize.height());
 
     int maxPanX_scaled = maxPanX * 110 / dps / zoom;
     int maxPanY_scaled = maxPanY * 110 / dps / zoom;  // Here I intentionally changed 100 to 110. 
 
     // Set range to 0 when canvas is smaller than viewport (centered)
-    if (scaledCanvasWidth <= viewportSize.width()) {
+    if (scaledCanvasWidth <= effectiveViewportSize.width()) {
         panXSlider->setRange(0, 0);
         panXSlider->setValue(0);
         // No need for horizontal scrollbar
@@ -1006,7 +1037,7 @@ void MainWindow::updatePanRange() {
         }
     }
     
-    if (scaledCanvasHeight <= viewportSize.height()) {
+    if (scaledCanvasHeight <= effectiveViewportSize.height()) {
         panYSlider->setRange(0, 0);
         panYSlider->setValue(0);
         // No need for vertical scrollbar
@@ -1718,8 +1749,8 @@ void MainWindow::updateDialDisplay() {
             break;
         case DialMode::PanAndPageScroll:
             dialIconView->setPixmap(QPixmap(":/resources/icons/scroll_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-            QString barStatus = controlBarVisible ? tr("Hide") : tr("Show");
-            dialDisplay->setText(QString(tr("\n\nPage %1\n%2 Bar")).arg(getCurrentPageForCanvas(currentCanvas()) + 1).arg(barStatus));
+            QString fullscreenStatus = controlBarVisible ? tr("Etr") : tr("Exit");
+            dialDisplay->setText(QString(tr("\n\nPage %1\n%2 FulScr")).arg(getCurrentPageForCanvas(currentCanvas()) + 1).arg(fullscreenStatus));
             break;
     }
 }
@@ -2359,6 +2390,17 @@ void MainWindow::setColorButtonsVisible(bool visible) {
 
     QSettings settings("SpeedyNote", "App");
     settings.setValue("colorButtonsVisible", visible);
+    
+    // Update colorButtonsVisible flag and trigger layout update
+    colorButtonsVisible = visible;
+    
+    // Trigger layout update to adjust responsive thresholds
+    if (layoutUpdateTimer) {
+        layoutUpdateTimer->stop();
+        layoutUpdateTimer->start(50); // Quick update for settings change
+    } else {
+        updateToolbarLayout(); // Direct update if no timer exists yet
+    }
 }
 
 
@@ -2722,11 +2764,24 @@ void MainWindow::loadUserSettings() {
 }
 
 void MainWindow::toggleControlBar() {
-    controlBarVisible = !controlBarVisible;
-    controlBar->setVisible(controlBarVisible);
+    // Proper fullscreen toggle: handle both sidebar and control bar
     
-    // Hide floating popup widgets when control bar is hidden to prevent stacking
-    if (!controlBarVisible) {
+    if (controlBarVisible) {
+        // Going into fullscreen mode
+        
+        // First, remember current sidebar state
+        sidebarWasVisibleBeforeFullscreen = sidebarContainer->isVisible();
+        
+        // Hide sidebar if it's visible
+        if (sidebarContainer->isVisible()) {
+            sidebarContainer->setVisible(false);
+        }
+        
+        // Hide control bar
+        controlBarVisible = false;
+        controlBar->setVisible(false);
+        
+        // Hide floating popup widgets when control bar is hidden to prevent stacking
         if (zoomFrame && zoomFrame->isVisible()) zoomFrame->hide();
         if (thicknessFrame && thicknessFrame->isVisible()) thicknessFrame->hide();
         
@@ -2750,6 +2805,15 @@ void MainWindow::toggleControlBar() {
             }
         }
     } else {
+        // Coming out of fullscreen mode
+        
+        // Restore control bar
+        controlBarVisible = true;
+        controlBar->setVisible(true);
+        
+        // Restore sidebar to its previous state
+        sidebarContainer->setVisible(sidebarWasVisibleBeforeFullscreen);
+        
         // Show orphaned widgets when control bar is visible
         // Note: These are kept hidden normally since they're not in the layout
         // Only show them if they were specifically intended to be visible
@@ -3016,4 +3080,228 @@ void MainWindow::handleEdgeProximity(InkCanvas* canvas, const QPoint& pos) {
 void MainWindow::openRecentNotebooksDialog() {
     RecentNotebooksDialog dialog(this, recentNotebooksManager, this);
     dialog.exec();
+}
+
+void MainWindow::resizeEvent(QResizeEvent *event) {
+    QMainWindow::resizeEvent(event);
+    
+    // Use a timer to delay layout updates during resize to prevent excessive switching
+    if (!layoutUpdateTimer) {
+        layoutUpdateTimer = new QTimer(this);
+        layoutUpdateTimer->setSingleShot(true);
+        connect(layoutUpdateTimer, &QTimer::timeout, this, &MainWindow::updateToolbarLayout);
+    }
+    
+    layoutUpdateTimer->stop();
+    layoutUpdateTimer->start(100); // Wait 100ms after resize stops
+}
+
+void MainWindow::updateToolbarLayout() {
+    // Calculate scaled width using device pixel ratio
+    QScreen *screen = QGuiApplication::primaryScreen();
+    // qreal dpr = screen ? screen->devicePixelRatio() : 1.0;
+    int scaledWidth = width();
+    
+    // Dynamic threshold based on color button visibility
+    int threshold = areColorButtonsVisible() ? 1406 : 1311;
+    
+    // Debug output to understand what's happening
+    qDebug() << "Window width:" << scaledWidth << "Threshold:" << threshold << "Color buttons visible:" << areColorButtonsVisible();
+    
+    bool shouldBeTwoRows = scaledWidth <= threshold;
+    
+    qDebug() << "Should be two rows:" << shouldBeTwoRows << "Currently is two rows:" << isToolbarTwoRows;
+    
+    if (shouldBeTwoRows != isToolbarTwoRows) {
+        isToolbarTwoRows = shouldBeTwoRows;
+        
+        qDebug() << "Switching to" << (isToolbarTwoRows ? "two rows" : "single row");
+        
+        if (isToolbarTwoRows) {
+            createTwoRowLayout();
+        } else {
+            createSingleRowLayout();
+        }
+    }
+}
+
+void MainWindow::createSingleRowLayout() {
+    // Delete separator line if it exists (from previous 2-row layout)
+    if (separatorLine) {
+        delete separatorLine;
+        separatorLine = nullptr;
+    }
+    
+    // Create new single row layout first
+    QHBoxLayout *newLayout = new QHBoxLayout;
+    
+    // Add all widgets to single row (same order as before)
+    newLayout->addWidget(toggleTabBarButton);
+    newLayout->addWidget(selectFolderButton);
+    newLayout->addWidget(exportNotebookButton);
+    newLayout->addWidget(importNotebookButton);
+    newLayout->addWidget(loadPdfButton);
+    newLayout->addWidget(clearPdfButton);
+    newLayout->addWidget(backgroundButton);
+    newLayout->addWidget(saveButton);
+    newLayout->addWidget(saveAnnotatedButton);
+    newLayout->addWidget(openControlPanelButton);
+    newLayout->addWidget(openRecentNotebooksButton);
+    newLayout->addWidget(redButton);
+    newLayout->addWidget(blueButton);
+    
+    // Only add these color buttons if they're visible
+    if (areColorButtonsVisible()) {
+        newLayout->addWidget(yellowButton);
+        newLayout->addWidget(greenButton);
+    }
+    
+    newLayout->addWidget(blackButton);
+    newLayout->addWidget(whiteButton);
+    newLayout->addWidget(customColorButton);
+    newLayout->addWidget(straightLineToggleButton);
+    newLayout->addWidget(ropeToolButton);
+    newLayout->addWidget(dialToggleButton);
+    newLayout->addWidget(fastForwardButton);
+    newLayout->addWidget(btnPageSwitch);
+    newLayout->addWidget(btnPannScroll);
+    newLayout->addWidget(btnZoom);
+    newLayout->addWidget(btnThickness);
+    newLayout->addWidget(btnColor);
+    newLayout->addWidget(btnTool);
+    newLayout->addWidget(btnPresets);
+    newLayout->addWidget(addPresetButton);
+    newLayout->addWidget(fullscreenButton);
+    newLayout->addWidget(zoom50Button);
+    newLayout->addWidget(dezoomButton);
+    newLayout->addWidget(zoom200Button);
+    newLayout->addStretch();
+    newLayout->addWidget(pageInput);
+    newLayout->addWidget(benchmarkButton);
+    newLayout->addWidget(benchmarkLabel);
+    newLayout->addWidget(deletePageButton);
+    
+    // Safely replace the layout
+    QLayout* oldLayout = controlBar->layout();
+    if (oldLayout) {
+        // Remove all items from old layout (but don't delete widgets)
+        QLayoutItem* item;
+        while ((item = oldLayout->takeAt(0)) != nullptr) {
+            // Just removing, not deleting widgets
+        }
+        delete oldLayout;
+    }
+    
+    // Set the new layout
+    controlBar->setLayout(newLayout);
+    controlLayoutSingle = newLayout;
+    
+    // Clean up other layout pointers
+    controlLayoutVertical = nullptr;
+    controlLayoutFirstRow = nullptr;
+    controlLayoutSecondRow = nullptr;
+    
+    // Update pan range after layout change
+    updatePanRange();
+}
+
+void MainWindow::createTwoRowLayout() {
+    // Create new layouts first
+    QVBoxLayout *newVerticalLayout = new QVBoxLayout;
+    QHBoxLayout *newFirstRowLayout = new QHBoxLayout;
+    QHBoxLayout *newSecondRowLayout = new QHBoxLayout;
+    
+    // Add comfortable spacing and margins for 2-row layout
+    newFirstRowLayout->setContentsMargins(8, 8, 8, 6);  // More generous margins
+    newFirstRowLayout->setSpacing(3);  // Add spacing between buttons for less cramped feel
+    newSecondRowLayout->setContentsMargins(8, 6, 8, 8);  // More generous margins
+    newSecondRowLayout->setSpacing(3);  // Add spacing between buttons for less cramped feel
+    
+    // First row: up to customColorButton
+    newFirstRowLayout->addWidget(toggleTabBarButton);
+    newFirstRowLayout->addWidget(selectFolderButton);
+    newFirstRowLayout->addWidget(exportNotebookButton);
+    newFirstRowLayout->addWidget(importNotebookButton);
+    newFirstRowLayout->addWidget(loadPdfButton);
+    newFirstRowLayout->addWidget(clearPdfButton);
+    newFirstRowLayout->addWidget(backgroundButton);
+    newFirstRowLayout->addWidget(saveButton);
+    newFirstRowLayout->addWidget(saveAnnotatedButton);
+    newFirstRowLayout->addWidget(openControlPanelButton);
+    newFirstRowLayout->addWidget(openRecentNotebooksButton);
+    newFirstRowLayout->addWidget(redButton);
+    newFirstRowLayout->addWidget(blueButton);
+    
+    // Only add these color buttons if they're visible
+    if (areColorButtonsVisible()) {
+        newFirstRowLayout->addWidget(yellowButton);
+        newFirstRowLayout->addWidget(greenButton);
+    }
+    
+    newFirstRowLayout->addWidget(blackButton);
+    newFirstRowLayout->addWidget(whiteButton);
+    newFirstRowLayout->addWidget(customColorButton);
+    newFirstRowLayout->addStretch();
+    
+    // Create a separator line
+    if (!separatorLine) {
+        separatorLine = new QFrame();
+        separatorLine->setFrameShape(QFrame::HLine);
+        separatorLine->setFrameShadow(QFrame::Sunken);
+        separatorLine->setLineWidth(1);
+        separatorLine->setStyleSheet("QFrame { color: rgba(255, 255, 255, 255); }");
+    }
+    
+    // Second row: everything after customColorButton
+    newSecondRowLayout->addWidget(straightLineToggleButton);
+    newSecondRowLayout->addWidget(ropeToolButton);
+    newSecondRowLayout->addWidget(dialToggleButton);
+    newSecondRowLayout->addWidget(fastForwardButton);
+    newSecondRowLayout->addWidget(btnPageSwitch);
+    newSecondRowLayout->addWidget(btnPannScroll);
+    newSecondRowLayout->addWidget(btnZoom);
+    newSecondRowLayout->addWidget(btnThickness);
+    newSecondRowLayout->addWidget(btnColor);
+    newSecondRowLayout->addWidget(btnTool);
+    newSecondRowLayout->addWidget(btnPresets);
+    newSecondRowLayout->addWidget(addPresetButton);
+    newSecondRowLayout->addWidget(fullscreenButton);
+    newSecondRowLayout->addWidget(zoom50Button);
+    newSecondRowLayout->addWidget(dezoomButton);
+    newSecondRowLayout->addWidget(zoom200Button);
+    newSecondRowLayout->addStretch();
+    newSecondRowLayout->addWidget(pageInput);
+    newSecondRowLayout->addWidget(benchmarkButton);
+    newSecondRowLayout->addWidget(benchmarkLabel);
+    newSecondRowLayout->addWidget(deletePageButton);
+    
+    // Add layouts to vertical layout with separator
+    newVerticalLayout->addLayout(newFirstRowLayout);
+    newVerticalLayout->addWidget(separatorLine);
+    newVerticalLayout->addLayout(newSecondRowLayout);
+    newVerticalLayout->setContentsMargins(0, 0, 0, 0);
+    newVerticalLayout->setSpacing(0); // No spacing since we have our own separator
+    
+    // Safely replace the layout
+    QLayout* oldLayout = controlBar->layout();
+    if (oldLayout) {
+        // Remove all items from old layout (but don't delete widgets)
+        QLayoutItem* item;
+        while ((item = oldLayout->takeAt(0)) != nullptr) {
+            // Just removing, not deleting widgets
+        }
+        delete oldLayout;
+    }
+    
+    // Set the new layout
+    controlBar->setLayout(newVerticalLayout);
+    controlLayoutVertical = newVerticalLayout;
+    controlLayoutFirstRow = newFirstRowLayout;
+    controlLayoutSecondRow = newSecondRowLayout;
+    
+    // Clean up other layout pointer
+    controlLayoutSingle = nullptr;
+    
+    // Update pan range after layout change
+    updatePanRange();
 }
