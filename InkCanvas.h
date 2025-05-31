@@ -20,16 +20,13 @@ enum class BackgroundStyle {
     Lines
 };
 
-
-
 class InkCanvas : public QWidget {
     Q_OBJECT
 
-
-    BackgroundStyle backgroundStyle = BackgroundStyle::None;
-    QColor backgroundColor = Qt::transparent;
-    int backgroundDensity = 40;  // pixels between lines
-
+signals:
+    void zoomChanged(int newZoom);
+    void panChanged(int panX, int panY);
+    void touchGestureEnded(); // Signal emitted when touch gestures end
 
 public:
     explicit InkCanvas(QWidget *parent = nullptr);
@@ -86,6 +83,14 @@ public:
     qreal getPenThickness(); // Added getter for pen thickness
     ToolType getCurrentTool(); // Added getter for tool type
 
+    // Straight line mode toggle
+    void setStraightLineMode(bool enabled) { straightLineMode = enabled; }
+    bool isStraightLineMode() const { return straightLineMode; }
+
+    // Rope tool mode toggle
+    void setRopeToolMode(bool enabled) { ropeToolMode = enabled; }
+    bool isRopeToolMode() const { return ropeToolMode; }
+
     void loadPdfPreviewAsync(int pageNumber);  // ✅ Load a quick preview of the PDF page
     // for notebook background below
     void setBackgroundStyle(BackgroundStyle style);
@@ -111,6 +116,10 @@ public:
 
     void clearPdfCache() { pdfCache.clear(); }
 
+    // Touch gesture support
+    void setTouchGesturesEnabled(bool enabled) { touchGesturesEnabled = enabled; }
+    bool areTouchGesturesEnabled() const { return touchGesturesEnabled; }
+
 protected:
     void paintEvent(QPaintEvent *event) override;
     void tabletEvent(QTabletEvent *event) override;
@@ -119,11 +128,17 @@ protected:
     void mouseReleaseEvent(QMouseEvent *event) override;
     void resizeEvent(QResizeEvent *event) override; // Handle resizing
     
+    // Touch event handling
+    bool event(QEvent *event) override;
 
 private:
+    QPointF mapLogicalWidgetToPhysicalBuffer(const QPointF& logicalWidgetPoint);
+    QRect mapRectBufferToWidgetLogical(const QRectF& physicalBufferRect);
+
     QPixmap buffer;            // Off-screen buffer
     QImage background;
     QPointF lastPoint;
+    QPointF straightLineStartPoint;  // Stores the start point for straight line mode
     bool drawing;
     QColor penColor; // Added pen color property
     qreal penThickness; // Added pen thickness property
@@ -131,14 +146,27 @@ private:
     ToolType previousTool; // To restore tool after erasing
     QString saveFolder; // Folder to save images
     QPixmap backgroundImage;
+    bool straightLineMode = false;  // Flag for straight line mode
+    bool ropeToolMode = false; // Flag for rope tool mode
+    QPixmap selectionBuffer; // Buffer for the selected area in rope tool mode (physical pixels, masked)
+    QRect selectionRect; // Bounding rectangle of the current selection in LOGICAL WIDGET coordinates
+    QRectF exactSelectionRectF; // Floating-point version for smoother movement
+    QPolygonF lassoPathPoints; // Points of the lasso selection in LOGICAL WIDGET coordinates
+    bool selectingWithRope = false; // True if currently drawing the lasso
+    bool movingSelection = false; // True if currently moving the selection
+    QPointF lastMovePoint; // Last point during selection movement (logical widget coordinates)
 
     int zoomFactor;     // Zoom percentage (100 = normal)
     int panOffsetX;     // Horizontal pan offset
     int panOffsetY;     // Vertical pan offset
+    
+    // Internal floating-point zoom for smoother gestures
+    qreal internalZoomFactor = 100.0;
 
     void initializeBuffer();   // Helper to initialize the buffer
     void drawStroke(const QPointF &start, const QPointF &end, qreal pressure);    
     void eraseStroke(const QPointF &start, const QPointF &end, qreal pressure);
+    QRectF calculatePreviewRect(const QPointF &start, const QPointF &oldEnd, const QPointF &newEnd);
     
 
     QCache<int, QPixmap> pdfCache; // Caches 5 pages of the PDF
@@ -156,11 +184,6 @@ private:
 
     bool edited = false;  // ✅ Track if the canvas has been edited
 
-    
-    
-
-
-
     bool benchmarking;
     std::deque<qint64> processedTimestamps;
     QElapsedTimer benchmarkTimer;
@@ -172,7 +195,17 @@ private:
 
     int pdfRenderDPI = 288;  // Default to 288 DPI
 
+    // Touch gesture support
+    bool touchGesturesEnabled = false;
+    QPointF lastTouchPos;
+    qreal lastPinchScale = 1.0;
+    bool isPanning = false;
+    int activeTouchPoints = 0;
 
+    // Background style members
+    BackgroundStyle backgroundStyle = BackgroundStyle::None;
+    QColor backgroundColor = Qt::transparent;
+    int backgroundDensity = 40;  // pixels between lines
 };
 
 #endif // INKCANVAS_H

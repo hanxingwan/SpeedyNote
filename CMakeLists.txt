@@ -42,8 +42,15 @@ add_custom_target(translations ALL DEPENDS ${QM_FILES})
 
 # Main executable
 add_executable(NoteApp
-    Main.cpp MainWindow.cpp InkCanvas.cpp ControlPanelDialog.cpp SDLControllerManager.cpp ToolType.h ${QRCC_FILES}
+    Main.cpp MainWindow.cpp InkCanvas.cpp ControlPanelDialog.cpp SDLControllerManager.cpp ButtonMappingTypes.cpp ${QRCC_FILES}
+    RecentNotebooksManager.cpp
+    RecentNotebooksDialog.cpp
+    KeyCaptureDialog.cpp
 )
+
+
+#
+add_compile_definitions(QT_NO_DEPRECATED_WARNINGS)
 
 # Link libraries
 target_link_libraries(NoteApp

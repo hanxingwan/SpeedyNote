@@ -1,9 +1,15 @@
 #include "ControlPanelDialog.h"
+#include "ButtonMappingTypes.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QCheckBox>
+#include <QTableWidget>
+#include <QPushButton>
+#include <QColorDialog>
+#include <QInputDialog>
+#include <QMessageBox>
 
 ControlPanelDialog::ControlPanelDialog(MainWindow *mainWindow, InkCanvas *targetCanvas, QWidget *parent)
     : QDialog(parent), canvas(targetCanvas), selectedColor(canvas->getBackgroundColor()), mainWindowRef(mainWindow) {
@@ -22,6 +28,7 @@ ControlPanelDialog::ControlPanelDialog(MainWindow *mainWindow, InkCanvas *target
         createToolbarTab();
     }
     createButtonMappingTab();
+    createKeyboardMappingTab();
     // === Buttons ===
     applyButton = new QPushButton(tr("Apply"));
     okButton = new QPushButton(tr("OK"));
@@ -100,13 +107,17 @@ void ControlPanelDialog::applyChanges() {
     canvas->update();
     canvas->saveBackgroundMetadata();
 
-    // ✅ Apply button mappings back to MainWindow
+    // ✅ Apply button mappings back to MainWindow with internal keys
     if (mainWindowRef) {
-        for (const QString &button : holdMappingCombos.keys()) {
-            mainWindowRef->setHoldMapping(button, holdMappingCombos[button]->currentText());
+        for (const QString &buttonKey : holdMappingCombos.keys()) {
+            QString displayString = holdMappingCombos[buttonKey]->currentText();
+            QString internalKey = ButtonMappingHelper::displayToInternalKey(displayString, true);  // true = isDialMode
+            mainWindowRef->setHoldMapping(buttonKey, internalKey);
         }
-        for (const QString &button : pressMappingCombos.keys()) {
-            mainWindowRef->setPressMapping(button, pressMappingCombos[button]->currentText());
+        for (const QString &buttonKey : pressMappingCombos.keys()) {
+            QString displayString = pressMappingCombos[buttonKey]->currentText();
+            QString internalKey = ButtonMappingHelper::displayToInternalKey(displayString, false);  // false = isAction
+            mainWindowRef->setPressMapping(buttonKey, internalKey);
         }
 
         // ✅ Save to persistent settings
@@ -122,16 +133,18 @@ void ControlPanelDialog::loadFromCanvas() {
     colorButton->setStyleSheet(QString("background-color: %1").arg(selectedColor.name()));
 
     if (mainWindowRef) {
-        for (const QString &button : holdMappingCombos.keys()) {
-            QString mode = mainWindowRef->getHoldMapping(button);
-            int index = holdMappingCombos[button]->findText(mode);
-            if (index >= 0) holdMappingCombos[button]->setCurrentIndex(index);
+        for (const QString &buttonKey : holdMappingCombos.keys()) {
+            QString internalKey = mainWindowRef->getHoldMapping(buttonKey);
+            QString displayString = ButtonMappingHelper::internalKeyToDisplay(internalKey, true);  // true = isDialMode
+            int index = holdMappingCombos[buttonKey]->findText(displayString);
+            if (index >= 0) holdMappingCombos[buttonKey]->setCurrentIndex(index);
         }
 
-        for (const QString &button : pressMappingCombos.keys()) {
-            QString action = mainWindowRef->getPressMapping(button);
-            int index = pressMappingCombos[button]->findText(action);
-            if (index >= 0) pressMappingCombos[button]->setCurrentIndex(index);
+        for (const QString &buttonKey : pressMappingCombos.keys()) {
+            QString internalKey = mainWindowRef->getPressMapping(buttonKey);
+            QString displayString = ButtonMappingHelper::internalKeyToDisplay(internalKey, false);  // false = isAction
+            int index = pressMappingCombos[buttonKey]->findText(displayString);
+            if (index >= 0) pressMappingCombos[buttonKey]->setCurrentIndex(index);
         }
     }
 }
@@ -204,6 +217,16 @@ void ControlPanelDialog::createToolbarTab(){
     scrollNote->setWordWrap(true);
     scrollNote->setStyleSheet("color: gray; font-size: 10px;");
     toolbarLayout->addWidget(scrollNote);
+    
+    // ✅ Checkbox to enable/disable touch gestures
+    QCheckBox *touchGesturesCheckbox = new QCheckBox(tr("Enable Touch Gestures"), toolbarTab);
+    touchGesturesCheckbox->setChecked(mainWindowRef->areTouchGesturesEnabled());
+    toolbarLayout->addWidget(touchGesturesCheckbox);
+    QLabel *touchGesturesNote = new QLabel(tr("Enable pinch to zoom and touch panning on the canvas. When disabled, only pen input is accepted."));
+    touchGesturesNote->setWordWrap(true);
+    touchGesturesNote->setStyleSheet("color: gray; font-size: 10px;");
+    toolbarLayout->addWidget(touchGesturesNote);
+    
     toolbarLayout->addStretch();
     toolbarTab->setLayout(toolbarLayout);
     tabWidget->addTab(toolbarTab, tr("Features"));
@@ -213,8 +236,7 @@ void ControlPanelDialog::createToolbarTab(){
     connect(benchmarkVisibilityCheckbox, &QCheckBox::toggled, mainWindowRef, &MainWindow::setBenchmarkControlsVisible);
     connect(colorButtonsVisibilityCheckbox, &QCheckBox::toggled, mainWindowRef, &MainWindow::setColorButtonsVisible);
     connect(scrollOnTopCheckBox, &QCheckBox::toggled, mainWindowRef, &MainWindow::setScrollOnTopEnabled);
-
-    
+    connect(touchGesturesCheckbox, &QCheckBox::toggled, mainWindowRef, &MainWindow::setTouchGesturesEnabled);
 }
 
 
@@ -222,27 +244,27 @@ void ControlPanelDialog::createButtonMappingTab() {
     QWidget *buttonTab = new QWidget(this);
     QVBoxLayout *layout = new QVBoxLayout(buttonTab);
 
-    QStringList buttons = {"LEFTSHOULDER", "RIGHTSHOULDER", "PADDLE2", "PADDLE4", "Y", "A", "B", "X", "LEFTSTICK", "START", "GUIDE"};
-    QStringList dialModes = {"None", "PageSwitching", "ZoomControl", "ThicknessControl", "ColorAdjustment", "ToolSwitching", "PresetSelection", "PanAndPageScroll"};
-    QStringList actions = {
-        "None", "Toggle Fullscreen", "Toggle Dial", "Zoom 50%", "Zoom Out", "Zoom 200%",
-        "Add Preset", "Delete Page", "Fast Forward", "Open Control Panel",
-        "Red", "Blue", "Yellow", "Green", "Black", "White", "Custom Color"
-    };
+    QStringList buttonKeys = ButtonMappingHelper::getInternalButtonKeys();
+    QStringList buttonDisplayNames = ButtonMappingHelper::getTranslatedButtons();
+    QStringList dialModes = ButtonMappingHelper::getTranslatedDialModes();
+    QStringList actions = ButtonMappingHelper::getTranslatedActions();
 
-    for (const QString &button : buttons) {
+    for (int i = 0; i < buttonKeys.size(); ++i) {
+        const QString &buttonKey = buttonKeys[i];
+        const QString &buttonDisplayName = buttonDisplayNames[i];
+        
         QHBoxLayout *h = new QHBoxLayout();
-        h->addWidget(new QLabel(button));
+        h->addWidget(new QLabel(buttonDisplayName));  // Use translated button name
 
         QComboBox *holdCombo = new QComboBox();
-        holdCombo->addItems(dialModes);
-        holdMappingCombos[button] = holdCombo;
+        holdCombo->addItems(dialModes);  // Add translated dial mode names
+        holdMappingCombos[buttonKey] = holdCombo;
         h->addWidget(new QLabel(tr("Hold:")));
         h->addWidget(holdCombo);
 
         QComboBox *pressCombo = new QComboBox();
-        pressCombo->addItems(actions);
-        pressMappingCombos[button] = pressCombo;
+        pressCombo->addItems(actions);  // Add translated action names
+        pressMappingCombos[buttonKey] = pressCombo;
         h->addWidget(new QLabel(tr("Press:")));
         h->addWidget(pressCombo);
 
@@ -252,4 +274,125 @@ void ControlPanelDialog::createButtonMappingTab() {
     layout->addStretch();
     buttonTab->setLayout(layout);
     tabWidget->addTab(buttonTab, tr("Button Mapping"));
+}
+
+void ControlPanelDialog::createKeyboardMappingTab() {
+    keyboardTab = new QWidget(this);
+    QVBoxLayout *layout = new QVBoxLayout(keyboardTab);
+    
+    // Instructions
+    QLabel *instructionLabel = new QLabel(tr("Configure custom keyboard shortcuts for application actions:"), keyboardTab);
+    instructionLabel->setWordWrap(true);
+    layout->addWidget(instructionLabel);
+    
+    // Table to show current mappings
+    keyboardTable = new QTableWidget(0, 2, keyboardTab);
+    keyboardTable->setHorizontalHeaderLabels({tr("Key Sequence"), tr("Action")});
+    keyboardTable->horizontalHeader()->setStretchLastSection(true);
+    keyboardTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    keyboardTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    layout->addWidget(keyboardTable);
+    
+    // Buttons
+    QHBoxLayout *buttonLayout = new QHBoxLayout();
+    addKeyboardMappingButton = new QPushButton(tr("Add Mapping"), keyboardTab);
+    removeKeyboardMappingButton = new QPushButton(tr("Remove Mapping"), keyboardTab);
+    
+    buttonLayout->addWidget(addKeyboardMappingButton);
+    buttonLayout->addWidget(removeKeyboardMappingButton);
+    buttonLayout->addStretch();
+    
+    layout->addLayout(buttonLayout);
+    
+    // Connections
+    connect(addKeyboardMappingButton, &QPushButton::clicked, this, &ControlPanelDialog::addKeyboardMapping);
+    connect(removeKeyboardMappingButton, &QPushButton::clicked, this, &ControlPanelDialog::removeKeyboardMapping);
+    
+    // Load current mappings
+    if (mainWindowRef) {
+        QMap<QString, QString> mappings = mainWindowRef->getKeyboardMappings();
+        keyboardTable->setRowCount(mappings.size());
+        int row = 0;
+        for (auto it = mappings.begin(); it != mappings.end(); ++it) {
+            keyboardTable->setItem(row, 0, new QTableWidgetItem(it.key()));
+            QString displayAction = ButtonMappingHelper::internalKeyToDisplay(it.value(), false);
+            keyboardTable->setItem(row, 1, new QTableWidgetItem(displayAction));
+            row++;
+        }
+    }
+    
+    tabWidget->addTab(keyboardTab, tr("Keyboard Shortcuts"));
+}
+
+void ControlPanelDialog::addKeyboardMapping() {
+    // Step 1: Capture key sequence
+    KeyCaptureDialog captureDialog(this);
+    if (captureDialog.exec() != QDialog::Accepted) {
+        return;
+    }
+    
+    QString keySequence = captureDialog.getCapturedKeySequence();
+    if (keySequence.isEmpty()) {
+        return;
+    }
+    
+    // Check if key sequence already exists
+    if (mainWindowRef && mainWindowRef->getKeyboardMappings().contains(keySequence)) {
+        QMessageBox::warning(this, tr("Key Already Mapped"), 
+            tr("The key sequence '%1' is already mapped. Please choose a different key combination.").arg(keySequence));
+        return;
+    }
+    
+    // Step 2: Choose action
+    QStringList actions = ButtonMappingHelper::getTranslatedActions();
+    bool ok;
+    QString selectedAction = QInputDialog::getItem(this, tr("Select Action"), 
+        tr("Choose the action to perform when '%1' is pressed:").arg(keySequence), 
+        actions, 0, false, &ok);
+    
+    if (!ok || selectedAction.isEmpty()) {
+        return;
+    }
+    
+    // Convert display name to internal key
+    QString internalKey = ButtonMappingHelper::displayToInternalKey(selectedAction, false);
+    
+    // Add the mapping
+    if (mainWindowRef) {
+        mainWindowRef->addKeyboardMapping(keySequence, internalKey);
+        
+        // Update table
+        int row = keyboardTable->rowCount();
+        keyboardTable->insertRow(row);
+        keyboardTable->setItem(row, 0, new QTableWidgetItem(keySequence));
+        keyboardTable->setItem(row, 1, new QTableWidgetItem(selectedAction));
+    }
+}
+
+void ControlPanelDialog::removeKeyboardMapping() {
+    int currentRow = keyboardTable->currentRow();
+    if (currentRow < 0) {
+        QMessageBox::information(this, tr("No Selection"), tr("Please select a mapping to remove."));
+        return;
+    }
+    
+    QTableWidgetItem *keyItem = keyboardTable->item(currentRow, 0);
+    if (!keyItem) return;
+    
+    QString keySequence = keyItem->text();
+    
+    // Confirm removal
+    int ret = QMessageBox::question(this, tr("Remove Mapping"), 
+        tr("Are you sure you want to remove the keyboard shortcut '%1'?").arg(keySequence),
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    
+    if (ret == QMessageBox::Yes) {
+        // Remove from MainWindow
+        if (mainWindowRef) {
+            mainWindowRef->removeKeyboardMapping(keySequence);
+        }
+        
+        // Remove from table
+        keyboardTable->removeRow(currentRow);
+    }
 }

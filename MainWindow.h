@@ -8,6 +8,7 @@
 #include <QTimer>
 #include <QLineEdit>
 #include <QSlider>
+#include <QScrollBar>
 #include <QComboBox>
 #include <QSpinBox>
 #include <QFileDialog>
@@ -18,6 +19,12 @@
 #include <QFont>
 #include <QQueue>
 #include "SDLControllerManager.h"
+#include "ButtonMappingTypes.h"
+#include "RecentNotebooksManager.h"
+#include <QResizeEvent>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QKeyEvent>
 
 // #include "HandwritingLineEdit.h"
 
@@ -49,7 +56,14 @@ enum class ControllerAction {
     GreenColor,
     BlackColor,
     WhiteColor,
-    CustomColor
+    CustomColor,
+    ToggleSidebar,
+    Save,
+    StraightLineTool,
+    RopeTool,
+    SetPenTool,
+    SetMarkerTool,
+    SetEraserTool
 };
 
 static QString actionToString(ControllerAction action) {
@@ -70,27 +84,47 @@ static QString actionToString(ControllerAction action) {
         case ControllerAction::BlackColor: return "Black";
         case ControllerAction::WhiteColor: return "White";
         case ControllerAction::CustomColor: return "Custom Color";
+        case ControllerAction::ToggleSidebar: return "Toggle Sidebar";
+        case ControllerAction::Save: return "Save";
+        case ControllerAction::StraightLineTool: return "Straight Line Tool";
+        case ControllerAction::RopeTool: return "Rope Tool";
+        case ControllerAction::SetPenTool: return "Set Pen Tool";
+        case ControllerAction::SetMarkerTool: return "Set Marker Tool";
+        case ControllerAction::SetEraserTool: return "Set Eraser Tool";
         default: return "None";
     }
 }
 
 static ControllerAction stringToAction(const QString &str) {
-    if (str == "Toggle Fullscreen") return ControllerAction::ToggleFullscreen;
-    if (str == "Toggle Dial") return ControllerAction::ToggleDial;
-    if (str == "Zoom 50%") return ControllerAction::Zoom50;
-    if (str == "Zoom Out") return ControllerAction::ZoomOut;
-    if (str == "Zoom 200%") return ControllerAction::Zoom200;
-    if (str == "Add Preset") return ControllerAction::AddPreset;
-    if (str == "Delete Page") return ControllerAction::DeletePage;
-    if (str == "Fast Forward") return ControllerAction::FastForward;
-    if (str == "Open Control Panel") return ControllerAction::OpenControlPanel;
-    if (str == "Red") return ControllerAction::RedColor;
-    if (str == "Blue") return ControllerAction::BlueColor;
-    if (str == "Yellow") return ControllerAction::YellowColor;
-    if (str == "Green") return ControllerAction::GreenColor;
-    if (str == "Black") return ControllerAction::BlackColor;
-    if (str == "White") return ControllerAction::WhiteColor;
-    if (str == "Custom Color") return ControllerAction::CustomColor;
+    // Convert internal key to ControllerAction enum
+    InternalControllerAction internalAction = ButtonMappingHelper::internalKeyToAction(str);
+    
+    switch (internalAction) {
+        case InternalControllerAction::None: return ControllerAction::None;
+        case InternalControllerAction::ToggleFullscreen: return ControllerAction::ToggleFullscreen;
+        case InternalControllerAction::ToggleDial: return ControllerAction::ToggleDial;
+        case InternalControllerAction::Zoom50: return ControllerAction::Zoom50;
+        case InternalControllerAction::ZoomOut: return ControllerAction::ZoomOut;
+        case InternalControllerAction::Zoom200: return ControllerAction::Zoom200;
+        case InternalControllerAction::AddPreset: return ControllerAction::AddPreset;
+        case InternalControllerAction::DeletePage: return ControllerAction::DeletePage;
+        case InternalControllerAction::FastForward: return ControllerAction::FastForward;
+        case InternalControllerAction::OpenControlPanel: return ControllerAction::OpenControlPanel;
+        case InternalControllerAction::RedColor: return ControllerAction::RedColor;
+        case InternalControllerAction::BlueColor: return ControllerAction::BlueColor;
+        case InternalControllerAction::YellowColor: return ControllerAction::YellowColor;
+        case InternalControllerAction::GreenColor: return ControllerAction::GreenColor;
+        case InternalControllerAction::BlackColor: return ControllerAction::BlackColor;
+        case InternalControllerAction::WhiteColor: return ControllerAction::WhiteColor;
+        case InternalControllerAction::CustomColor: return ControllerAction::CustomColor;
+        case InternalControllerAction::ToggleSidebar: return ControllerAction::ToggleSidebar;
+        case InternalControllerAction::Save: return ControllerAction::Save;
+        case InternalControllerAction::StraightLineTool: return ControllerAction::StraightLineTool;
+        case InternalControllerAction::RopeTool: return ControllerAction::RopeTool;
+        case InternalControllerAction::SetPenTool: return ControllerAction::SetPenTool;
+        case InternalControllerAction::SetMarkerTool: return ControllerAction::SetMarkerTool;
+        case InternalControllerAction::SetEraserTool: return ControllerAction::SetEraserTool;
+    }
     return ControllerAction::None;
 }
 
@@ -118,7 +152,9 @@ public:
     bool isScrollOnTopEnabled() const;
     void setScrollOnTopEnabled(bool enabled);
 
-    
+    bool touchGesturesEnabled = false;
+    bool areTouchGesturesEnabled() const;
+    void setTouchGesturesEnabled(bool enabled);
 
     SDLControllerManager *controllerManager = nullptr;
     QThread *controllerThread = nullptr;
@@ -141,8 +177,21 @@ public:
     // void loadUserSettings();  // New
     void savePdfDPI(int dpi); // New
 
-
+    // Migration functions for old button mappings
+    void migrateOldButtonMappings();
+    QString migrateOldDialModeString(const QString &oldString);
+    QString migrateOldActionString(const QString &oldString);
     
+    InkCanvas* currentCanvas(); // Made public for RecentNotebooksDialog
+    void saveCurrentPage(); // Made public for RecentNotebooksDialog
+    void switchPage(int pageNumber); // Made public for RecentNotebooksDialog
+    void updateTabLabel(); // Made public for RecentNotebooksDialog
+    QSpinBox *pageInput; // Made public for RecentNotebooksDialog
+    
+    // New: Keyboard mapping methods (made public for ControlPanelDialog)
+    void addKeyboardMapping(const QString &keySequence, const QString &action);
+    void removeKeyboardMapping(const QString &keySequence);
+    QMap<QString, QString> getKeyboardMappings() const;
 
 private slots:
     void toggleBenchmark();
@@ -158,24 +207,19 @@ private slots:
     void loadPdf();
     void clearPdf();
 
-    void saveCurrentPage();
-    void switchPage(int pageNumber);
-    void selectBackground();
-
     void updateZoom();
     void applyZoom();
     void updatePanRange();
     void updatePanX(int value);
     void updatePanY(int value);
 
+    void selectBackground(); // Added back
 
     void forceUIRefresh();
-
 
     void switchTab(int index);
     void addNewTab();
     void removeTabAt(int index);
-    void updateTabLabel();
     void toggleZoomSlider();
     void toggleThicknessSlider(); // Added function to toggle thickness slider
     void toggleFullscreen();
@@ -185,7 +229,6 @@ private slots:
     void handleDialInput(int angle);  // ✅ Handle touch input
     void onDialReleased();
     // void processPageSwitch();
-    bool eventFilter(QObject *watched, QEvent *event) override;
     void initializeDialSound();
 
     void changeDialMode(DialMode mode);
@@ -212,19 +255,29 @@ private slots:
     bool isDarkMode();
     QIcon loadThemedIcon(const QString& baseName);
 
+    void handleDialPanScroll(int angle);  // Add missing function declaration
+    void onPanScrollReleased();           // Add missing function declaration
+
+    // Touch gesture handlers
+    void handleTouchZoomChange(int newZoom);
+    void handleTouchPanChange(int panX, int panY);
+    void handleTouchGestureEnd(); // Add handler for touch gesture completion
     
+    // Color button state management
+    void updateColorButtonStates();
+    void selectColorButton(QPushButton* selectedButton);
+    void updateStraightLineButtonState();
+    void updateRopeToolButtonState(); // New slot for rope tool button
+    void updateDialButtonState();     // New method for dial toggle button
+    void updateFastForwardButtonState(); // New method for fast forward toggle button
 
+    QColor getContrastingTextColor(const QColor &backgroundColor);
+    void updateCustomColorButtonStyle(const QColor &color);
 
-
-    
-
-    
-
-    
+    void openRecentNotebooksDialog(); // Added slot
 
 private:
     InkCanvas *canvas;
-    InkCanvas* currentCanvas();
     QPushButton *benchmarkButton;
     QLabel *benchmarkLabel;
     QTimer *benchmarkTimer;
@@ -251,6 +304,7 @@ private:
     QPushButton *saveAnnotatedButton;
     QPushButton *fullscreenButton;
     QPushButton *openControlPanelButton;
+    QPushButton *openRecentNotebooksButton; // Added button
 
     QPushButton *loadPdfButton;
     QPushButton *clearPdfButton;
@@ -259,8 +313,9 @@ private:
     QMap<InkCanvas*, int> pageMap;
     
 
-    QSpinBox *pageInput;
     QPushButton *backgroundButton; // New button to set background
+    QPushButton *straightLineToggleButton; // Button to toggle straight line mode
+    QPushButton *ropeToolButton; // Button to toggle rope tool mode
 
     QSlider *zoomSlider;
     QPushButton *zoomButton;
@@ -270,8 +325,8 @@ private:
     QPushButton *zoom200Button;
     QWidget *zoomContainer;
     QLineEdit *zoomInput;
-    QSlider *panXSlider;
-    QSlider *panYSlider;
+    QScrollBar *panXSlider;
+    QScrollBar *panYSlider;
 
 
     QListWidget *tabList;          // Sidebar for tabs
@@ -301,27 +356,27 @@ private:
         ColorAdjustment
     };
 
-    DialMode currentDialMode = PageSwitching;  // ✅ Default mode
+    DialMode currentDialMode = PageSwitching; ✅ Default mode
 
-    QComboBox *dialModeSelector;  // ✅ Mode selector
-    QComboBox *channelSelector;  // ✅ Channel selector
-    int selectedChannel = 0;  // ✅ Default channel
+    QComboBox *dialModeSelector; ✅ Mode selector
+    QComboBox *channelSelector; ✅ Channel selector
+    int selectedChannel = 0; ✅ Default channel
     */
     
-    DialMode currentDialMode = PanAndPageScroll;  // ✅ Default mode
+    DialMode currentDialMode = PanAndPageScroll; // ✅ Default mode
     DialMode temporaryDialMode = None;
 
-    QComboBox *dialModeSelector;  // ✅ Mode selector
-    QComboBox *channelSelector;  // ✅ Channel selector
-    int selectedChannel = 0;  // ✅ Default channel
-    QPushButton *colorPreview;  // ✅ Color preview
+    QComboBox *dialModeSelector; // ✅ Mode selector
+    QComboBox *channelSelector; // ✅ Channel selector
+    int selectedChannel = 0; // ✅ Default channel
+    QPushButton *colorPreview; // ✅ Color preview
 
-    QLabel *dialDisplay = nullptr;  // ✅ Display for dial mode
+    QLabel *dialDisplay = nullptr; // ✅ Display for dial mode
 
     QFrame *dialColorPreview;
     QLabel *dialIconView;
-    QFont pixelFont;  // ✅ Font for pixel effect
-    // QLabel *modeIndicator;  // ✅ Indicator for mode selection
+    QFont pixelFont; // ✅ Font for pixel effect
+    // QLabel *modeIndicator; ✅ Indicator for mode selection
     // QLabel *dialNeedle;
 
     QPushButton *btnPageSwitch;
@@ -333,37 +388,51 @@ private:
     QPushButton *btnPannScroll;
     int tempClicks = 0;
 
-    QPushButton *dialHiddenButton;  // ✅ Invisible tap button over OLED display
+    QPushButton *dialHiddenButton; // ✅ Invisible tap button over OLED display
 
-    QQueue<QColor> colorPresets;  // ✅ FIFO queue for color presets
-    QPushButton *addPresetButton;  // ✅ Button to add current color to queue
-    int currentPresetIndex = 0;  // ✅ Track selected preset
+    QQueue<QColor> colorPresets; // ✅ FIFO queue for color presets
+    QPushButton *addPresetButton; // ✅ Button to add current color to queue
+    int currentPresetIndex = 0; // ✅ Track selected preset
 
-    qreal initialDpr = getDevicePixelRatio(); // Get initial device pixel ratio
+    qreal initialDpr = 1.0; // Will be set in constructor
 
     QWidget *sidebarContainer;  // Container for sidebar
+    QWidget *controlBar;        // Control toolbar
 
     void setTemporaryDialMode(DialMode mode);
     void clearTemporaryDialMode();
 
+    bool controlBarVisible = true;  // Track controlBar visibility state
+    void toggleControlBar();        // Function to toggle controlBar visibility
+    bool sidebarWasVisibleBeforeFullscreen = true;  // Track sidebar state before fullscreen
+
     int accumulatedRotationAfterLimit = 0; 
 
     int pendingPageFlip = 0;  // -1 for previous, +1 for next, 0 for no flip. This is used for mode PanAndPageScroll
-    void handleDialPanScroll(int angle);
-    void onPanScrollReleased();
 
     // Add in MainWindow class:
     QMap<QString, QString> buttonHoldMapping;
     QMap<QString, QString> buttonPressMapping;
     QMap<QString, ControllerAction> buttonPressActionMapping;
+    
+    // New: Keyboard mapping support
+    QMap<QString, QString> keyboardMappings;  // keySequence -> action internal key
+    QMap<QString, ControllerAction> keyboardActionMapping;  // keySequence -> action enum
 
 
     void handleButtonHeld(const QString &buttonName);
     void handleButtonReleased(const QString &buttonName);
 
     void handleControllerButton(const QString &buttonName);
+    
+    // New: Keyboard mapping methods
+    void handleKeyboardShortcut(const QString &keySequence);
+    void saveKeyboardMappings();
+    void loadKeyboardMappings();
 
     void ensureTabHasUniqueSaveFolder(InkCanvas* canvas);
+
+    RecentNotebooksManager *recentNotebooksManager; // Added manager instance
 
     int pdfRenderDPI = 288;  // Default to 288 DPI
 
@@ -371,7 +440,37 @@ private:
 
     void loadUserSettings();
 
+    bool scrollbarsVisible = false;
+    QTimer *scrollbarHideTimer = nullptr;
     
+    // Event filter for scrollbar hover detection and dial container drag
+    bool eventFilter(QObject *obj, QEvent *event) override;
+    
+    // Update scrollbar positions based on container size
+    void updateScrollbarPositions();
+    
+    // Handle edge proximity detection for scrollbar visibility
+    void handleEdgeProximity(InkCanvas* canvas, const QPoint& pos);
+    
+    // Responsive toolbar management
+    bool isToolbarTwoRows = false;
+    QVBoxLayout *controlLayoutVertical = nullptr;
+    QHBoxLayout *controlLayoutSingle = nullptr;
+    QHBoxLayout *controlLayoutFirstRow = nullptr;
+    QHBoxLayout *controlLayoutSecondRow = nullptr;
+    void updateToolbarLayout();
+    void createSingleRowLayout();
+    void createTwoRowLayout();
+    
+    // Add timer for delayed layout updates
+    QTimer *layoutUpdateTimer = nullptr;
+    
+    // Separator line for 2-row layout
+    QFrame *separatorLine = nullptr;
+    
+protected:
+    void resizeEvent(QResizeEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;  // New: Handle keyboard shortcuts
 };
 
 #endif // MAINWINDOW_H
