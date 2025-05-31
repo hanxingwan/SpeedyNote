@@ -30,7 +30,7 @@
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false) {
 
-    setWindowTitle(tr("SpeedyNote Beta 0.4.9"));
+    setWindowTitle(tr("SpeedyNote Beta 0.4.10"));
 
     // Initialize DPR early
     initialDpr = getDevicePixelRatio();
@@ -599,6 +599,7 @@ void MainWindow::setupUi() {
     // ✅ Toggle fast-forward mode
     connect(fastForwardButton, &QPushButton::clicked, [this]() {
         fastForwardMode = !fastForwardMode;
+        updateFastForwardButtonState();
     });
 
     QComboBox *dialModeSelector = new QComboBox(this);
@@ -1187,6 +1188,8 @@ void MainWindow::switchTab(int index) {
             updateColorButtonStates();  // Update button states when switching tabs
             updateStraightLineButtonState();  // Update straight line button state when switching tabs
             updateRopeToolButtonState(); // Update rope tool button state when switching tabs
+            updateDialButtonState();     // Update dial button state when switching tabs
+            updateFastForwardButtonState(); // Update fast forward button state when switching tabs
         }
     }
 }
@@ -1343,6 +1346,8 @@ void MainWindow::addNewTab() {
     updateDialDisplay();
     updateStraightLineButtonState();  // Initialize straight line button state for the new tab
     updateRopeToolButtonState(); // Initialize rope tool button state for the new tab
+    updateDialButtonState();     // Initialize dial button state for the new tab
+    updateFastForwardButtonState(); // Initialize fast forward button state for the new tab
 
     QString tempDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/temp_session";
     newCanvas->setSaveFolder(tempDir);
@@ -1677,6 +1682,8 @@ void MainWindow::toggleDial() {
 
     loadButtonMappings();  // ✅ Load button mappings for the controller
 
+    // Update button state to reflect dial visibility
+    updateDialButtonState();
 }
 
 void MainWindow::updateDialDisplay() {
@@ -2644,6 +2651,13 @@ QString MainWindow::migrateOldActionString(const QString &oldString) {
     if (oldString == "Black") return "black_color";
     if (oldString == "White") return "white_color";
     if (oldString == "Custom Color") return "custom_color";
+    if (oldString == "Toggle Sidebar") return "toggle_sidebar";
+    if (oldString == "Save") return "save";
+    if (oldString == "Straight Line Tool") return "straight_line_tool";
+    if (oldString == "Rope Tool") return "rope_tool";
+    if (oldString == "Set Pen Tool") return "set_pen_tool";
+    if (oldString == "Set Marker Tool") return "set_marker_tool";
+    if (oldString == "Set Eraser Tool") return "set_eraser_tool";
     return oldString; // Return as-is if not found (might already be new format)
 }
 
@@ -2698,6 +2712,36 @@ void MainWindow::handleControllerButton(const QString &buttonName) {  // This is
             break;
         case ControllerAction::CustomColor:
             customColorButton->click();
+            break;
+        case ControllerAction::ToggleSidebar:
+            toggleTabBarButton->click();
+            break;
+        case ControllerAction::Save:
+            saveButton->click();
+            break;
+        case ControllerAction::StraightLineTool:
+            straightLineToggleButton->click();
+            break;
+        case ControllerAction::RopeTool:
+            ropeToolButton->click();
+            break;
+        case ControllerAction::SetPenTool:
+            if (currentCanvas()) {
+                currentCanvas()->setTool(ToolType::Pen);
+                updateDialDisplay();
+            }
+            break;
+        case ControllerAction::SetMarkerTool:
+            if (currentCanvas()) {
+                currentCanvas()->setTool(ToolType::Marker);
+                updateDialDisplay();
+            }
+            break;
+        case ControllerAction::SetEraserTool:
+            if (currentCanvas()) {
+                currentCanvas()->setTool(ToolType::Eraser);
+                updateDialDisplay();
+            }
             break;
         default:
             break;
@@ -2761,6 +2805,9 @@ void MainWindow::loadUserSettings() {
 
     touchGesturesEnabled = settings.value("touchGesturesEnabled", false).toBool();
     setTouchGesturesEnabled(touchGesturesEnabled);
+    
+    // Load keyboard mappings
+    loadKeyboardMappings();
 }
 
 void MainWindow::toggleControlBar() {
@@ -3002,6 +3049,29 @@ void MainWindow::updateRopeToolButtonState() {
         // Force style update
         ropeToolButton->style()->unpolish(ropeToolButton);
         ropeToolButton->style()->polish(ropeToolButton);
+    }
+}
+
+void MainWindow::updateDialButtonState() {
+    // Check if dial is visible
+    bool isDialVisible = dialContainer && dialContainer->isVisible();
+    
+    if (dialToggleButton) {
+        dialToggleButton->setProperty("selected", isDialVisible);
+        
+        // Force style update
+        dialToggleButton->style()->unpolish(dialToggleButton);
+        dialToggleButton->style()->polish(dialToggleButton);
+    }
+}
+
+void MainWindow::updateFastForwardButtonState() {
+    if (fastForwardButton) {
+        fastForwardButton->setProperty("selected", fastForwardMode);
+        
+        // Force style update
+        fastForwardButton->style()->unpolish(fastForwardButton);
+        fastForwardButton->style()->polish(fastForwardButton);
     }
 }
 
@@ -3304,4 +3374,159 @@ void MainWindow::createTwoRowLayout() {
     
     // Update pan range after layout change
     updatePanRange();
+}
+
+// New: Keyboard mapping implementation
+void MainWindow::handleKeyboardShortcut(const QString &keySequence) {
+    ControllerAction action = keyboardActionMapping.value(keySequence, ControllerAction::None);
+    
+    // Use the same handler as Joy-Con buttons
+    switch (action) {
+        case ControllerAction::ToggleFullscreen:
+            fullscreenButton->click();
+            break;
+        case ControllerAction::ToggleDial:
+            toggleDial();
+            break;
+        case ControllerAction::Zoom50:
+            zoom50Button->click();
+            break;
+        case ControllerAction::ZoomOut:
+            dezoomButton->click();
+            break;
+        case ControllerAction::Zoom200:
+            zoom200Button->click();
+            break;
+        case ControllerAction::AddPreset:
+            addPresetButton->click();
+            break;
+        case ControllerAction::DeletePage:
+            deletePageButton->click();
+            break;
+        case ControllerAction::FastForward:
+            fastForwardButton->click();
+            break;
+        case ControllerAction::OpenControlPanel:
+            openControlPanelButton->click();
+            break;
+        case ControllerAction::RedColor:
+            redButton->click();
+            break;
+        case ControllerAction::BlueColor:
+            blueButton->click();
+            break;
+        case ControllerAction::YellowColor:
+            yellowButton->click();
+            break;
+        case ControllerAction::GreenColor:
+            greenButton->click();
+            break;
+        case ControllerAction::BlackColor:
+            blackButton->click();
+            break;
+        case ControllerAction::WhiteColor:
+            whiteButton->click();
+            break;
+        case ControllerAction::CustomColor:
+            customColorButton->click();
+            break;
+        case ControllerAction::ToggleSidebar:
+            toggleTabBarButton->click();
+            break;
+        case ControllerAction::Save:
+            saveButton->click();
+            break;
+        case ControllerAction::StraightLineTool:
+            straightLineToggleButton->click();
+            break;
+        case ControllerAction::RopeTool:
+            ropeToolButton->click();
+            break;
+        case ControllerAction::SetPenTool:
+            if (currentCanvas()) {
+                currentCanvas()->setTool(ToolType::Pen);
+                updateDialDisplay();
+            }
+            break;
+        case ControllerAction::SetMarkerTool:
+            if (currentCanvas()) {
+                currentCanvas()->setTool(ToolType::Marker);
+                updateDialDisplay();
+            }
+            break;
+        case ControllerAction::SetEraserTool:
+            if (currentCanvas()) {
+                currentCanvas()->setTool(ToolType::Eraser);
+                updateDialDisplay();
+            }
+            break;
+        default:
+            break;
+    }
+}
+
+void MainWindow::addKeyboardMapping(const QString &keySequence, const QString &action) {
+    keyboardMappings[keySequence] = action;
+    keyboardActionMapping[keySequence] = stringToAction(action);
+    saveKeyboardMappings();
+}
+
+void MainWindow::removeKeyboardMapping(const QString &keySequence) {
+    keyboardMappings.remove(keySequence);
+    keyboardActionMapping.remove(keySequence);
+    saveKeyboardMappings();
+}
+
+void MainWindow::saveKeyboardMappings() {
+    QSettings settings("SpeedyNote", "App");
+    settings.beginGroup("KeyboardMappings");
+    for (auto it = keyboardMappings.begin(); it != keyboardMappings.end(); ++it) {
+        settings.setValue(it.key(), it.value());
+    }
+    settings.endGroup();
+}
+
+void MainWindow::loadKeyboardMappings() {
+    QSettings settings("SpeedyNote", "App");
+    settings.beginGroup("KeyboardMappings");
+    QStringList keys = settings.allKeys();
+    for (const QString &key : keys) {
+        QString value = settings.value(key).toString();
+        keyboardMappings[key] = value;
+        keyboardActionMapping[key] = stringToAction(value);
+    }
+    settings.endGroup();
+}
+
+QMap<QString, QString> MainWindow::getKeyboardMappings() const {
+    return keyboardMappings;
+}
+
+void MainWindow::keyPressEvent(QKeyEvent *event) {
+    // Build key sequence string
+    QStringList modifiers;
+    
+    if (event->modifiers() & Qt::ControlModifier) modifiers << "Ctrl";
+    if (event->modifiers() & Qt::ShiftModifier) modifiers << "Shift";
+    if (event->modifiers() & Qt::AltModifier) modifiers << "Alt";
+    if (event->modifiers() & Qt::MetaModifier) modifiers << "Meta";
+    
+    QString keyString = QKeySequence(event->key()).toString();
+    
+    QString fullSequence;
+    if (!modifiers.isEmpty()) {
+        fullSequence = modifiers.join("+") + "+" + keyString;
+    } else {
+        fullSequence = keyString;
+    }
+    
+    // Check if this sequence is mapped
+    if (keyboardMappings.contains(fullSequence)) {
+        handleKeyboardShortcut(fullSequence);
+        event->accept();
+        return;
+    }
+    
+    // If not handled, pass to parent
+    QMainWindow::keyPressEvent(event);
 }

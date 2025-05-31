@@ -24,6 +24,7 @@
 #include <QResizeEvent>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QKeyEvent>
 
 // #include "HandwritingLineEdit.h"
 
@@ -55,7 +56,14 @@ enum class ControllerAction {
     GreenColor,
     BlackColor,
     WhiteColor,
-    CustomColor
+    CustomColor,
+    ToggleSidebar,
+    Save,
+    StraightLineTool,
+    RopeTool,
+    SetPenTool,
+    SetMarkerTool,
+    SetEraserTool
 };
 
 static QString actionToString(ControllerAction action) {
@@ -76,6 +84,13 @@ static QString actionToString(ControllerAction action) {
         case ControllerAction::BlackColor: return "Black";
         case ControllerAction::WhiteColor: return "White";
         case ControllerAction::CustomColor: return "Custom Color";
+        case ControllerAction::ToggleSidebar: return "Toggle Sidebar";
+        case ControllerAction::Save: return "Save";
+        case ControllerAction::StraightLineTool: return "Straight Line Tool";
+        case ControllerAction::RopeTool: return "Rope Tool";
+        case ControllerAction::SetPenTool: return "Set Pen Tool";
+        case ControllerAction::SetMarkerTool: return "Set Marker Tool";
+        case ControllerAction::SetEraserTool: return "Set Eraser Tool";
         default: return "None";
     }
 }
@@ -102,6 +117,13 @@ static ControllerAction stringToAction(const QString &str) {
         case InternalControllerAction::BlackColor: return ControllerAction::BlackColor;
         case InternalControllerAction::WhiteColor: return ControllerAction::WhiteColor;
         case InternalControllerAction::CustomColor: return ControllerAction::CustomColor;
+        case InternalControllerAction::ToggleSidebar: return ControllerAction::ToggleSidebar;
+        case InternalControllerAction::Save: return ControllerAction::Save;
+        case InternalControllerAction::StraightLineTool: return ControllerAction::StraightLineTool;
+        case InternalControllerAction::RopeTool: return ControllerAction::RopeTool;
+        case InternalControllerAction::SetPenTool: return ControllerAction::SetPenTool;
+        case InternalControllerAction::SetMarkerTool: return ControllerAction::SetMarkerTool;
+        case InternalControllerAction::SetEraserTool: return ControllerAction::SetEraserTool;
     }
     return ControllerAction::None;
 }
@@ -165,6 +187,11 @@ public:
     void switchPage(int pageNumber); // Made public for RecentNotebooksDialog
     void updateTabLabel(); // Made public for RecentNotebooksDialog
     QSpinBox *pageInput; // Made public for RecentNotebooksDialog
+    
+    // New: Keyboard mapping methods (made public for ControlPanelDialog)
+    void addKeyboardMapping(const QString &keySequence, const QString &action);
+    void removeKeyboardMapping(const QString &keySequence);
+    QMap<QString, QString> getKeyboardMappings() const;
 
 private slots:
     void toggleBenchmark();
@@ -241,6 +268,8 @@ private slots:
     void selectColorButton(QPushButton* selectedButton);
     void updateStraightLineButtonState();
     void updateRopeToolButtonState(); // New slot for rope tool button
+    void updateDialButtonState();     // New method for dial toggle button
+    void updateFastForwardButtonState(); // New method for fast forward toggle button
 
     QColor getContrastingTextColor(const QColor &backgroundColor);
     void updateCustomColorButtonStyle(const QColor &color);
@@ -385,12 +414,21 @@ private:
     QMap<QString, QString> buttonHoldMapping;
     QMap<QString, QString> buttonPressMapping;
     QMap<QString, ControllerAction> buttonPressActionMapping;
+    
+    // New: Keyboard mapping support
+    QMap<QString, QString> keyboardMappings;  // keySequence -> action internal key
+    QMap<QString, ControllerAction> keyboardActionMapping;  // keySequence -> action enum
 
 
     void handleButtonHeld(const QString &buttonName);
     void handleButtonReleased(const QString &buttonName);
 
     void handleControllerButton(const QString &buttonName);
+    
+    // New: Keyboard mapping methods
+    void handleKeyboardShortcut(const QString &keySequence);
+    void saveKeyboardMappings();
+    void loadKeyboardMappings();
 
     void ensureTabHasUniqueSaveFolder(InkCanvas* canvas);
 
@@ -432,6 +470,7 @@ private:
     
 protected:
     void resizeEvent(QResizeEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;  // New: Handle keyboard shortcuts
 };
 
 #endif // MAINWINDOW_H

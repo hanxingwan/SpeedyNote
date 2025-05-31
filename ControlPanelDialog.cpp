@@ -5,6 +5,11 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QCheckBox>
+#include <QTableWidget>
+#include <QPushButton>
+#include <QColorDialog>
+#include <QInputDialog>
+#include <QMessageBox>
 
 ControlPanelDialog::ControlPanelDialog(MainWindow *mainWindow, InkCanvas *targetCanvas, QWidget *parent)
     : QDialog(parent), canvas(targetCanvas), selectedColor(canvas->getBackgroundColor()), mainWindowRef(mainWindow) {
@@ -23,6 +28,7 @@ ControlPanelDialog::ControlPanelDialog(MainWindow *mainWindow, InkCanvas *target
         createToolbarTab();
     }
     createButtonMappingTab();
+    createKeyboardMappingTab();
     // === Buttons ===
     applyButton = new QPushButton(tr("Apply"));
     okButton = new QPushButton(tr("OK"));
@@ -268,4 +274,125 @@ void ControlPanelDialog::createButtonMappingTab() {
     layout->addStretch();
     buttonTab->setLayout(layout);
     tabWidget->addTab(buttonTab, tr("Button Mapping"));
+}
+
+void ControlPanelDialog::createKeyboardMappingTab() {
+    keyboardTab = new QWidget(this);
+    QVBoxLayout *layout = new QVBoxLayout(keyboardTab);
+    
+    // Instructions
+    QLabel *instructionLabel = new QLabel(tr("Configure custom keyboard shortcuts for application actions:"), keyboardTab);
+    instructionLabel->setWordWrap(true);
+    layout->addWidget(instructionLabel);
+    
+    // Table to show current mappings
+    keyboardTable = new QTableWidget(0, 2, keyboardTab);
+    keyboardTable->setHorizontalHeaderLabels({tr("Key Sequence"), tr("Action")});
+    keyboardTable->horizontalHeader()->setStretchLastSection(true);
+    keyboardTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    keyboardTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    layout->addWidget(keyboardTable);
+    
+    // Buttons
+    QHBoxLayout *buttonLayout = new QHBoxLayout();
+    addKeyboardMappingButton = new QPushButton(tr("Add Mapping"), keyboardTab);
+    removeKeyboardMappingButton = new QPushButton(tr("Remove Mapping"), keyboardTab);
+    
+    buttonLayout->addWidget(addKeyboardMappingButton);
+    buttonLayout->addWidget(removeKeyboardMappingButton);
+    buttonLayout->addStretch();
+    
+    layout->addLayout(buttonLayout);
+    
+    // Connections
+    connect(addKeyboardMappingButton, &QPushButton::clicked, this, &ControlPanelDialog::addKeyboardMapping);
+    connect(removeKeyboardMappingButton, &QPushButton::clicked, this, &ControlPanelDialog::removeKeyboardMapping);
+    
+    // Load current mappings
+    if (mainWindowRef) {
+        QMap<QString, QString> mappings = mainWindowRef->getKeyboardMappings();
+        keyboardTable->setRowCount(mappings.size());
+        int row = 0;
+        for (auto it = mappings.begin(); it != mappings.end(); ++it) {
+            keyboardTable->setItem(row, 0, new QTableWidgetItem(it.key()));
+            QString displayAction = ButtonMappingHelper::internalKeyToDisplay(it.value(), false);
+            keyboardTable->setItem(row, 1, new QTableWidgetItem(displayAction));
+            row++;
+        }
+    }
+    
+    tabWidget->addTab(keyboardTab, tr("Keyboard Shortcuts"));
+}
+
+void ControlPanelDialog::addKeyboardMapping() {
+    // Step 1: Capture key sequence
+    KeyCaptureDialog captureDialog(this);
+    if (captureDialog.exec() != QDialog::Accepted) {
+        return;
+    }
+    
+    QString keySequence = captureDialog.getCapturedKeySequence();
+    if (keySequence.isEmpty()) {
+        return;
+    }
+    
+    // Check if key sequence already exists
+    if (mainWindowRef && mainWindowRef->getKeyboardMappings().contains(keySequence)) {
+        QMessageBox::warning(this, tr("Key Already Mapped"), 
+            tr("The key sequence '%1' is already mapped. Please choose a different key combination.").arg(keySequence));
+        return;
+    }
+    
+    // Step 2: Choose action
+    QStringList actions = ButtonMappingHelper::getTranslatedActions();
+    bool ok;
+    QString selectedAction = QInputDialog::getItem(this, tr("Select Action"), 
+        tr("Choose the action to perform when '%1' is pressed:").arg(keySequence), 
+        actions, 0, false, &ok);
+    
+    if (!ok || selectedAction.isEmpty()) {
+        return;
+    }
+    
+    // Convert display name to internal key
+    QString internalKey = ButtonMappingHelper::displayToInternalKey(selectedAction, false);
+    
+    // Add the mapping
+    if (mainWindowRef) {
+        mainWindowRef->addKeyboardMapping(keySequence, internalKey);
+        
+        // Update table
+        int row = keyboardTable->rowCount();
+        keyboardTable->insertRow(row);
+        keyboardTable->setItem(row, 0, new QTableWidgetItem(keySequence));
+        keyboardTable->setItem(row, 1, new QTableWidgetItem(selectedAction));
+    }
+}
+
+void ControlPanelDialog::removeKeyboardMapping() {
+    int currentRow = keyboardTable->currentRow();
+    if (currentRow < 0) {
+        QMessageBox::information(this, tr("No Selection"), tr("Please select a mapping to remove."));
+        return;
+    }
+    
+    QTableWidgetItem *keyItem = keyboardTable->item(currentRow, 0);
+    if (!keyItem) return;
+    
+    QString keySequence = keyItem->text();
+    
+    // Confirm removal
+    int ret = QMessageBox::question(this, tr("Remove Mapping"), 
+        tr("Are you sure you want to remove the keyboard shortcut '%1'?").arg(keySequence),
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    
+    if (ret == QMessageBox::Yes) {
+        // Remove from MainWindow
+        if (mainWindowRef) {
+            mainWindowRef->removeKeyboardMapping(keySequence);
+        }
+        
+        // Remove from table
+        keyboardTable->removeRow(currentRow);
+    }
 }

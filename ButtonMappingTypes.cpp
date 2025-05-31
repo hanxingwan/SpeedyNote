@@ -33,6 +33,13 @@ QString ButtonMappingHelper::actionToInternalKey(InternalControllerAction action
         case InternalControllerAction::BlackColor: return "black_color";
         case InternalControllerAction::WhiteColor: return "white_color";
         case InternalControllerAction::CustomColor: return "custom_color";
+        case InternalControllerAction::ToggleSidebar: return "toggle_sidebar";
+        case InternalControllerAction::Save: return "save";
+        case InternalControllerAction::StraightLineTool: return "straight_line_tool";
+        case InternalControllerAction::RopeTool: return "rope_tool";
+        case InternalControllerAction::SetPenTool: return "set_pen_tool";
+        case InternalControllerAction::SetMarkerTool: return "set_marker_tool";
+        case InternalControllerAction::SetEraserTool: return "set_eraser_tool";
     }
     return "none";
 }
@@ -67,6 +74,13 @@ InternalControllerAction ButtonMappingHelper::internalKeyToAction(const QString 
     if (key == "black_color") return InternalControllerAction::BlackColor;
     if (key == "white_color") return InternalControllerAction::WhiteColor;
     if (key == "custom_color") return InternalControllerAction::CustomColor;
+    if (key == "toggle_sidebar") return InternalControllerAction::ToggleSidebar;
+    if (key == "save") return InternalControllerAction::Save;
+    if (key == "straight_line_tool") return InternalControllerAction::StraightLineTool;
+    if (key == "rope_tool") return InternalControllerAction::RopeTool;
+    if (key == "set_pen_tool") return InternalControllerAction::SetPenTool;
+    if (key == "set_marker_tool") return InternalControllerAction::SetMarkerTool;
+    if (key == "set_eraser_tool") return InternalControllerAction::SetEraserTool;
     return InternalControllerAction::None;
 }
 
@@ -101,7 +115,14 @@ QStringList ButtonMappingHelper::getTranslatedActions() {
         tr("Green"),
         tr("Black"),
         tr("White"),
-        tr("Custom Color")
+        tr("Custom Color"),
+        tr("Toggle Sidebar"),
+        tr("Save"),
+        tr("Straight Line Tool"),
+        tr("Rope Tool"),
+        tr("Set Pen Tool"),
+        tr("Set Marker Tool"),
+        tr("Set Eraser Tool")
     };
 }
 
@@ -152,7 +173,14 @@ QStringList ButtonMappingHelper::getInternalActionKeys() {
         "green_color",
         "black_color",
         "white_color",
-        "custom_color"
+        "custom_color",
+        "toggle_sidebar",
+        "save",
+        "straight_line_tool",
+        "rope_tool",
+        "set_pen_tool",
+        "set_marker_tool",
+        "set_eraser_tool"
     };
 }
 

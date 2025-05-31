@@ -35,7 +35,14 @@ enum class InternalControllerAction {
     GreenColor,
     BlackColor,
     WhiteColor,
-    CustomColor
+    CustomColor,
+    ToggleSidebar,        // New: Hide/show sidebar
+    Save,                 // New: Save current page
+    StraightLineTool,     // New: Toggle straight line tool
+    RopeTool,            // New: Toggle rope tool
+    SetPenTool,          // New: Set tool to pen
+    SetMarkerTool,       // New: Set tool to marker
+    SetEraserTool        // New: Set tool to eraser
 };
 
 class ButtonMappingHelper {
