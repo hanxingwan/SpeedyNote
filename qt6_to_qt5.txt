@@ -1,0 +1,6 @@
+1. CMakeLists.txt
+2. loadPdf line 1 pdfDocument.reset(Poppler::Document::load(pdfPath));
+3. remove QInputDevice include in inkcanvas.cpp
+4. Change to QTabletEvent
+5. change include to poppler-qt5.h
+6. remove all sounds and do not include qt multimedia

@@ -8,9 +8,12 @@
 #include <QPushButton>
 #include <QSpinBox>
 #include <QColor>
+#include <QTableWidget>
+#include <QHeaderView>
 
 #include "InkCanvas.h" // Needed for BackgroundStyle enum
 #include "MainWindow.h"
+#include "KeyCaptureDialog.h"
 
 class ControlPanelDialog : public QDialog {
     Q_OBJECT
@@ -21,6 +24,8 @@ public:
 private slots:
     void applyChanges();
     void chooseColor();
+    void addKeyboardMapping();       // New: add keyboard shortcut
+    void removeKeyboardMapping();    // New: remove keyboard shortcut
 
 private:
     InkCanvas *canvas;
@@ -47,6 +52,21 @@ private:
     QWidget *toolbarTab;
     void createToolbarTab();
     void createPerformanceTab();
+
+    QWidget *controllerMappingTab;
+
+    // Mapping comboboxes for hold and press
+    QMap<QString, QComboBox*> holdMappingCombos;
+    QMap<QString, QComboBox*> pressMappingCombos;
+
+    void createButtonMappingTab();
+    void createKeyboardMappingTab();  // New: keyboard mapping tab
+
+    // Keyboard mapping widgets
+    QWidget *keyboardTab;
+    QTableWidget *keyboardTable;
+    QPushButton *addKeyboardMappingButton;
+    QPushButton *removeKeyboardMappingButton;
 };
 
 #endif // CONTROLPANELDIALOG_H

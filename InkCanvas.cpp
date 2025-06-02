@@ -18,6 +18,9 @@
 #include "MainWindow.h"
 // #include <QInputDevice>
 #include <QTabletEvent>
+#include <QTouchEvent>
+#include <QtMath>
+#include <QPainterPath>
 
 #include <QtConcurrent/QtConcurrentRun>
 #include <QFuture>
@@ -38,14 +41,18 @@ InkCanvas::InkCanvas(QWidget *parent)
     : QWidget(parent), drawing(false), penColor(Qt::black), penThickness(5.0), zoomFactor(100), panOffsetX(0), panOffsetY(0), currentTool(ToolType::Pen) {    
     setAttribute(Qt::WA_StaticContents);
     setTabletTracking(true);
+    setAttribute(Qt::WA_AcceptTouchEvents);  // Enable touch events
 
-    
+    // Enable immediate updates for smoother animation
+    setAttribute(Qt::WA_OpaquePaintEvent);
+    setAttribute(Qt::WA_NoSystemBackground);
     
     // Detect screen resolution and set canvas size
     QScreen *screen = QGuiApplication::primaryScreen();
     if (screen) {
         QSize logicalSize = screen->availableGeometry().size() * 0.89;
-        setFixedSize(logicalSize);
+        setMaximumSize(logicalSize); // Optional
+        setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     } else {
         setFixedSize(1920, 1080); // Fallback size
     }
@@ -138,7 +145,7 @@ void InkCanvas::loadPdfPage(int pageNumber) {
     if (pageNumber >= 0 && pageNumber < pdfDocument->numPages()) {
         std::unique_ptr<Poppler::Page> page(pdfDocument->page(pageNumber));
         if (page) {
-            QImage pdfImage = page->renderToImage(288, 288);
+            QImage pdfImage = page->renderToImage(pdfRenderDPI, pdfRenderDPI);
             if (!pdfImage.isNull()) {
                 QPixmap cachedPixmap = QPixmap::fromImage(pdfImage);
                 pdfCache.insert(pageNumber, new QPixmap(cachedPixmap));
@@ -175,8 +182,11 @@ void InkCanvas::loadPdfPreviewAsync(int pageNumber) {
         QImage pdfImage = page->renderToImage(96, 96);
         if (pdfImage.isNull()) return QPixmap();
 
-        QImage upscaled = pdfImage.scaled(pdfImage.width() * 3, pdfImage.height() * 3,
-                                          Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        QImage upscaled = pdfImage.scaled(pdfImage.width() * (pdfRenderDPI / 96),
+                                  pdfImage.height() * (pdfRenderDPI / 96),
+                                  Qt::KeepAspectRatio,
+                                  Qt::SmoothTransformation);
+
         return QPixmap::fromImage(upscaled);
     });
 
@@ -220,11 +230,38 @@ void InkCanvas::resizeEvent(QResizeEvent *event) {
 void InkCanvas::paintEvent(QPaintEvent *event) {
     QPainter painter(this);
     
-    // Scale the painter to match zoom factor
-    painter.scale(zoomFactor / 100.0, zoomFactor / 100.0);
+    // Save the painter state before transformations
+    painter.save();
+    
+    // Calculate the scaled canvas size
+    qreal scaledCanvasWidth = buffer.width() * (internalZoomFactor / 100.0);
+    qreal scaledCanvasHeight = buffer.height() * (internalZoomFactor / 100.0);
+    
+    // Calculate centering offsets
+    qreal centerOffsetX = 0;
+    qreal centerOffsetY = 0;
+    
+    // Center horizontally if canvas is smaller than widget
+    if (scaledCanvasWidth < width()) {
+        centerOffsetX = (width() - scaledCanvasWidth) / 2.0;
+    }
+    
+    // Center vertically if canvas is smaller than widget
+    if (scaledCanvasHeight < height()) {
+        centerOffsetY = (height() - scaledCanvasHeight) / 2.0;
+    }
+    
+    // Apply centering offset first
+    painter.translate(centerOffsetX, centerOffsetY);
+    
+    // Use internal zoom factor for smoother animation
+    painter.scale(internalZoomFactor / 100.0, internalZoomFactor / 100.0);
 
     // Pan offset needs to be reversed because painter works in transformed coordinates
     painter.translate(-panOffsetX, -panOffsetY);
+    
+    // Set clipping rectangle to canvas bounds to prevent painting outside
+    painter.setClipRect(0, 0, buffer.width(), buffer.height());
 
     // 🟨 Optional notebook-style background rendering
     if (backgroundImage.isNull() && backgroundStyle != BackgroundStyle::None) {
@@ -264,35 +301,456 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
 
     // ✅ Draw user's strokes from the buffer (transparent overlay)
     painter.drawPixmap(0, 0, buffer);
+    
+    // Draw straight line preview if in straight line mode and drawing
+    // Skip preview for eraser tool
+    if (straightLineMode && drawing && currentTool != ToolType::Eraser) {
+        // Save the current state before applying the eraser mode
+        painter.save();
+        
+        // Store current pressure - ensure minimum is 0.5 for consistent preview
+        qreal pressure = qMax(0.5, painter.device()->devicePixelRatioF() > 1.0 ? 0.8 : 1.0);
+        
+        // Set up the pen based on tool type
+        if (currentTool == ToolType::Marker) {
+            qreal thickness = penThickness * 8.0;
+            QColor markerColor = penColor;
+            // Increase alpha for better visibility in straight line mode
+            // Using a higher value (80) instead of the regular 4 to compensate for single-pass drawing
+            markerColor.setAlpha(80);
+            QPen pen(markerColor, thickness, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+            painter.setPen(pen);
+        } else { // Default Pen
+            // Match the exact same thickness calculation as in drawStroke
+            qreal scaledThickness = penThickness * pressure;
+            QPen pen(penColor, scaledThickness, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+            painter.setPen(pen);
+        }
+        
+        // Use the same coordinate transformation logic as in drawStroke
+        // to ensure the preview line appears at the exact same position
+        QPointF bufferStart, bufferEnd;
+        
+        // Convert screen coordinates to buffer coordinates using the same calculations as drawStroke
+        qreal scaledCanvasWidth = buffer.width() * (zoomFactor / 100.0);
+        qreal scaledCanvasHeight = buffer.height() * (zoomFactor / 100.0);
+        qreal centerOffsetX = (scaledCanvasWidth < width()) ? (width() - scaledCanvasWidth) / 2.0 : 0;
+        qreal centerOffsetY = (scaledCanvasHeight < height()) ? (height() - scaledCanvasHeight) / 2.0 : 0;
+        
+        QPointF adjustedStart = straightLineStartPoint - QPointF(centerOffsetX, centerOffsetY);
+        QPointF adjustedEnd = lastPoint - QPointF(centerOffsetX, centerOffsetY);
+        
+        bufferStart = (adjustedStart / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
+        bufferEnd = (adjustedEnd / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
+        
+        // Draw the preview line using the same coordinates that will be used for the final line
+        painter.drawLine(bufferStart, bufferEnd);
+        
+        // Restore the original painter state
+        painter.restore();
+    }
+
+    // Draw selection rectangle if in rope tool mode and selecting or moving
+    if (ropeToolMode && (selectingWithRope || movingSelection)) {
+        painter.save(); // Save painter state for overlays
+        painter.resetTransform(); // Reset transform to draw directly in logical widget coordinates
+        
+        if (selectingWithRope && !lassoPathPoints.isEmpty()) {
+            QPen selectionPen(Qt::DashLine);
+            selectionPen.setColor(Qt::blue);
+            selectionPen.setWidthF(1.5); // Width in logical pixels
+            painter.setPen(selectionPen);
+            painter.drawPolygon(lassoPathPoints); // lassoPathPoints are logical widget coordinates
+        } else if (movingSelection && !selectionBuffer.isNull() && !selectionRect.isEmpty()) {
+            // selectionRect is in logical widget coordinates.
+            // selectionBuffer is in buffer coordinates, we need to handle scaling correctly
+            QPixmap scaledBuffer = selectionBuffer;
+            
+            // Calculate the current zoom factor
+            qreal currentZoom = internalZoomFactor / 100.0;
+            
+            // Scale the selection buffer to match the current zoom level
+            if (currentZoom != 1.0) {
+                QSize scaledSize = QSize(
+                    qRound(scaledBuffer.width() * currentZoom),
+                    qRound(scaledBuffer.height() * currentZoom)
+                );
+                scaledBuffer = scaledBuffer.scaled(scaledSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+            }
+            
+            // Draw it at the logical position
+            // Use exactSelectionRectF for smoother movement if available
+            QPointF topLeft = exactSelectionRectF.isEmpty() ? selectionRect.topLeft() : exactSelectionRectF.topLeft();
+            painter.drawPixmap(topLeft, scaledBuffer);
+
+            QPen selectionBorderPen(Qt::DashLine);
+            selectionBorderPen.setColor(Qt::darkCyan);
+            selectionBorderPen.setWidthF(1.5); // Width in logical pixels
+            painter.setPen(selectionBorderPen);
+            
+            // Use exactSelectionRectF for drawing the selection border if available
+            if (!exactSelectionRectF.isEmpty()) {
+                painter.drawRect(exactSelectionRectF);
+            } else {
+                painter.drawRect(selectionRect);
+            }
+        }
+        painter.restore(); // Restore painter state to what it was for drawing the main buffer
+    }
+    
+    // Restore the painter state
+    painter.restore();
+    
+    // Fill the area outside the canvas with the widget's background color
+    QRect widgetRect = rect();
+    QRectF canvasRect(
+        centerOffsetX - panOffsetX * (internalZoomFactor / 100.0),
+        centerOffsetY - panOffsetY * (internalZoomFactor / 100.0),
+        buffer.width() * (internalZoomFactor / 100.0),
+        buffer.height() * (internalZoomFactor / 100.0)
+    );
+    
+    // Create regions for areas outside the canvas
+    QRegion outsideRegion(widgetRect);
+    outsideRegion -= QRegion(canvasRect.toRect());
+    
+    // Fill the outside region with the background color
+    painter.setClipRegion(outsideRegion);
+    painter.fillRect(widgetRect, palette().window().color());
 }
 
 void InkCanvas::tabletEvent(QTabletEvent *event) {
-
-
+    // Hardware eraser detection
+    static bool hardwareEraserActive = false;
+    bool wasUsingHardwareEraser = false;
+    
+    // Track hardware eraser state
     if (event->pointerType() == QTabletEvent::Eraser) {
+        // Hardware eraser is being used
+        wasUsingHardwareEraser = true;
+        
         if (event->type() == QEvent::TabletPress) {
+            // Start of eraser stroke - save current tool and switch to eraser
+            hardwareEraserActive = true;
             previousTool = currentTool;
             currentTool = ToolType::Eraser;
-        } else if (event->type() == QEvent::TabletRelease) {
-            currentTool = previousTool;
         }
     }
+    
+    // Maintain hardware eraser state across move events
+    if (hardwareEraserActive && event->type() != QEvent::TabletRelease) {
+        wasUsingHardwareEraser = true;
+    }
+
+    // Determine if we're in eraser mode (either hardware eraser or tool set to eraser)
+    bool isErasing = (currentTool == ToolType::Eraser);
 
     if (event->type() == QEvent::TabletPress) {
         drawing = true;
-        lastPoint = event->posF();
+        lastPoint = event->posF(); // Logical widget coordinates
+        if (straightLineMode) {
+            straightLineStartPoint = lastPoint;
+        }
+        if (ropeToolMode) {
+            if (movingSelection && selectionRect.contains(lastPoint.toPoint())) { // lastPoint is QPointF
+                // Already moving, do nothing on press (movement handled by move events)
+                 lastMovePoint = lastPoint; // Update lastMovePoint
+            } else if (!selectionBuffer.isNull() && selectionRect.contains(lastPoint.toPoint())) {
+                // Start moving an existing selection
+                movingSelection = true;
+                selectingWithRope = false;
+                lastMovePoint = lastPoint;
+                // Initialize the exact floating-point rect if it's empty
+                if (exactSelectionRectF.isEmpty()) {
+                    exactSelectionRectF = QRectF(selectionRect);
+                }
+                // selectionBuffer already has the content.
+                // The original area in 'buffer' was already cleared when selection was made.
+            } else {
+                // Start a new selection or cancel existing one
+                if (!selectionBuffer.isNull()) { // If there's an active selection, a tap outside cancels it
+                    selectionBuffer = QPixmap();
+                    selectionRect = QRect();
+                    lassoPathPoints.clear();
+                    movingSelection = false;
+                    selectingWithRope = false;
+                    update(); // Full update to remove old selection visuals
+                    drawing = false; // Consumed this press for cancel
+                    return;
+                }
+                selectingWithRope = true;
+                movingSelection = false;
+                lassoPathPoints.clear();
+                lassoPathPoints << lastPoint; // Start the lasso path
+                selectionRect = QRect();
+                selectionBuffer = QPixmap();
+            }
+        }
     } else if (event->type() == QEvent::TabletMove && drawing) {
-        if (currentTool == ToolType::Eraser) {
+        if (ropeToolMode) {
+            if (selectingWithRope) {
+                QRectF oldPreviewBoundingRect = lassoPathPoints.boundingRect();
+                lassoPathPoints << event->posF();
+                lastPoint = event->posF();
+                QRectF newPreviewBoundingRect = lassoPathPoints.boundingRect();
+                // Update the area of the selection rectangle preview (logical widget coordinates)
+                update(oldPreviewBoundingRect.united(newPreviewBoundingRect).toRect().adjusted(-5,-5,5,5));
+            } else if (movingSelection) {
+                QPointF delta = event->posF() - lastMovePoint; // Delta in logical widget coordinates
+                QRect oldWidgetSelectionRect = selectionRect;
+                
+                // Update the exact floating-point rectangle first
+                exactSelectionRectF.translate(delta);
+                
+                // Convert back to integer rect, but only when the position actually changes
+                QRect newRect = exactSelectionRectF.toRect();
+                if (newRect != selectionRect) {
+                    selectionRect = newRect;
+                    // Update the combined area of the old and new selection positions (logical widget coordinates)
+                    update(oldWidgetSelectionRect.united(selectionRect).adjusted(-2,-2,2,2));
+                } else {
+                    // Even if the integer position didn't change, we still need to update
+                    // to make movement feel smoother, especially with slow movements
+                    update(selectionRect.adjusted(-2,-2,2,2));
+                }
+                
+                lastMovePoint = event->posF();
+                if (!edited){
+                    edited = true;
+                }
+            }
+        } else if (straightLineMode && !isErasing) {
+            // For straight line mode with non-eraser tools, just update the last position
+            // and trigger a repaint of only the affected area for preview
+            static QElapsedTimer updateTimer;
+            static bool timerInitialized = false;
+            
+            if (!timerInitialized) {
+                updateTimer.start();
+                timerInitialized = true;
+            }
+            
+            // Throttle updates based on time for high CPU usage tools
+            bool shouldUpdate = true;
+            
+            // Apply throttling for marker which can be CPU intensive
+            if (currentTool == ToolType::Marker) {
+                shouldUpdate = updateTimer.elapsed() > 16; // Only update every 16ms (approx 60fps)
+            }
+            
+            if (shouldUpdate) {
+                QPointF oldLastPoint = lastPoint;
+                lastPoint = event->posF();
+                
+                // Calculate affected rectangle that needs updating
+                QRectF updateRect = calculatePreviewRect(straightLineStartPoint, oldLastPoint, lastPoint);
+                update(updateRect.toRect());
+                
+                // Reset timer
+                updateTimer.restart();
+            } else {
+                // Just update the last point without redrawing
+                lastPoint = event->posF();
+            }
+        } else if (straightLineMode && isErasing) {
+            // For eraser in straight line mode, continuously erase from start to current point
+            // This gives immediate visual feedback and smoother erasing experience
+            
+            // Store current point
+            QPointF currentPoint = event->posF();
+            
+            // Clear previous stroke by redrawing with transparency
+            QRectF updateRect = QRectF(straightLineStartPoint, lastPoint).normalized().adjusted(-20, -20, 20, 20);
+            update(updateRect.toRect());
+            
+            // Erase from start point to current position
+            eraseStroke(straightLineStartPoint, currentPoint, event->pressure());
+            
+            // Update last point
+            lastPoint = currentPoint;
+            
+            // Only track benchmarking when enabled
+            if (benchmarking) {
+                processedTimestamps.push_back(benchmarkTimer.elapsed());
+            }
+        } else {
+            // Normal drawing mode OR eraser regardless of straight line mode
+            if (isErasing) {
             eraseStroke(lastPoint, event->posF(), event->pressure());
         } else {
             drawStroke(lastPoint, event->posF(), event->pressure());
         }
         lastPoint = event->posF();
+            
+            // Only track benchmarking when enabled
+            if (benchmarking) {
         processedTimestamps.push_back(benchmarkTimer.elapsed());
+            }
+        }
     } else if (event->type() == QEvent::TabletRelease) {
+        if (straightLineMode && !isErasing) {
+            // Draw the final line on release with the current pressure
+            qreal pressure = event->pressure();
+            
+            // Always use at least a minimum pressure
+            pressure = qMax(pressure, 0.5);
+            
+            drawStroke(straightLineStartPoint, event->posF(), pressure);
+            
+            // Only track benchmarking when enabled
+            if (benchmarking) {
+                processedTimestamps.push_back(benchmarkTimer.elapsed());
+            }
+            
+            // Force repaint to clear the preview line
+            update();
+            if (!edited){
+                edited = true;
+            }
+        } else if (straightLineMode && isErasing) {
+            // For erasing in straight line mode, most of the work is done during movement
+            // Just ensure one final erasing pass from start to end point
+            qreal pressure = qMax(event->pressure(), 0.5);
+            
+            // Final pass to ensure the entire line is erased
+            eraseStroke(straightLineStartPoint, event->posF(), pressure);
+            
+            // Force update to clear any remaining artifacts
+            update();
+            if (!edited){
+                edited = true;
+            }
+        }
+        
         drawing = false;
+        
+        // Reset tool state if we were using the hardware eraser
+        if (wasUsingHardwareEraser) {
+            currentTool = previousTool;
+            hardwareEraserActive = false;  // Reset hardware eraser tracking
+        }
+
+        if (ropeToolMode) {
+            if (selectingWithRope) {
+                if (lassoPathPoints.size() > 2) { // Need at least 3 points for a polygon
+                    lassoPathPoints << lassoPathPoints.first(); // Close the polygon
+                    
+                    if (!lassoPathPoints.boundingRect().isEmpty()) {
+                        // 1. Create a QPolygonF in buffer coordinates using proper transformation
+                        QPolygonF bufferLassoPath;
+                        for (const QPointF& p_widget_logical : qAsConst(lassoPathPoints)) {
+                            bufferLassoPath << mapLogicalWidgetToPhysicalBuffer(p_widget_logical);
+                        }
+
+                        // 2. Get the bounding box of this path on the buffer
+                        QRectF bufferPathBoundingRect = bufferLassoPath.boundingRect();
+
+                        // 3. Copy that part of the main buffer
+                        QPixmap originalPiece = buffer.copy(bufferPathBoundingRect.toRect());
+
+                        // 4. Create the selectionBuffer (same size as originalPiece) and fill transparent
+                        selectionBuffer = QPixmap(originalPiece.size());
+                        selectionBuffer.fill(Qt::transparent);
+                        
+                        // 5. Create a mask from the lasso path
+                        QPainterPath maskPath;
+                        // The lasso path for the mask needs to be relative to originalPiece.topLeft()
+                        maskPath.addPolygon(bufferLassoPath.translated(-bufferPathBoundingRect.topLeft()));
+                        
+                        // 6. Paint the originalPiece onto selectionBuffer, using the mask
+                        QPainter selectionPainter(&selectionBuffer);
+                        selectionPainter.setClipPath(maskPath);
+                        selectionPainter.drawPixmap(0,0, originalPiece);
+                        selectionPainter.end();
+
+                        // 7. Clear the selected area from the main buffer using the path
+                        QPainter mainBufferPainter(&buffer);
+                        mainBufferPainter.setCompositionMode(QPainter::CompositionMode_Clear);
+                        mainBufferPainter.fillPath(maskPath.translated(bufferPathBoundingRect.topLeft()), Qt::transparent);
+                        mainBufferPainter.end();
+                        
+                        // 8. Calculate the correct selectionRect in logical widget coordinates
+                        QRectF logicalSelectionRect = mapRectBufferToWidgetLogical(bufferPathBoundingRect);
+                        selectionRect = logicalSelectionRect.toRect();
+                        exactSelectionRectF = logicalSelectionRect;
+                        
+                        // Update the area of the selection on screen
+                        update(logicalSelectionRect.adjusted(-2,-2,2,2).toRect());
+                    }
+                }
+                lassoPathPoints.clear(); // Ready for next selection, or move
+                selectingWithRope = false; 
+                // Now, if the user presses inside selectionRect, movingSelection will become true.
+            } else if (movingSelection) {
+                if (!selectionBuffer.isNull() && !selectionRect.isEmpty()) {
+                    QPainter painter(&buffer);
+                    // Use exact floating-point position if available for more precise placement
+                    QPointF topLeft = exactSelectionRectF.isEmpty() ? selectionRect.topLeft() : exactSelectionRectF.topLeft();
+                    // Use proper coordinate transformation to get buffer coordinates
+                    QPointF bufferDest = mapLogicalWidgetToPhysicalBuffer(topLeft);
+                    painter.drawPixmap(bufferDest.toPoint(), selectionBuffer);
+                    painter.end();
+                    
+                    // Update the pasted area
+                    QRectF bufferPasteRect(bufferDest, selectionBuffer.size());
+                    update(mapRectBufferToWidgetLogical(bufferPasteRect).adjusted(-2,-2,2,2));
+                    
+                    // Clear selection after pasting, making it permanent
+                    selectionBuffer = QPixmap();
+                    selectionRect = QRect();
+                    exactSelectionRectF = QRectF();
+                    movingSelection = false;
+                }
+            }
+        }
     }
     event->accept();
+}
+
+// Helper function to calculate area that needs updating for preview
+QRectF InkCanvas::calculatePreviewRect(const QPointF &start, const QPointF &oldEnd, const QPointF &newEnd) {
+    // Calculate centering offsets - use the same calculation as in paintEvent
+    qreal scaledCanvasWidth = buffer.width() * (zoomFactor / 100.0);
+    qreal scaledCanvasHeight = buffer.height() * (zoomFactor / 100.0);
+    qreal centerOffsetX = (scaledCanvasWidth < width()) ? (width() - scaledCanvasWidth) / 2.0 : 0;
+    qreal centerOffsetY = (scaledCanvasHeight < height()) ? (height() - scaledCanvasHeight) / 2.0 : 0;
+    
+    // Calculate the buffer coordinates for our points (same as in drawStroke)
+    QPointF adjustedStart = start - QPointF(centerOffsetX, centerOffsetY);
+    QPointF adjustedOldEnd = oldEnd - QPointF(centerOffsetX, centerOffsetY);
+    QPointF adjustedNewEnd = newEnd - QPointF(centerOffsetX, centerOffsetY);
+    
+    QPointF bufferStart = (adjustedStart / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
+    QPointF bufferOldEnd = (adjustedOldEnd / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
+    QPointF bufferNewEnd = (adjustedNewEnd / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
+    
+    // Now convert from buffer coordinates to screen coordinates
+    QPointF screenStart = (bufferStart - QPointF(panOffsetX, panOffsetY)) * (zoomFactor / 100.0) + QPointF(centerOffsetX, centerOffsetY);
+    QPointF screenOldEnd = (bufferOldEnd - QPointF(panOffsetX, panOffsetY)) * (zoomFactor / 100.0) + QPointF(centerOffsetX, centerOffsetY);
+    QPointF screenNewEnd = (bufferNewEnd - QPointF(panOffsetX, panOffsetY)) * (zoomFactor / 100.0) + QPointF(centerOffsetX, centerOffsetY);
+    
+    // Create rectangles for both the old and new lines
+    QRectF oldLineRect = QRectF(screenStart, screenOldEnd).normalized();
+    QRectF newLineRect = QRectF(screenStart, screenNewEnd).normalized();
+    
+    // Calculate padding based on pen thickness and device pixel ratio
+    qreal dpr = devicePixelRatioF();
+    qreal padding;
+    
+    if (currentTool == ToolType::Eraser) {
+        padding = penThickness * 6.0 * dpr;
+    } else if (currentTool == ToolType::Marker) {
+        padding = penThickness * 8.0 * dpr;
+    } else {
+        padding = penThickness * dpr;
+    }
+    
+    // Ensure minimum padding
+    padding = qMax(padding, 15.0);
+    
+    // Combine rectangles with appropriate padding
+    QRectF combinedRect = oldLineRect.united(newLineRect);
+    return combinedRect.adjusted(-padding, -padding, padding, padding);
 }
 
 void InkCanvas::mousePressEvent(QMouseEvent *event) {
@@ -329,7 +787,14 @@ void InkCanvas::drawStroke(const QPointF &start, const QPointF &end, qreal press
     if (currentTool == ToolType::Marker) {
         thickness *= 8.0;
         QColor markerColor = penColor;
-        markerColor.setAlpha(4); // Semi-transparent for marker effect
+        // Adjust alpha based on whether we're in straight line mode
+        if (straightLineMode) {
+            // For straight line mode, use higher alpha to make it more visible
+            markerColor.setAlpha(40);
+        } else {
+            // For regular drawing, use lower alpha for the usual marker effect
+            markerColor.setAlpha(4);
+        }
         QPen pen(markerColor, thickness, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
         painter.setPen(pen);
     } else { // Default Pen
@@ -338,9 +803,18 @@ void InkCanvas::drawStroke(const QPointF &start, const QPointF &end, qreal press
         painter.setPen(pen);
     }
 
-    // Convert screen position to buffer position
-    QPointF bufferStart = ((start) / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
-    QPointF bufferEnd = ((end) / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
+    // Calculate centering offsets
+    qreal scaledCanvasWidth = buffer.width() * (zoomFactor / 100.0);
+    qreal scaledCanvasHeight = buffer.height() * (zoomFactor / 100.0);
+    qreal centerOffsetX = (scaledCanvasWidth < width()) ? (width() - scaledCanvasWidth) / 2.0 : 0;
+    qreal centerOffsetY = (scaledCanvasHeight < height()) ? (height() - scaledCanvasHeight) / 2.0 : 0;
+    
+    // Convert screen position to buffer position, accounting for centering
+    QPointF adjustedStart = start - QPointF(centerOffsetX, centerOffsetY);
+    QPointF adjustedEnd = end - QPointF(centerOffsetX, centerOffsetY);
+    
+    QPointF bufferStart = (adjustedStart / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
+    QPointF bufferEnd = (adjustedEnd / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
 
     painter.drawLine(bufferStart, bufferEnd);
 
@@ -349,8 +823,8 @@ void InkCanvas::drawStroke(const QPointF &start, const QPointF &end, qreal press
                         .adjusted(-updatePadding, -updatePadding, updatePadding, updatePadding);
 
     QRect scaledUpdateRect = QRect(
-        ((updateRect.topLeft() - QPointF(panOffsetX, panOffsetY)) * (zoomFactor / 100.0)).toPoint(),
-        ((updateRect.bottomRight() - QPointF(panOffsetX, panOffsetY)) * (zoomFactor / 100.0)).toPoint()
+        ((updateRect.topLeft() - QPointF(panOffsetX, panOffsetY)) * (zoomFactor / 100.0) + QPointF(centerOffsetX, centerOffsetY)).toPoint(),
+        ((updateRect.bottomRight() - QPointF(panOffsetX, panOffsetY)) * (zoomFactor / 100.0) + QPointF(centerOffsetX, centerOffsetY)).toPoint()
     );
     update(scaledUpdateRect);
 }
@@ -360,6 +834,10 @@ void InkCanvas::eraseStroke(const QPointF &start, const QPointF &end, qreal pres
         initializeBuffer();
     }
 
+    if (!edited){
+        edited = true;
+    }
+
     QPainter painter(&buffer);
     painter.setCompositionMode(QPainter::CompositionMode_Clear);
 
@@ -367,9 +845,18 @@ void InkCanvas::eraseStroke(const QPointF &start, const QPointF &end, qreal pres
     QPen eraserPen(Qt::transparent, eraserThickness, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
     painter.setPen(eraserPen);
 
-    // Convert screen position to buffer position
-    QPointF bufferStart = ((start) / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
-    QPointF bufferEnd = ((end) / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
+    // Calculate centering offsets
+    qreal scaledCanvasWidth = buffer.width() * (zoomFactor / 100.0);
+    qreal scaledCanvasHeight = buffer.height() * (zoomFactor / 100.0);
+    qreal centerOffsetX = (scaledCanvasWidth < width()) ? (width() - scaledCanvasWidth) / 2.0 : 0;
+    qreal centerOffsetY = (scaledCanvasHeight < height()) ? (height() - scaledCanvasHeight) / 2.0 : 0;
+    
+    // Convert screen position to buffer position, accounting for centering
+    QPointF adjustedStart = start - QPointF(centerOffsetX, centerOffsetY);
+    QPointF adjustedEnd = end - QPointF(centerOffsetX, centerOffsetY);
+    
+    QPointF bufferStart = (adjustedStart / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
+    QPointF bufferEnd = (adjustedEnd / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
 
     painter.drawLine(bufferStart, bufferEnd);
 
@@ -378,8 +865,8 @@ void InkCanvas::eraseStroke(const QPointF &start, const QPointF &end, qreal pres
                         .adjusted(-10, -10, 10, 10);
 
     QRect scaledUpdateRect = QRect(
-        ((updateRect.topLeft() - QPointF(panOffsetX, panOffsetY)) * (zoomFactor / 100.0)).toPoint(),
-        ((updateRect.bottomRight() - QPointF(panOffsetX, panOffsetY)) * (zoomFactor / 100.0)).toPoint()
+        ((updateRect.topLeft() - QPointF(panOffsetX, panOffsetY)) * (zoomFactor / 100.0) + QPointF(centerOffsetX, centerOffsetY)).toPoint(),
+        ((updateRect.bottomRight() - QPointF(panOffsetX, panOffsetY)) * (zoomFactor / 100.0) + QPointF(centerOffsetX, centerOffsetY)).toPoint()
     );
     update(scaledUpdateRect);
 }
@@ -585,6 +1072,14 @@ void InkCanvas::deletePage(int pageNumber) {
     QFile::remove(fileName);
     QFile::remove(bgFileName);
     QFile::remove(metadataFileName);
+
+    if (pdfDocument){
+        loadPdfPage(pageNumber);
+    }
+    else{
+        loadPage(pageNumber);
+    }
+
 }
 
 void InkCanvas::setBackground(const QString &filePath, int pageNumber) {
@@ -643,9 +1138,9 @@ void InkCanvas::setBackground(const QString &filePath, int pageNumber) {
     update();  // Refresh canvas
 }
 
-
 void InkCanvas::setZoom(int zoomLevel) {
-    zoomFactor = qMax(20, qMin(zoomLevel, 400)); // Limit zoom to 50%-400%
+    zoomFactor = qMax(10, qMin(zoomLevel, 400)); // Limit zoom to 10%-400%
+    internalZoomFactor = zoomFactor; // Sync internal zoom
     update();
 }
 
@@ -751,12 +1246,12 @@ void InkCanvas::saveBackgroundMetadata() {
 
 void InkCanvas::exportNotebook(const QString &destinationFile) {
     if (destinationFile.isEmpty()) {
-        QMessageBox::warning(nullptr, "Export Error", "No export file specified.");
+        QMessageBox::warning(nullptr, tr("Export Error"), tr("No export file specified."));
         return;
     }
 
     if (saveFolder.isEmpty()) {
-        QMessageBox::warning(nullptr, "Export Error", "No notebook loaded (saveFolder is empty)");
+        QMessageBox::warning(nullptr, tr("Export Error"), tr("No notebook loaded (saveFolder is empty)"));
         return;
     }
 
@@ -772,7 +1267,7 @@ void InkCanvas::exportNotebook(const QString &destinationFile) {
     }
 
     if (files.isEmpty()) {
-        QMessageBox::warning(nullptr, "Export Error", "No files found to export.");
+        QMessageBox::warning(nullptr, tr("Export Error"), tr("No files found to export."));
         return;
     }
 
@@ -786,7 +1281,7 @@ void InkCanvas::exportNotebook(const QString &destinationFile) {
         }
         listFile.close();
     } else {
-        QMessageBox::warning(nullptr, "Export Error", "Failed to create temporary file list.");
+        QMessageBox::warning(nullptr, tr("Export Error"), tr("Failed to create temporary file list."));
         return;
     }
 
@@ -808,7 +1303,7 @@ void InkCanvas::exportNotebook(const QString &destinationFile) {
 
     process.start(tarExe, args);
     if (!process.waitForFinished()) {
-        QMessageBox::warning(nullptr, "Export Error", "Tar process failed to finish.");
+        QMessageBox::warning(nullptr, tr("Export Error"), tr("Tar process failed to finish."));
         QFile::remove(tempFileList);
         return;
     }
@@ -816,29 +1311,29 @@ void InkCanvas::exportNotebook(const QString &destinationFile) {
     QFile::remove(tempFileList);
 
     if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
-        QMessageBox::warning(nullptr, "Export Error", "Tar process failed.");
+        QMessageBox::warning(nullptr, tr("Export Error"), tr("Tar process failed."));
         return;
     }
 
-    QMessageBox::information(nullptr, "Export", "Notebook exported successfully.");
+    QMessageBox::information(nullptr, tr("Export"), tr("Notebook exported successfully."));
 }
 
 
 void InkCanvas::importNotebook(const QString &packageFile) {
 
     // Ask user for destination working folder
-    QString destFolder = QFileDialog::getExistingDirectory(nullptr, "Select Destination Folder for Imported Notebook");
+    QString destFolder = QFileDialog::getExistingDirectory(nullptr, tr("Select Destination Folder for Imported Notebook"));
 
     if (destFolder.isEmpty()) {
-        QMessageBox::warning(nullptr, "Import Canceled", "No destination folder selected.");
+        QMessageBox::warning(nullptr, tr("Import Canceled"), tr("No destination folder selected."));
         return;
     }
 
     // Check if destination folder is empty (optional, good practice)
     QDir destDir(destFolder);
     if (!destDir.entryList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot).isEmpty()) {
-        QMessageBox::StandardButton reply = QMessageBox::question(nullptr, "Destination Not Empty",
-            "The selected folder is not empty. Files may be overwritten. Continue?",
+        QMessageBox::StandardButton reply = QMessageBox::question(nullptr, tr("Destination Not Empty"),
+            tr("The selected folder is not empty. Files may be overwritten. Continue?"),
             QMessageBox::Yes | QMessageBox::No);
         if (reply != QMessageBox::Yes) {
             return;
@@ -864,7 +1359,7 @@ void InkCanvas::importNotebook(const QString &packageFile) {
     setSaveFolder(destFolder);
     loadPage(0);
 
-    QMessageBox::information(nullptr, "Import Complete", "Notebook imported successfully.");
+    QMessageBox::information(nullptr, tr("Import Complete"), tr("Notebook imported successfully."));
 }
 
 
@@ -912,7 +1407,182 @@ void InkCanvas::importNotebookTo(const QString &packageFile, const QString &dest
         setSaveFolder(destFolder);
         loadNotebookId();
         loadPage(0);
-    
-        QMessageBox::information(nullptr, "Import", "Notebook imported successfully.");
+
+        QMessageBox::information(nullptr, tr("Import"), tr("Notebook imported successfully."));
+    }
+
+bool InkCanvas::event(QEvent *event) {
+    if (!touchGesturesEnabled) {
+        return QWidget::event(event);
+    }
+
+    if (event->type() == QEvent::TouchBegin || 
+        event->type() == QEvent::TouchUpdate || 
+        event->type() == QEvent::TouchEnd) {
+        
+        QTouchEvent *touchEvent = static_cast<QTouchEvent*>(event);
+        const QList<QTouchEvent::TouchPoint> touchPoints = touchEvent->touchPoints();
+        
+        activeTouchPoints = touchPoints.count();
+
+        if (activeTouchPoints == 1) {
+            // Single finger pan
+            const QTouchEvent::TouchPoint &touchPoint = touchPoints.first();
+            
+            if (event->type() == QEvent::TouchBegin) {
+                isPanning = true;
+                lastTouchPos = touchPoint.pos();
+            } else if (event->type() == QEvent::TouchUpdate && isPanning) {
+                QPointF delta = touchPoint.pos() - lastTouchPos;
+                
+                // Make panning more responsive by using floating-point calculations
+                qreal scaledDeltaX = delta.x() / (internalZoomFactor / 100.0);
+                qreal scaledDeltaY = delta.y() / (internalZoomFactor / 100.0);
+                
+                // Calculate new pan positions with sub-pixel precision
+                qreal newPanX = panOffsetX - scaledDeltaX;
+                qreal newPanY = panOffsetY - scaledDeltaY;
+                
+                // Clamp pan values when canvas is smaller than viewport
+                qreal scaledCanvasWidth = buffer.width() * (internalZoomFactor / 100.0);
+                qreal scaledCanvasHeight = buffer.height() * (internalZoomFactor / 100.0);
+                
+                // If canvas is smaller than widget, lock pan to 0 (centered)
+                if (scaledCanvasWidth < width()) {
+                    newPanX = 0;
+                }
+                if (scaledCanvasHeight < height()) {
+                    newPanY = 0;
+                }
+                
+                // Emit signal with integer values for compatibility
+                emit panChanged(qRound(newPanX), qRound(newPanY));
+                
+                lastTouchPos = touchPoint.pos();
+            }
+        } else if (activeTouchPoints == 2) {
+            // Two finger pinch zoom
+            isPanning = false;
+            
+            const QTouchEvent::TouchPoint &touch1 = touchPoints[0];
+            const QTouchEvent::TouchPoint &touch2 = touchPoints[1];
+            
+            // Calculate distance between touch points with higher precision
+            qreal currentDist = QLineF(touch1.pos(), touch2.pos()).length();
+            qreal startDist = QLineF(touch1.startPos(), touch2.startPos()).length();
+            
+            if (event->type() == QEvent::TouchBegin) {
+                lastPinchScale = 1.0;
+                // Store the starting internal zoom
+                internalZoomFactor = zoomFactor;
+            } else if (event->type() == QEvent::TouchUpdate && startDist > 0) {
+                qreal scale = currentDist / startDist;
+                
+                // Use exponential scaling for more natural feel
+                qreal scaleChange = scale / lastPinchScale;
+                
+                // Apply scale with higher sensitivity
+                internalZoomFactor *= scaleChange;
+                internalZoomFactor = qBound(10.0, internalZoomFactor, 400.0);
+                
+                // Calculate zoom center (midpoint between two fingers)
+                QPointF center = (touch1.pos() + touch2.pos()) / 2.0;
+                
+                // Account for centering offset
+                qreal scaledCanvasWidth = buffer.width() * (zoomFactor / 100.0);
+                qreal scaledCanvasHeight = buffer.height() * (zoomFactor / 100.0);
+                qreal centerOffsetX = (scaledCanvasWidth < width()) ? (width() - scaledCanvasWidth) / 2.0 : 0;
+                qreal centerOffsetY = (scaledCanvasHeight < height()) ? (height() - scaledCanvasHeight) / 2.0 : 0;
+                
+                // Adjust center point for centering offset
+                QPointF adjustedCenter = center - QPointF(centerOffsetX, centerOffsetY);
+                
+                // Always update zoom for smooth animation
+                int newZoom = qRound(internalZoomFactor);
+                
+                // Calculate pan adjustment to keep the zoom centered at pinch point
+                QPointF bufferCenter = adjustedCenter / (zoomFactor / 100.0) + QPointF(panOffsetX, panOffsetY);
+                
+                // Update zoom factor before emitting
+                qreal oldZoomFactor = zoomFactor;
+                zoomFactor = newZoom;
+                
+                // Emit zoom change even for small changes
+                emit zoomChanged(newZoom);
+                
+                // Adjust pan to keep center point fixed with sub-pixel precision
+                qreal newPanX = bufferCenter.x() - adjustedCenter.x() / (internalZoomFactor / 100.0);
+                qreal newPanY = bufferCenter.y() - adjustedCenter.y() / (internalZoomFactor / 100.0);
+                
+                // After zoom, check if we need to center
+                qreal newScaledCanvasWidth = buffer.width() * (internalZoomFactor / 100.0);
+                qreal newScaledCanvasHeight = buffer.height() * (internalZoomFactor / 100.0);
+                
+                if (newScaledCanvasWidth < width()) {
+                    newPanX = 0;
+                }
+                if (newScaledCanvasHeight < height()) {
+                    newPanY = 0;
+                }
+                
+                emit panChanged(qRound(newPanX), qRound(newPanY));
+                
+                lastPinchScale = scale;
+                
+                // Request update only for visible area
+                update();
+            }
+        } else {
+            // More than 2 fingers - ignore
+            isPanning = false;
+        }
+        
+        if (event->type() == QEvent::TouchEnd) {
+            isPanning = false;
+            lastPinchScale = 1.0;
+            activeTouchPoints = 0;
+            // Sync internal zoom with actual zoom
+            internalZoomFactor = zoomFactor;
+            
+            // Emit signal that touch gesture has ended
+            emit touchGestureEnded();
+        }
+        
+        event->accept();
+        return true;
     }
     
+    return QWidget::event(event);
+}
+
+// Helper function to map LOGICAL widget coordinates to PHYSICAL buffer coordinates
+QPointF InkCanvas::mapLogicalWidgetToPhysicalBuffer(const QPointF& logicalWidgetPoint) {
+    // Use the same coordinate transformation logic as drawStroke for consistency
+    qreal scaledCanvasWidth = buffer.width() * (zoomFactor / 100.0);
+    qreal scaledCanvasHeight = buffer.height() * (zoomFactor / 100.0);
+    qreal centerOffsetX = (scaledCanvasWidth < width()) ? (width() - scaledCanvasWidth) / 2.0 : 0;
+    qreal centerOffsetY = (scaledCanvasHeight < height()) ? (height() - scaledCanvasHeight) / 2.0 : 0;
+    
+    // Convert widget position to buffer position, accounting for centering
+    QPointF adjustedPoint = logicalWidgetPoint - QPointF(centerOffsetX, centerOffsetY);
+    QPointF bufferPoint = (adjustedPoint / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
+    
+    return bufferPoint;
+}
+
+// Helper function to map a PHYSICAL buffer RECT to LOGICAL widget RECT for updates
+QRect InkCanvas::mapRectBufferToWidgetLogical(const QRectF& physicalBufferRect) {
+    // Use the same coordinate transformation logic as drawStroke for consistency
+    qreal scaledCanvasWidth = buffer.width() * (zoomFactor / 100.0);
+    qreal scaledCanvasHeight = buffer.height() * (zoomFactor / 100.0);
+    qreal centerOffsetX = (scaledCanvasWidth < width()) ? (width() - scaledCanvasWidth) / 2.0 : 0;
+    qreal centerOffsetY = (scaledCanvasHeight < height()) ? (height() - scaledCanvasHeight) / 2.0 : 0;
+    
+    // Convert buffer coordinates back to widget coordinates
+    QRectF widgetRect = QRectF(
+        (physicalBufferRect.topLeft() - QPointF(panOffsetX, panOffsetY)) * (zoomFactor / 100.0) + QPointF(centerOffsetX, centerOffsetY),
+        physicalBufferRect.size() * (zoomFactor / 100.0)
+    );
+    
+    return widgetRect.toRect();
+}

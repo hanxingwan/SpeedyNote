@@ -3,12 +3,12 @@
 #endif
 
 #include <QApplication>
-#include <QCoreApplication>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QLoggingCategory>
 #include <QInputMethod>
-#include <QDebug>
+#include <QTranslator>
+#include <QLibraryInfo>
 #include "MainWindow.h"
 
 int main(int argc, char *argv[]) {
@@ -19,7 +19,10 @@ int main(int argc, char *argv[]) {
     AllocConsole();
     freopen("CONOUT$", "w", stdout);
     freopen("CONOUT$", "w", stderr);
-    */ // to show console for debugging
+    */
+    
+     // to show console for debugging
+    
     
 #endif
     SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI, "1");
@@ -45,6 +48,23 @@ int main(int argc, char *argv[]) {
     QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
     QCoreApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
     QApplication app(argc, argv);
+
+    
+    QTranslator translator;
+    QString locale = QLocale::system().name(); // e.g., "zh_CN", "es_ES"
+    QString langCode = locale.section('_', 0, 0); // e.g., "zh"
+
+    // printf("Locale: %s\n", locale.toStdString().c_str());
+    // printf("Language Code: %s\n", langCode.toStdString().c_str());
+
+    // QString locale = "es-ES"; // e.g., "zh_CN", "es_ES"
+    // QString langCode = "es"; // e.g., "zh"
+    QString translationsPath = QCoreApplication::applicationDirPath();
+
+    if (translator.load(translationsPath + "/app_" + langCode + ".qm")) {
+        app.installTranslator(&translator);
+    }
+
     QString notebookFile;
     if (argc >= 2) {
         notebookFile = QString::fromLocal8Bit(argv[1]);

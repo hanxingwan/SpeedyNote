@@ -1,6 +1,6 @@
-
 #include "MainWindow.h"
 #include "InkCanvas.h"
+#include "ButtonMappingTypes.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QScreen>
@@ -16,23 +16,27 @@
 #include <QTextStream>
 #include <QInputDialog>
 #include <QDial>
-#include <QSoundEffect>
+// #include <QSoundEffect>
 #include <QFontDatabase>
 #include <QStandardPaths>
 #include <QSettings>
 #include <QMessageBox>
+#include <QDebug>
+#include <cmath>
 // #include "HandwritingLineEdit.h"
 #include "ControlPanelDialog.h"
 #include "SDLControllerManager.h"
-#include <QDebug>
+#include "RecentNotebooksDialog.h" // Added
 
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false) {
 
-    setWindowTitle("SpeedyNote Beta 0.4.0");
-    
+    setWindowTitle(tr("SpeedyNote Beta 0.4.10"));
 
-    // QString iconPath = QCoreApplication::applicationDirPath() + "/icon.ico"; 
+    // Initialize DPR early
+    initialDpr = getDevicePixelRatio();
+
+    // QString iconPath = QCoreApplication::applicationDirPath() + "/icon.ico";
     setWindowIcon(QIcon(":/resources/icons/mainicon.png"));
     
 
@@ -48,6 +52,9 @@ MainWindow::MainWindow(QWidget *parent)
 
     // ✅ Create the first tab (default canvas)
     // addNewTab();
+    QSettings settings("SpeedyNote", "App");
+    pdfRenderDPI = settings.value("pdfRenderDPI", 288).toInt();
+    setPdfDPI(pdfRenderDPI);
     setupUi();    // ✅ Move all UI setup here
 
     controllerManager = new SDLControllerManager();
@@ -65,12 +72,14 @@ MainWindow::MainWindow(QWidget *parent)
     // toggleFullscreen(); // ✅ Toggle fullscreen to adjust layout
     // toggleDial(); // ✅ Toggle dial to adjust layout
    
-    zoomSlider->setValue(100 / initialDpr); // Set initial zoom level based on DPR
-
-    QSettings settings("SpeedyNote", "App");
-    lowResPreviewEnabled = settings.value("lowResPreviewEnabled", true).toBool();
+    // zoomSlider->setValue(100 / initialDpr); // Set initial zoom level based on DPR
+    // setColorButtonsVisible(false); // ✅ Show color buttons by default
+    
+    loadUserSettings();
 
     setBenchmarkControlsVisible(false);
+    
+    recentNotebooksManager = new RecentNotebooksManager(this); // Initialize manager
 
 }
 
@@ -92,6 +101,21 @@ void MainWindow::setupUi() {
         QPushButton:pressed {
             background: rgba(0, 0, 0, 50); /* Darken on click */
         }
+
+        QPushButton[selected="true"] {
+            background: rgba(255, 255, 255, 100);
+            border: 2px solid rgba(255, 255, 255, 150);
+            padding: 4px;
+            border-radius: 4px;
+        }
+
+        QPushButton[selected="true"]:hover {
+            background: rgba(255, 255, 255, 120);
+        }
+
+        QPushButton[selected="true"]:pressed {
+            background: rgba(0, 0, 0, 50);
+        }
     )";
 
 
@@ -105,8 +129,8 @@ void MainWindow::setupUi() {
     clearPdfButton->setIcon(pdfDeleteIcon);
     loadPdfButton->setStyleSheet(buttonStyle);
     clearPdfButton->setStyleSheet(buttonStyle);
-    loadPdfButton->setToolTip("Load PDF");
-    clearPdfButton->setToolTip("Clear PDF");
+    loadPdfButton->setToolTip(tr("Load PDF"));
+    clearPdfButton->setToolTip(tr("Clear PDF"));
     connect(loadPdfButton, &QPushButton::clicked, this, &MainWindow::loadPdf);
     connect(clearPdfButton, &QPushButton::clicked, this, &MainWindow::clearPdf);
 
@@ -115,16 +139,16 @@ void MainWindow::setupUi() {
     QIcon exportIcon(loadThemedIcon("export"));  // Path to your icon in resources
     exportNotebookButton->setIcon(exportIcon);
     exportNotebookButton->setStyleSheet(buttonStyle);
-    exportNotebookButton->setToolTip("Export Notebook Into .SNPKG File");
+    exportNotebookButton->setToolTip(tr("Export Notebook Into .SNPKG File"));
     importNotebookButton = new QPushButton(this);
     importNotebookButton->setFixedSize(30, 30);
     QIcon importIcon(loadThemedIcon("import"));  // Path to your icon in resources
     importNotebookButton->setIcon(importIcon);
     importNotebookButton->setStyleSheet(buttonStyle);
-    importNotebookButton->setToolTip("Import Notebook From .SNPKG File");
+    importNotebookButton->setToolTip(tr("Import Notebook From .SNPKG File"));
 
     connect(exportNotebookButton, &QPushButton::clicked, this, [=]() {
-        QString filename = QFileDialog::getSaveFileName(this, "Export Notebook", "", "SpeedyNote Package (*.snpkg)");
+        QString filename = QFileDialog::getSaveFileName(this, tr("Export Notebook"), "", "SpeedyNote Package (*.snpkg)");
         if (!filename.isEmpty()) {
             if (!filename.endsWith(".snpkg")) filename += ".snpkg";
             currentCanvas()->exportNotebook(filename);
@@ -132,7 +156,7 @@ void MainWindow::setupUi() {
     });
     
     connect(importNotebookButton, &QPushButton::clicked, this, [=]() {
-        QString filename = QFileDialog::getOpenFileName(this, "Import Notebook", "", "SpeedyNote Package (*.snpkg)");
+        QString filename = QFileDialog::getOpenFileName(this, tr("Import Notebook"), "", "SpeedyNote Package (*.snpkg)");
         if (!filename.isEmpty()) {
             currentCanvas()->importNotebook(filename);
         }
@@ -143,13 +167,13 @@ void MainWindow::setupUi() {
     benchmarkButton->setIcon(benchmarkIcon);
     benchmarkButton->setFixedSize(30, 30); // Make the benchmark button smaller
     benchmarkButton->setStyleSheet(buttonStyle);
-    benchmarkButton->setToolTip("Toggle Benchmark");
+    benchmarkButton->setToolTip(tr("Toggle Benchmark"));
     benchmarkLabel = new QLabel("PR:N/A", this);
     benchmarkLabel->setFixedHeight(30);  // Make the benchmark bar smaller
 
     toggleTabBarButton = new QPushButton(this);
     toggleTabBarButton->setIcon(loadThemedIcon("tabs"));  // You can design separate icons for "show" and "hide"
-    toggleTabBarButton->setToolTip("Show/Hide Tabs");
+    toggleTabBarButton->setToolTip(tr("Show/Hide Tabs"));
     toggleTabBarButton->setFixedSize(30, 30);
     toggleTabBarButton->setStyleSheet(buttonStyle);
 
@@ -158,7 +182,7 @@ void MainWindow::setupUi() {
     QIcon folderIcon(loadThemedIcon("folder"));  // Path to your icon in resources
     selectFolderButton->setIcon(folderIcon);
     selectFolderButton->setStyleSheet(buttonStyle);
-    selectFolderButton->setToolTip("Select Save Folder");
+    selectFolderButton->setToolTip(tr("Select Save Folder"));
     connect(selectFolderButton, &QPushButton::clicked, this, &MainWindow::selectFolder);
     
     
@@ -167,7 +191,7 @@ void MainWindow::setupUi() {
     QIcon saveIcon(loadThemedIcon("save"));  // Path to your icon in resources
     saveButton->setIcon(saveIcon);
     saveButton->setStyleSheet(buttonStyle);
-    saveButton->setToolTip("Save Current Page");
+    saveButton->setToolTip(tr("Save Current Page"));
     connect(saveButton, &QPushButton::clicked, this, &MainWindow::saveCurrentPage);
     
     saveAnnotatedButton = new QPushButton(this);
@@ -175,13 +199,13 @@ void MainWindow::setupUi() {
     QIcon saveAnnotatedIcon(loadThemedIcon("saveannotated"));  // Path to your icon in resources
     saveAnnotatedButton->setIcon(saveAnnotatedIcon);
     saveAnnotatedButton->setStyleSheet(buttonStyle);
-    saveAnnotatedButton->setToolTip("Save Page with Background");
+    saveAnnotatedButton->setToolTip(tr("Save Page with Background"));
     connect(saveAnnotatedButton, &QPushButton::clicked, this, &MainWindow::saveAnnotated);
 
     fullscreenButton = new QPushButton(this);
     fullscreenButton->setIcon(loadThemedIcon("fullscreen"));  // Load from resources
     fullscreenButton->setFixedSize(30, 30);
-    fullscreenButton->setToolTip("Toggle Fullscreen");
+    fullscreenButton->setToolTip(tr("Toggle Fullscreen"));
     fullscreenButton->setStyleSheet(buttonStyle);
 
     // ✅ Connect button click to toggleFullscreen() function
@@ -192,21 +216,33 @@ void MainWindow::setupUi() {
     QIcon redIcon(":/resources/icons/red.png");  // Path to your icon in resources
     redButton->setIcon(redIcon);
     redButton->setStyleSheet(buttonStyle);
-    connect(redButton, &QPushButton::clicked, [this]() { currentCanvas()->setPenColor(QColor("#EE0000")); updateDialDisplay(); });
+    connect(redButton, &QPushButton::clicked, [this]() { 
+        currentCanvas()->setPenColor(QColor("#EE0000")); 
+        updateDialDisplay(); 
+        updateColorButtonStates();
+    });
     
     blueButton = new QPushButton(this);
     blueButton->setFixedSize(30, 30);
     QIcon blueIcon(":/resources/icons/blue.png");  // Path to your icon in resources
     blueButton->setIcon(blueIcon);
     blueButton->setStyleSheet(buttonStyle);
-    connect(blueButton, &QPushButton::clicked, [this]() { currentCanvas()->setPenColor(QColor("#0033FF")); updateDialDisplay(); });
+    connect(blueButton, &QPushButton::clicked, [this]() { 
+        currentCanvas()->setPenColor(QColor("#0033FF")); 
+        updateDialDisplay(); 
+        updateColorButtonStates();
+    });
 
     yellowButton = new QPushButton(this);
     yellowButton->setFixedSize(30, 30);
     QIcon yellowIcon(":/resources/icons/yellow.png");  // Path to your icon in resources
     yellowButton->setIcon(yellowIcon);
     yellowButton->setStyleSheet(buttonStyle);
-    connect(yellowButton, &QPushButton::clicked, [this]() { currentCanvas()->setPenColor(QColor("#FFEE00")); updateDialDisplay(); });
+    connect(yellowButton, &QPushButton::clicked, [this]() { 
+        currentCanvas()->setPenColor(QColor("#FFEE00")); 
+        updateDialDisplay(); 
+        updateColorButtonStates();
+    });
 
 
     greenButton = new QPushButton(this);
@@ -214,7 +250,11 @@ void MainWindow::setupUi() {
     QIcon greenIcon(":/resources/icons/green.png");  // Path to your icon in resources
     greenButton->setIcon(greenIcon);
     greenButton->setStyleSheet(buttonStyle);
-    connect(greenButton, &QPushButton::clicked, [this]() { currentCanvas()->setPenColor(QColor("#33EE00")); updateDialDisplay(); });
+    connect(greenButton, &QPushButton::clicked, [this]() { 
+        currentCanvas()->setPenColor(QColor("#33EE00")); 
+        updateDialDisplay(); 
+        updateColorButtonStates();
+    });
     
 
     blackButton = new QPushButton(this);
@@ -222,14 +262,22 @@ void MainWindow::setupUi() {
     QIcon blackIcon(":/resources/icons/black.png");  // Path to your icon in resources
     blackButton->setIcon(blackIcon);
     blackButton->setStyleSheet(buttonStyle);
-    connect(blackButton, &QPushButton::clicked, [this]() { currentCanvas()->setPenColor(QColor("#000000")); updateDialDisplay(); });
+    connect(blackButton, &QPushButton::clicked, [this]() { 
+        currentCanvas()->setPenColor(QColor("#000000")); 
+        updateDialDisplay(); 
+        updateColorButtonStates();
+    });
 
     whiteButton = new QPushButton(this);
     whiteButton->setFixedSize(30, 30);
     QIcon whiteIcon(":/resources/icons/white.png");  // Path to your icon in resources
     whiteButton->setIcon(whiteIcon);
     whiteButton->setStyleSheet(buttonStyle);
-    connect(whiteButton, &QPushButton::clicked, [this]() { currentCanvas()->setPenColor(QColor("#FFFFFF")); updateDialDisplay(); });
+    connect(whiteButton, &QPushButton::clicked, [this]() { 
+        currentCanvas()->setPenColor(QColor("#FFFFFF")); 
+        updateDialDisplay(); 
+        updateColorButtonStates();
+    });
     
     customColorInput = new QLineEdit(this);
     customColorInput->setPlaceholderText("Custom HEX");
@@ -280,17 +328,56 @@ void MainWindow::setupUi() {
     QIcon bgIcon(loadThemedIcon("background"));  // Path to your icon in resources
     backgroundButton->setIcon(bgIcon);
     backgroundButton->setStyleSheet(buttonStyle);
-    backgroundButton->setToolTip("Set Background Pic");
+    backgroundButton->setToolTip(tr("Set Background Pic"));
     connect(backgroundButton, &QPushButton::clicked, this, &MainWindow::selectBackground);
 
+    // Initialize straight line toggle button
+    straightLineToggleButton = new QPushButton(this);
+    straightLineToggleButton->setFixedSize(30, 30);
+    QIcon straightLineIcon(loadThemedIcon("straightLine"));  // Make sure this icon exists or use a different one
+    straightLineToggleButton->setIcon(straightLineIcon);
+    straightLineToggleButton->setStyleSheet(buttonStyle);
+    straightLineToggleButton->setToolTip(tr("Toggle Straight Line Mode"));
+    connect(straightLineToggleButton, &QPushButton::clicked, this, [this]() {
+        if (!currentCanvas()) return;
+        
+        // If we're turning on straight line mode, first disable rope tool
+        if (!currentCanvas()->isStraightLineMode()) {
+            currentCanvas()->setRopeToolMode(false);
+            updateRopeToolButtonState();
+        }
+        
+        bool newMode = !currentCanvas()->isStraightLineMode();
+        currentCanvas()->setStraightLineMode(newMode);
+        updateStraightLineButtonState();
+    });
     
+    ropeToolButton = new QPushButton(this);
+    ropeToolButton->setFixedSize(30, 30);
+    QIcon ropeToolIcon(loadThemedIcon("rope")); // Make sure this icon exists
+    ropeToolButton->setIcon(ropeToolIcon);
+    ropeToolButton->setStyleSheet(buttonStyle);
+    ropeToolButton->setToolTip(tr("Toggle Rope Tool Mode"));
+    connect(ropeToolButton, &QPushButton::clicked, this, [this]() {
+        if (!currentCanvas()) return;
+        
+        // If we're turning on rope tool mode, first disable straight line
+        if (!currentCanvas()->isRopeToolMode()) {
+            currentCanvas()->setStraightLineMode(false);
+            updateStraightLineButtonState();
+        }
+        
+        bool newMode = !currentCanvas()->isRopeToolMode();
+        currentCanvas()->setRopeToolMode(newMode);
+        updateRopeToolButtonState();
+    });
     
     deletePageButton = new QPushButton(this);
     deletePageButton->setFixedSize(30, 30);
     QIcon trashIcon(loadThemedIcon("trash"));  // Path to your icon in resources
     deletePageButton->setIcon(trashIcon);
     deletePageButton->setStyleSheet(buttonStyle);
-    deletePageButton->setToolTip("Delete Current Page");
+    deletePageButton->setToolTip(tr("Delete Current Page"));
     connect(deletePageButton, &QPushButton::clicked, this, &MainWindow::deleteCurrentPage);
 
     zoomButton = new QPushButton(this);
@@ -311,7 +398,7 @@ void MainWindow::setupUi() {
     zoomFrame->setFixedSize(440, 40); // Adjust width/height as needed
 
     zoomSlider = new QSlider(Qt::Horizontal, this);
-    zoomSlider->setRange(20, 250);
+    zoomSlider->setRange(10, 400);
     zoomSlider->setValue(100);
     zoomSlider->setMaximumWidth(405);
 
@@ -326,43 +413,113 @@ void MainWindow::setupUi() {
     zoom50Button = new QPushButton("0.5x", this);
     zoom50Button->setFixedSize(35, 30);
     zoom50Button->setStyleSheet(buttonStyle);
-    zoom50Button->setToolTip("Set Zoom to 50%");
-    connect(zoom50Button, &QPushButton::clicked, [this]() { zoomSlider->setValue(50); updateDialDisplay(); });
+    zoom50Button->setToolTip(tr("Set Zoom to 50%"));
+    connect(zoom50Button, &QPushButton::clicked, [this]() { zoomSlider->setValue(50 / initialDpr); updateDialDisplay(); });
 
     dezoomButton = new QPushButton("1x", this);
     dezoomButton->setFixedSize(30, 30);
     dezoomButton->setStyleSheet(buttonStyle);
-    dezoomButton->setToolTip("Set Zoom to 100%");
-    connect(dezoomButton, &QPushButton::clicked, [this]() { zoomSlider->setValue(100); updateDialDisplay();});
+    dezoomButton->setToolTip(tr("Set Zoom to 100%"));
+    connect(dezoomButton, &QPushButton::clicked, [this]() { zoomSlider->setValue(100 / initialDpr); updateDialDisplay(); });
 
     zoom200Button = new QPushButton("2x", this);
     zoom200Button->setFixedSize(31, 30);
     zoom200Button->setStyleSheet(buttonStyle);
-    zoom200Button->setToolTip("Set Zoom to 200%");
-    connect(zoom200Button, &QPushButton::clicked, [this]() { zoomSlider->setValue(200); updateDialDisplay();});
+    zoom200Button->setToolTip(tr("Set Zoom to 200%"));
+    connect(zoom200Button, &QPushButton::clicked, [this]() { zoomSlider->setValue(200 / initialDpr); updateDialDisplay(); });
 
-    panXSlider = new QSlider(Qt::Horizontal, this);
-    panYSlider = new QSlider(Qt::Vertical, this);
+    panXSlider = new QScrollBar(Qt::Horizontal, this);
+    panYSlider = new QScrollBar(Qt::Vertical, this);
     panYSlider->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
-
-    connect(panXSlider, &QSlider::valueChanged, this, &MainWindow::updatePanX);
     
-    connect(panYSlider, &QSlider::valueChanged, this, &MainWindow::updatePanY);
+    // Set scrollbar styling
+    QString scrollBarStyle = R"(
+        QScrollBar {
+            background: rgba(200, 200, 200, 80);
+            border: none;
+            margin: 0px;
+        }
+        QScrollBar:hover {
+            background: rgba(200, 200, 200, 120);
+        }
+        QScrollBar:horizontal {
+            height: 16px !important;  /* Force narrow height */
+            max-height: 16px !important;
+        }
+        QScrollBar:vertical {
+            width: 16px !important;   /* Force narrow width */
+            max-width: 16px !important;
+        }
+        QScrollBar::handle {
+            background: rgba(100, 100, 100, 150);
+            border-radius: 2px;
+            min-height: 120px;  /* Longer handle for vertical scrollbar */
+            min-width: 120px;   /* Longer handle for horizontal scrollbar */
+        }
+        QScrollBar::handle:hover {
+            background: rgba(80, 80, 80, 210);
+        }
+        /* Hide scroll buttons */
+        QScrollBar::add-line, 
+        QScrollBar::sub-line {
+            width: 0px;
+            height: 0px;
+            background: none;
+            border: none;
+        }
+        /* Disable scroll page buttons */
+        QScrollBar::add-page, 
+        QScrollBar::sub-page {
+            background: transparent;
+        }
+    )";
+    
+    panXSlider->setStyleSheet(scrollBarStyle);
+    panYSlider->setStyleSheet(scrollBarStyle);
+    
+    // Force fixed dimensions programmatically
+    panXSlider->setFixedHeight(16);
+    panYSlider->setFixedWidth(16);
+    
+    // Set up auto-hiding
+    panXSlider->setMouseTracking(true);
+    panYSlider->setMouseTracking(true);
+    panXSlider->installEventFilter(this);
+    panYSlider->installEventFilter(this);
+    panXSlider->setVisible(false);
+    panYSlider->setVisible(false);
+    
+    // Create timer for auto-hiding
+    scrollbarHideTimer = new QTimer(this);
+    scrollbarHideTimer->setSingleShot(true);
+    scrollbarHideTimer->setInterval(200); // Hide after 0.2 seconds
+    connect(scrollbarHideTimer, &QTimer::timeout, this, [this]() {
+        panXSlider->setVisible(false);
+        panYSlider->setVisible(false);
+        scrollbarsVisible = false;
+    });
+    
+    // panXSlider->setFixedHeight(30);
+    // panYSlider->setFixedWidth(30);
+
+    connect(panXSlider, &QScrollBar::valueChanged, this, &MainWindow::updatePanX);
+    
+    connect(panYSlider, &QScrollBar::valueChanged, this, &MainWindow::updatePanY);
 
 
 
 
     // 🌟 Left Side: Tabs List
     tabList = new QListWidget(this);
-    tabList->setFixedWidth(122);  // Adjust width as needed
+    tabList->setMinimumWidth(122);  // Adjust width as needed
     tabList->setSelectionMode(QAbstractItemView::SingleSelection);
 
 
     // 🌟 Add Button for New Tab
     addTabButton = new QPushButton(this);
-    QIcon addTab(":/resources/icons/addtab.png");  // Path to your icon in resources
+    QIcon addTab(loadThemedIcon("addtab"));  // Path to your icon in resources
     addTabButton->setIcon(addTab);
-    addTabButton->setFixedWidth(122);
+    addTabButton->setMinimumWidth(122);
     addTabButton->setFixedHeight(45);  // Adjust height as needed
     connect(addTabButton, &QPushButton::clicked, this, &MainWindow::addNewTab);
 
@@ -373,7 +530,9 @@ void MainWindow::setupUi() {
     connect(tabList, &QListWidget::currentRowChanged, this, &MainWindow::switchTab);
 
     sidebarContainer = new QWidget(this);  // <-- New container
-    sidebarContainer->setContentsMargins(0, 0, 0, 0);  // <-- Remove margins
+    sidebarContainer->setObjectName("sidebarContainer");
+    sidebarContainer->setContentsMargins(5, 0, 5, 5);  // <-- Remove margins
+    sidebarContainer->setMaximumWidth(140);  // <-- Set max width
     QVBoxLayout *tabLayout = new QVBoxLayout(sidebarContainer);
     tabLayout->setContentsMargins(0, 0, 1, 0); 
     tabLayout->addWidget(tabList);
@@ -403,6 +562,7 @@ void MainWindow::setupUi() {
 
 
     pageInput = new QSpinBox(this);
+    pageInput->setFixedSize(42, 30);
     pageInput->setMinimum(1);
     pageInput->setMaximum(9999);
     pageInput->setValue(1);
@@ -420,7 +580,7 @@ void MainWindow::setupUi() {
     dialToggleButton = new QPushButton(this);
     dialToggleButton->setIcon(loadThemedIcon("dial"));  // Icon for dial
     dialToggleButton->setFixedSize(30, 30);
-    dialToggleButton->setToolTip("Toggle Magic Dial");
+    dialToggleButton->setToolTip(tr("Toggle Magic Dial"));
     dialToggleButton->setStyleSheet(buttonStyle);
 
     // ✅ Connect to toggle function
@@ -434,12 +594,13 @@ void MainWindow::setupUi() {
     fastForwardButton->setFixedSize(30, 30);
     // QIcon ffIcon(":/resources/icons/fastforward.png");  // Path to your icon in resources
     fastForwardButton->setIcon(loadThemedIcon("fastforward"));
-    fastForwardButton->setToolTip("Toggle Fast Forward 8x");
+    fastForwardButton->setToolTip(tr("Toggle Fast Forward 8x"));
     fastForwardButton->setStyleSheet(buttonStyle);
 
     // ✅ Toggle fast-forward mode
     connect(fastForwardButton, &QPushButton::clicked, [this]() {
         fastForwardMode = !fastForwardMode;
+        updateFastForwardButtonState();
     });
 
     QComboBox *dialModeSelector = new QComboBox(this);
@@ -468,25 +629,32 @@ void MainWindow::setupUi() {
 
     btnPageSwitch = new QPushButton(loadThemedIcon("bookpage"), "", this);
     btnPageSwitch->setStyleSheet(buttonStyle);
-    btnPageSwitch->setToolTip("Set Dial Mode to Page Switching");
+    btnPageSwitch->setFixedSize(30, 30);
+    btnPageSwitch->setToolTip(tr("Set Dial Mode to Page Switching"));
     btnZoom = new QPushButton(loadThemedIcon("zoom"), "", this);
     btnZoom->setStyleSheet(buttonStyle);
-    btnZoom->setToolTip("Set Dial Mode to Zoom Ctrl");
+    btnZoom->setFixedSize(30, 30);
+    btnZoom->setToolTip(tr("Set Dial Mode to Zoom Ctrl"));
     btnThickness = new QPushButton(loadThemedIcon("thickness"), "", this);
     btnThickness->setStyleSheet(buttonStyle);
-    btnThickness->setToolTip("Set Dial Mode to Pen Tip Thickness Ctrl");
+    btnThickness->setFixedSize(30, 30);
+    btnThickness->setToolTip(tr("Set Dial Mode to Pen Tip Thickness Ctrl"));
     btnColor = new QPushButton(loadThemedIcon("color"), "", this);
     btnColor->setStyleSheet(buttonStyle);
-    btnColor->setToolTip("Set Dial Mode to Color Adjustment");
+    btnColor->setFixedSize(30, 30);
+    btnColor->setToolTip(tr("Set Dial Mode to Color Adjustment"));
     btnTool = new QPushButton(loadThemedIcon("pen"), "", this);
     btnTool->setStyleSheet(buttonStyle);
-    btnTool->setToolTip("Set Dial Mode to Tool Switching");
+    btnTool->setFixedSize(30, 30);
+    btnTool->setToolTip(tr("Set Dial Mode to Tool Switching"));
     btnPresets = new QPushButton(loadThemedIcon("preset"), "", this);
     btnPresets->setStyleSheet(buttonStyle);
-    btnPresets->setToolTip("Set Dial Mode to Color Preset Selection");
+    btnPresets->setFixedSize(30, 30);
+    btnPresets->setToolTip(tr("Set Dial Mode to Color Preset Selection"));
     btnPannScroll = new QPushButton(loadThemedIcon("scroll"), "", this);
     btnPannScroll->setStyleSheet(buttonStyle);
-    btnPannScroll->setToolTip("Slide and turn pages with the dial");
+    btnPannScroll->setFixedSize(30, 30);
+    btnPannScroll->setToolTip(tr("Slide and turn pages with the dial"));
 
     connect(btnPageSwitch, &QPushButton::clicked, this, [this]() { changeDialMode(PageSwitching); });
     connect(btnZoom, &QPushButton::clicked, this, [this]() { changeDialMode(ZoomControl); });
@@ -508,14 +676,14 @@ void MainWindow::setupUi() {
     // ✅ Button to add current color to presets
     addPresetButton = new QPushButton(loadThemedIcon("savepreset"), "", this);
     addPresetButton->setStyleSheet(buttonStyle);
-    addPresetButton->setToolTip("Add Current Color to Presets");
+    addPresetButton->setToolTip(tr("Add Current Color to Presets"));
     connect(addPresetButton, &QPushButton::clicked, this, &MainWindow::addColorPreset);
 
 
     openControlPanelButton = new QPushButton(this);
     openControlPanelButton->setIcon(loadThemedIcon("settings"));  // Replace with your actual settings icon
     openControlPanelButton->setStyleSheet(buttonStyle);
-    openControlPanelButton->setToolTip("Open Control Panel");
+    openControlPanelButton->setToolTip(tr("Open Control Panel"));
     openControlPanelButton->setFixedSize(30, 30);  // Adjust to match your other buttons
 
     connect(openControlPanelButton, &QPushButton::clicked, this, [=]() {
@@ -526,6 +694,13 @@ void MainWindow::setupUi() {
         }
     });
 
+    openRecentNotebooksButton = new QPushButton(this); // Create button
+    openRecentNotebooksButton->setIcon(loadThemedIcon("recent")); // Replace with actual icon if available
+    openRecentNotebooksButton->setStyleSheet(buttonStyle);
+    openRecentNotebooksButton->setToolTip(tr("Open Recent Notebooks"));
+    openRecentNotebooksButton->setFixedSize(30, 30);
+    connect(openRecentNotebooksButton, &QPushButton::clicked, this, &MainWindow::openRecentNotebooksDialog);
+
     customColorButton = new QPushButton(this);
     customColorButton->setFixedSize(62, 30);
     customColorButton->setText("#000000");
@@ -535,7 +710,7 @@ void MainWindow::setupUi() {
         initialColor = currentCanvas()->getPenColor();
     }
 
-    customColorButton->setStyleSheet(QString("background-color: %1").arg(initialColor.name()));
+    updateCustomColorButtonStyle(initialColor);
 
     QTimer::singleShot(0, this, [=]() {
         connect(customColorButton, &QPushButton::clicked, this, [=]() {
@@ -543,9 +718,9 @@ void MainWindow::setupUi() {
             QColor chosen = QColorDialog::getColor(currentCanvas()->getPenColor(), this, "Select Pen Color");
             if (chosen.isValid()) {
                 currentCanvas()->setPenColor(chosen);
-                customColorButton->setStyleSheet(QString("background-color: %1").arg(chosen.name()));
-                customColorButton->setText(QString("%1").arg(chosen.name()).toUpper());
+                updateCustomColorButtonStyle(chosen);
                 updateDialDisplay();
+                updateColorButtonStates();
             }
         });
     });
@@ -563,6 +738,7 @@ void MainWindow::setupUi() {
     controlLayout->addWidget(saveButton);
     controlLayout->addWidget(saveAnnotatedButton);
     controlLayout->addWidget(openControlPanelButton);
+    controlLayout->addWidget(openRecentNotebooksButton); // Add button to layout
     controlLayout->addWidget(redButton);
     controlLayout->addWidget(blueButton);
     controlLayout->addWidget(yellowButton);
@@ -570,6 +746,8 @@ void MainWindow::setupUi() {
     controlLayout->addWidget(blackButton);
     controlLayout->addWidget(whiteButton);
     controlLayout->addWidget(customColorButton);
+    controlLayout->addWidget(straightLineToggleButton);
+    controlLayout->addWidget(ropeToolButton); // Add rope tool button to layout
     // controlLayout->addWidget(colorPreview);
     // controlLayout->addWidget(thicknessButton);
     // controlLayout->addWidget(jumpToPageButton);
@@ -593,23 +771,25 @@ void MainWindow::setupUi() {
     controlLayout->addWidget(zoom50Button);
     controlLayout->addWidget(dezoomButton);
     controlLayout->addWidget(zoom200Button);
+    controlLayout->addStretch();
     
     
     controlLayout->addWidget(pageInput);
     controlLayout->addWidget(benchmarkButton);
     controlLayout->addWidget(benchmarkLabel);
     controlLayout->addWidget(deletePageButton);
-    controlLayout->addStretch();
     
     
 
-    QWidget *controlBar = new QWidget;
-    controlBar->setLayout(controlLayout);
+    controlBar = new QWidget;  // Use member variable instead of local
+    controlBar->setObjectName("controlBar");
+    // controlBar->setLayout(controlLayout);  // Commented out - responsive layout will handle this
     controlBar->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
 
     QPalette palette = QGuiApplication::palette();
     QColor highlightColor = palette.highlight().color();  // System highlight color
     controlBar->setStyleSheet(QString(R"(
+    QWidget#controlBar {
         background-color: %1;
         }
     )").arg(highlightColor.name()));
@@ -620,21 +800,44 @@ void MainWindow::setupUi() {
     canvasStack = new QStackedWidget();
     canvasStack->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
-    QVBoxLayout *canvasLayout = new QVBoxLayout;
-    canvasLayout->addWidget(panXSlider);
+    // Create a container for the canvas and scrollbars with relative positioning
+    QWidget *canvasContainer = new QWidget;
+    QVBoxLayout *canvasLayout = new QVBoxLayout(canvasContainer);
+    canvasLayout->setContentsMargins(0, 0, 0, 0);
     canvasLayout->addWidget(canvasStack);
 
-    QHBoxLayout *content_layout = new QHBoxLayout;
-    content_layout->setContentsMargins(5, 0, 5, 5); 
-    content_layout->addWidget(sidebarContainer); 
-    content_layout->addWidget(panYSlider);
-    content_layout->addLayout(canvasLayout);
-
+    // Enable context menu for the workaround
+    canvasContainer->setContextMenuPolicy(Qt::CustomContextMenu);
     
+    // Set up the scrollbars to overlay the canvas
+    panXSlider->setParent(canvasContainer);
+    panYSlider->setParent(canvasContainer);
+    
+    // Raise scrollbars to ensure they're visible above the canvas
+    panXSlider->raise();
+    panYSlider->raise();
+    
+    // Handle scrollbar intersection
+    connect(canvasContainer, &QWidget::customContextMenuRequested, this, [this]() {
+        // This connection is just to make sure the container exists
+        // and can receive signals - a workaround for some Qt versions
+    });
+    
+    // Position the scrollbars at the bottom and right edges
+    canvasContainer->installEventFilter(this);
+    
+    // Update scrollbar positions initially
+    QTimer::singleShot(0, this, [this, canvasContainer]() {
+        updateScrollbarPositions();
+    });
 
-
+    QHBoxLayout *content_layout = new QHBoxLayout;
+    content_layout->setContentsMargins(0, 0, 0, 0); 
+    content_layout->addWidget(sidebarContainer); 
+    content_layout->addWidget(canvasContainer, 1); // Add stretch factor to expand canvas
 
     QWidget *container = new QWidget;
+    container->setObjectName("container");
     QVBoxLayout *mainLayout = new QVBoxLayout(container);
     mainLayout->setContentsMargins(0, 0, 0, 0);  // ✅ Remove extra margins
     // mainLayout->setSpacing(0); // ✅ Remove spacing between toolbar and content
@@ -658,6 +861,9 @@ void MainWindow::setupUi() {
 
     addNewTab();
 
+    // Initialize responsive toolbar layout
+    createSingleRowLayout();  // Start with single row layout
+
 }
 
 MainWindow::~MainWindow() {
@@ -674,13 +880,13 @@ void MainWindow::toggleBenchmark() {
     } else {
         currentCanvas()->stopBenchmark();
         benchmarkTimer->stop();
-        benchmarkLabel->setText("PR:N/A");
+        benchmarkLabel->setText(tr("PR:N/A"));
     }
 }
 
 void MainWindow::updateBenchmarkDisplay() {
     int sampleRate = currentCanvas()->getProcessedRate();
-    benchmarkLabel->setText(QString("PR:%1 Hz").arg(sampleRate));
+    benchmarkLabel->setText(QString(tr("PR:%1 Hz")).arg(sampleRate));
 }
 
 void MainWindow::applyCustomColor() {
@@ -709,13 +915,19 @@ void MainWindow::changeTool(int index) {
 }
 
 void MainWindow::selectFolder() {
-    QString folder = QFileDialog::getExistingDirectory(this, "Select Save Folder");
+    QString folder = QFileDialog::getExistingDirectory(this, tr("Select Save Folder"));
     if (!folder.isEmpty()) {
-        currentCanvas()->setSaveFolder(folder);
+        InkCanvas *canvas = currentCanvas();
+        if (canvas) {
+            if (canvas->isEdited()){
+                saveCurrentPage();
+            }
+            canvas->setSaveFolder(folder);
         switchPage(1);
         pageInput->setValue(1);
-
         updateTabLabel();
+            recentNotebooksManager->addRecentNotebook(folder, canvas); // Track when folder is selected
+        }
     }
 }
 
@@ -728,6 +940,10 @@ void MainWindow::switchPage(int pageNumber) {
     InkCanvas *canvas = currentCanvas();
     if (!canvas) return;
 
+    if (currentCanvas()->isEdited()){
+        saveCurrentPage();
+    }
+
     int newPage = pageNumber - 1;
     pageMap[canvas] = newPage;  // ✅ Save the page for this tab
 
@@ -739,8 +955,11 @@ void MainWindow::switchPage(int pageNumber) {
 
     canvas->setLastActivePage(newPage);
     updateZoom();
+    // It seems panXSlider and panYSlider can be null here during startup.
+    if(panXSlider && panYSlider){
     canvas->setLastPanX(panXSlider->maximum());
     canvas->setLastPanY(panYSlider->maximum());
+    }
     updateDialDisplay();
 }
 
@@ -753,7 +972,7 @@ void MainWindow::saveCurrentPage() {
 }
 
 void MainWindow::selectBackground() {
-    QString filePath = QFileDialog::getOpenFileName(this, "Select Background Image", "", "Images (*.png *.jpg *.jpeg)");
+    QString filePath = QFileDialog::getOpenFileName(this, tr("Select Background Image"), "", "Images (*.png *.jpg *.jpeg)");
     if (!filePath.isEmpty()) {
         currentCanvas()->setBackground(filePath, getCurrentPageForCanvas(currentCanvas()));
     }
@@ -786,16 +1005,52 @@ void MainWindow::updatePanRange() {
 
     QSize canvasSize = currentCanvas()->getCanvasSize();
     QSize viewportSize = QGuiApplication::primaryScreen()->size() * QGuiApplication::primaryScreen()->devicePixelRatio();
-    qreal dps = getDevicePixelRatio();
-    int maxPanX = qMax(0, static_cast<int>(canvasSize.width() * zoom * dps / 100 - viewportSize.width()));
-    int maxPanY = qMax(0, static_cast<int>(canvasSize.height() * zoom * dps / 100 - viewportSize.height()));
- 
+    qreal dps = initialDpr;
+    
+    // Adjust viewport size for 2-row toolbar layout
+    QSize effectiveViewportSize = viewportSize;
+    if (isToolbarTwoRows) {
+        // In 2-row mode, treat the viewport width as half size to unlock pan earlier
+        effectiveViewportSize.setWidth(viewportSize.width() / 2);
+    }
+    
+    // Calculate scaled canvas size
+    int scaledCanvasWidth = canvasSize.width() * zoom * dps / 100;
+    int scaledCanvasHeight = canvasSize.height() * zoom * dps / 100;
+    
+    // Calculate max pan values - if canvas is smaller than viewport, pan should be 0
+    int maxPanX = qMax(0, scaledCanvasWidth - effectiveViewportSize.width());
+    int maxPanY = qMax(0, scaledCanvasHeight - effectiveViewportSize.height());
 
     int maxPanX_scaled = maxPanX * 110 / dps / zoom;
     int maxPanY_scaled = maxPanY * 110 / dps / zoom;  // Here I intentionally changed 100 to 110. 
 
+    // Set range to 0 when canvas is smaller than viewport (centered)
+    if (scaledCanvasWidth <= effectiveViewportSize.width()) {
+        panXSlider->setRange(0, 0);
+        panXSlider->setValue(0);
+        // No need for horizontal scrollbar
+        panXSlider->setVisible(false);
+    } else {
     panXSlider->setRange(0, maxPanX_scaled);
+        // Show scrollbar only if mouse is near and timeout hasn't occurred
+        if (scrollbarsVisible && !scrollbarHideTimer->isActive()) {
+            scrollbarHideTimer->start();
+        }
+    }
+    
+    if (scaledCanvasHeight <= effectiveViewportSize.height()) {
+        panYSlider->setRange(0, 0);
+        panYSlider->setValue(0);
+        // No need for vertical scrollbar
+        panYSlider->setVisible(false);
+    } else {
     panYSlider->setRange(0, maxPanY_scaled);
+        // Show scrollbar only if mouse is near and timeout hasn't occurred
+        if (scrollbarsVisible && !scrollbarHideTimer->isActive()) {
+            scrollbarHideTimer->start();
+        }
+    }
 }
 
 void MainWindow::updatePanX(int value) {
@@ -803,6 +1058,24 @@ void MainWindow::updatePanX(int value) {
     if (canvas) {
         canvas->setPanX(value);
         canvas->setLastPanX(value);  // ✅ Store panX per tab
+        
+        // Show horizontal scrollbar temporarily
+        if (panXSlider->maximum() > 0) {
+            panXSlider->setVisible(true);
+            scrollbarsVisible = true;
+            
+            // Make sure scrollbar position matches the canvas position
+            if (panXSlider->value() != value) {
+                panXSlider->blockSignals(true);
+                panXSlider->setValue(value);
+                panXSlider->blockSignals(false);
+            }
+            
+            if (scrollbarHideTimer->isActive()) {
+                scrollbarHideTimer->stop();
+            }
+            scrollbarHideTimer->start();
+        }
     }
 }
 
@@ -811,6 +1084,24 @@ void MainWindow::updatePanY(int value) {
     if (canvas) {
         canvas->setPanY(value);
         canvas->setLastPanY(value);  // ✅ Store panY per tab
+        
+        // Show vertical scrollbar temporarily
+        if (panYSlider->maximum() > 0) {
+            panYSlider->setVisible(true);
+            scrollbarsVisible = true;
+            
+            // Make sure scrollbar position matches the canvas position
+            if (panYSlider->value() != value) {
+                panYSlider->blockSignals(true);
+                panYSlider->setValue(value);
+                panYSlider->blockSignals(false);
+            }
+            
+            if (scrollbarHideTimer->isActive()) {
+                scrollbarHideTimer->stop();
+            }
+            scrollbarHideTimer->start();
+        }
     }
 }
 void MainWindow::applyZoom() {
@@ -828,22 +1119,37 @@ void MainWindow::forceUIRefresh() {
 }
 
 void MainWindow::loadPdf() {
-    QString filePath = QFileDialog::getOpenFileName(this, "Select PDF", "", "PDF Files (*.pdf)");
+    InkCanvas *canvas = currentCanvas();
+    if (!canvas) return;
+
+    QString saveFolder = canvas->getSaveFolder();
+    QString tempDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/temp_session";
+    
+    // Check if no save folder is set or if it's the temporary directory
+    if (saveFolder.isEmpty() || saveFolder == tempDir) {
+        QMessageBox::warning(this, tr("Cannot Load PDF"), 
+            tr("Please select a permanent save folder before loading a PDF.\n\nClick the folder icon to choose a location for your notebook."));
+        return;
+    }
+
+    QString filePath = QFileDialog::getOpenFileName(this, tr("Select PDF"), "", "PDF Files (*.pdf)");
     if (!filePath.isEmpty()) {
         currentCanvas()->loadPdf(filePath);
-
         updateTabLabel(); // ✅ Update the tab name after assigning a PDF
     }
 }
 
 void MainWindow::clearPdf() {
-    currentCanvas()->clearPdf();
+    InkCanvas *canvas = currentCanvas();
+    if (!canvas) return;
+    
+    canvas->clearPdf();
 }
 
 
 void MainWindow::switchTab(int index) {
     if (!canvasStack || !tabList || !pageInput || !zoomSlider || !panXSlider || !panYSlider) {
-        // qDebug() << "Error: switchTab() called before UI was fully initialized!";
+        qDebug() << "Error: switchTab() called before UI was fully initialized!";
         return;
     }
 
@@ -880,6 +1186,11 @@ void MainWindow::switchTab(int index) {
                 updatePanRange();
             }
             updateDialDisplay();
+            updateColorButtonStates();  // Update button states when switching tabs
+            updateStraightLineButtonState();  // Update straight line button state when switching tabs
+            updateRopeToolButtonState(); // Update rope tool button state when switching tabs
+            updateDialButtonState();     // Update dial button state when switching tabs
+            updateFastForwardButtonState(); // Update fast forward button state when switching tabs
         }
     }
 }
@@ -890,6 +1201,7 @@ void MainWindow::addNewTab() {
 
     int newTabIndex = tabList->count();  // New tab index
     QWidget *tabWidget = new QWidget();  // Custom tab container
+    tabWidget->setObjectName("tabWidget"); // Name the widget for easy retrieval later
     QHBoxLayout *tabLayout = new QHBoxLayout(tabWidget);
     tabLayout->setContentsMargins(5, 2, 5, 2);
 
@@ -906,19 +1218,97 @@ void MainWindow::addNewTab() {
     closeButton->setIcon(QIcon(":/resources/icons/cross.png")); // Set icon
     closeButton->setStyleSheet("QPushButton { border: none; background: transparent; }"); // Hide button border
     
+    // ✅ Create new InkCanvas instance EARLIER so it can be captured by the lambda
+    InkCanvas *newCanvas = new InkCanvas(this);
+    
     // ✅ Handle tab closing when the button is clicked
-    connect(closeButton, &QPushButton::clicked, this, [=]() {
+    connect(closeButton, &QPushButton::clicked, this, [=]() { // newCanvas is now captured
 
-        // Find the item associated with this button's parent (tabWidget)
+        // Prevent closing if it's the last remaining tab
+        if (tabList->count() <= 1) {
+            // Optional: show a message or do nothing silently
+            QMessageBox::information(this, tr("Notice"), tr("At least one tab must remain open."));
+
+            return;
+        }
+
+        // Find the index of the tab associated with this button's parent (tabWidget)
+        int indexToRemove = -1;
+        // newCanvas is captured by the lambda, representing the canvas of the tab being closed.
+        // tabWidget is also captured.
         for (int i = 0; i < tabList->count(); ++i) {
-            QListWidgetItem *item = tabList->item(i);
-            QWidget *widget = tabList->itemWidget(item);
-            if (widget == tabWidget) {
-                removeTabAt(i);
-                return;
+            if (tabList->itemWidget(tabList->item(i)) == tabWidget) {
+                indexToRemove = i;
+                break;
             }
         }
+
+        if (indexToRemove == -1) {
+            qWarning() << "Could not find tab to remove based on tabWidget.";
+            // Fallback or error handling if needed, though this shouldn't happen if tabWidget is valid.
+            // As a fallback, try to find the index based on newCanvas if lists are in sync.
+            for (int i = 0; i < canvasStack->count(); ++i) {
+                if (canvasStack->widget(i) == newCanvas) {
+                    indexToRemove = i;
+                    break;
+                }
+            }
+            if (indexToRemove == -1) {
+                 qWarning() << "Could not find tab to remove based on newCanvas either.";
+                 return; // Critical error, cannot proceed.
+            }
+        }
+        
+        // At this point, newCanvas is the InkCanvas instance for the tab being closed.
+        // And indexToRemove is its index in tabList and canvasStack.
+
+        // 1. Ensure the notebook has a unique save folder if it's temporary/edited
+        ensureTabHasUniqueSaveFolder(newCanvas); // Pass the specific canvas
+
+        // 2. Get the final save folder path
+        QString folderPath = newCanvas->getSaveFolder();
+        QString tempDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/temp_session";
+
+        // 3. Update cover preview and recent list if it's a permanent notebook
+        if (!folderPath.isEmpty() && folderPath != tempDir && recentNotebooksManager) {
+            recentNotebooksManager->generateAndSaveCoverPreview(folderPath, newCanvas);
+            // Add/update in recent list. This also moves it to the top.
+            recentNotebooksManager->addRecentNotebook(folderPath, newCanvas);
+        }
+        
+        // 4. Update the tab's label directly as folderPath might have changed
+        QLabel *label = tabWidget->findChild<QLabel*>("tabLabel");
+        if (label) {
+            QString tabNameText;
+            if (!folderPath.isEmpty() && folderPath != tempDir) { // Only for permanent notebooks
+                QString metadataFile = folderPath + "/.pdf_path.txt";
+                if (QFile::exists(metadataFile)) {
+                    QFile file(metadataFile);
+                    if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                        QTextStream in(&file);
+                        QString pdfPath = in.readLine().trimmed();
+                        file.close();
+                        if (QFile::exists(pdfPath)) { // Check if PDF file actually exists
+                            tabNameText = QFileInfo(pdfPath).fileName();
+                        }
+                    }
+                }
+                // Fallback to folder name if no PDF or PDF path invalid
+                if (tabNameText.isEmpty()) {
+                    tabNameText = QFileInfo(folderPath).fileName();
+                }
+            }
+            // Only update the label if a new valid name was determined.
+            // If it's still a temp folder, the original "Tab X" label remains appropriate.
+            if (!tabNameText.isEmpty()) {
+                label->setText(tabNameText);
+            }
+        }
+
+        // 5. Remove the tab
+        removeTabAt(indexToRemove);
     });
+
 
     // ✅ Add widgets to the tab layout
     tabLayout->addWidget(tabLabel);
@@ -932,9 +1322,20 @@ void MainWindow::addNewTab() {
     tabList->addItem(tabItem);
     tabList->setItemWidget(tabItem, tabWidget);  // Attach tab layout
 
-    // ✅ Create new InkCanvas instance
-    InkCanvas *newCanvas = new InkCanvas(this);
     canvasStack->addWidget(newCanvas);
+
+    // ✅ Connect touch gesture signals
+    connect(newCanvas, &InkCanvas::zoomChanged, this, &MainWindow::handleTouchZoomChange);
+    connect(newCanvas, &InkCanvas::panChanged, this, &MainWindow::handleTouchPanChange);
+    connect(newCanvas, &InkCanvas::touchGestureEnded, this, &MainWindow::handleTouchGestureEnd);
+    
+    // Install event filter to detect mouse movement for scrollbar visibility
+    newCanvas->setMouseTracking(true);
+    newCanvas->setAttribute(Qt::WA_TabletTracking, true); // Enable tablet tracking
+    newCanvas->installEventFilter(this);
+    
+    // ✅ Apply touch gesture setting
+    newCanvas->setTouchGesturesEnabled(touchGesturesEnabled);
 
     pageMap[newCanvas] = 0;
 
@@ -944,13 +1345,20 @@ void MainWindow::addNewTab() {
 
     zoomSlider->setValue(100 / initialDpr); // Set initial zoom level based on DPR
     updateDialDisplay();
+    updateStraightLineButtonState();  // Initialize straight line button state for the new tab
+    updateRopeToolButtonState(); // Initialize rope tool button state for the new tab
+    updateDialButtonState();     // Initialize dial button state for the new tab
+    updateFastForwardButtonState(); // Initialize fast forward button state for the new tab
 
     QString tempDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/temp_session";
     newCanvas->setSaveFolder(tempDir);
     newCanvas->setBackgroundStyle(BackgroundStyle::Grid);
     newCanvas->setBackgroundColor(Qt::white);
     newCanvas->setBackgroundDensity(30);  // The default bg settings are here
+    newCanvas->setPDFRenderDPI(getPdfDPI());
     
+    // Update color button states for the new tab
+    updateColorButtonStates();
 }
 
 
@@ -963,10 +1371,20 @@ void MainWindow::removeTabAt(int index) {
     delete item;
 
     // ✅ Remove and delete the canvas safely
-    QWidget *canvas = canvasStack->widget(index);
-    if (canvas) {
-        canvasStack->removeWidget(canvas);
-        delete canvas;
+    QWidget *canvasWidget = canvasStack->widget(index); // Get widget before removal
+    // ensureTabHasUniqueSaveFolder(currentCanvas()); // Moved to the close button lambda
+
+    if (canvasWidget) {
+        canvasStack->removeWidget(canvasWidget); // Remove from stack
+        // InkCanvas *canvasInstance = qobject_cast<InkCanvas*>(canvasWidget);
+        // if (canvasInstance) {
+        //     QString folderPath = canvasInstance->getSaveFolder();
+        //     QString tempDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/temp_session";
+        //     if (!folderPath.isEmpty() && folderPath != tempDir && recentNotebooksManager) {
+        //         recentNotebooksManager->addRecentNotebook(folderPath, canvasInstance); // Moved to close button lambda
+        //     }
+        // }
+        delete canvasWidget; // Now delete the widget (and its InkCanvas)
     }
 
     // ✅ Select the previous tab (or first tab if none left)
@@ -975,7 +1393,67 @@ void MainWindow::removeTabAt(int index) {
         tabList->setCurrentRow(newIndex);
         canvasStack->setCurrentWidget(canvasStack->widget(newIndex));
     }
+
+    // QWidget *canvasWidget = canvasStack->widget(index); // Redeclaration - remove this block
+    // InkCanvas *canvasInstance = qobject_cast<InkCanvas*>(canvasWidget);
+    //
+    // if (canvasInstance) {
+    //     QString folderPath = canvasInstance->getSaveFolder();
+    //     if (!folderPath.isEmpty() && folderPath != QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/temp_session") {
+    //         // recentNotebooksManager->addRecentNotebook(folderPath, canvasInstance); // Moved to close button lambda
+    //     }
+    // }
 }
+
+void MainWindow::ensureTabHasUniqueSaveFolder(InkCanvas* canvas) {
+    if (!canvas) return;
+
+    if (canvasStack->count() == 0) return;
+
+    QString currentFolder = canvas->getSaveFolder();
+    QString tempFolder = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/temp_session";
+
+    if (currentFolder.isEmpty() || currentFolder == tempFolder) {
+
+        QDir sourceDir(tempFolder);
+        QStringList pageFiles = sourceDir.entryList(QStringList() << "*.png", QDir::Files);
+
+        // No pages to save → skip prompting
+        if (pageFiles.isEmpty()) {
+            return;
+        }
+
+        QMessageBox::warning(this, tr("Unsaved Notebook"),
+                             tr("This notebook is still using a temporary session folder.\nPlease select a permanent folder to avoid data loss."));
+
+        QString selectedFolder = QFileDialog::getExistingDirectory(this, tr("Select Save Folder"));
+        if (selectedFolder.isEmpty()) return;
+
+        QDir destDir(selectedFolder);
+        if (!destDir.exists()) {
+            QDir().mkpath(selectedFolder);
+        }
+
+        // Copy contents from temp to selected folder
+        for (const QString &file : sourceDir.entryList(QDir::Files)) {
+            QString srcFilePath = tempFolder + "/" + file;
+            QString dstFilePath = selectedFolder + "/" + file;
+
+            // If file already exists at destination, remove it to avoid rename failure
+            if (QFile::exists(dstFilePath)) {
+                QFile::remove(dstFilePath);
+            }
+
+            QFile::rename(srcFilePath, dstFilePath);  // This moves the file
+        }
+
+        canvas->setSaveFolder(selectedFolder);
+        // updateTabLabel(); // No longer needed here, handled by the close button lambda
+    }
+
+    return;
+}
+
 
 
 InkCanvas* MainWindow::currentCanvas() {
@@ -1091,6 +1569,7 @@ void MainWindow::toggleDial() {
     if (!dialContainer) {  
         // ✅ Create floating container for the dial
         dialContainer = new QWidget(this);
+        dialContainer->setObjectName("dialContainer");
         dialContainer->setFixedSize(140, 140);
         dialContainer->setAttribute(Qt::WA_TranslucentBackground);
         dialContainer->setAttribute(Qt::WA_NoSystemBackground);
@@ -1099,12 +1578,20 @@ void MainWindow::toggleDial() {
         dialContainer->setStyleSheet("background: transparent; border-radius: 100px;");  // ✅ More transparent
 
         // ✅ Create dial
+        QPalette palette = QGuiApplication::palette();
+        QColor highlightColor = palette.highlight().color();  // System highlight color
+
         pageDial = new QDial(dialContainer);
         pageDial->setFixedSize(140, 140);
         pageDial->setMinimum(0);
         pageDial->setMaximum(360);
         pageDial->setWrapping(true);  // ✅ Allow full-circle rotation
-        pageDial->setStyleSheet("background:rgba(85, 3, 144, 0);");
+        // pageDial->setStyleSheet("background:rgb(255, 255, 255);");
+        pageDial->setStyleSheet(QString(R"(
+        QDial {
+            background-color: %1;
+            }
+        )").arg(highlightColor.name()));
 
         /*
 
@@ -1140,6 +1627,7 @@ void MainWindow::toggleDial() {
         
 
         int fontId = QFontDatabase::addApplicationFont(":/resources/fonts/Jersey20-Regular.ttf");
+        // int chnFontId = QFontDatabase::addApplicationFont(":/resources/fonts/NotoSansSC-Medium.ttf");
         QStringList fontFamilies = QFontDatabase::applicationFontFamilies(fontId);
 
         if (!fontFamilies.isEmpty()) {
@@ -1156,10 +1644,7 @@ void MainWindow::toggleDial() {
         dialHiddenButton->setFocusPolicy(Qt::NoFocus); // ✅ Prevents accidental focus issues
         dialHiddenButton->setEnabled(false);  // ✅ Disabled by default
 
-        // ✅ Connect to channel switching function
-        connect(dialHiddenButton, &QPushButton::clicked, this, &MainWindow::cycleColorChannel);
-
-
+        // ✅ Connection will be set in changeDialMode() based on current mode
 
         dialColorPreview->raise();  // ✅ Ensure it's on top
         dialIconView->raise();
@@ -1179,7 +1664,7 @@ void MainWindow::toggleDial() {
         dialContainer->setVisible(!dialContainer->isVisible());
     }
 
-    initializeDialSound();  // ✅ Ensure sound is loaded
+    // initializeDialSound();  // ✅ Ensure sound is loaded
 
     // Inside toggleDial():
     
@@ -1198,6 +1683,8 @@ void MainWindow::toggleDial() {
 
     loadButtonMappings();  // ✅ Load button mappings for the controller
 
+    // Update button state to reflect dial visibility
+    updateDialButtonState();
 }
 
 void MainWindow::updateDialDisplay() {
@@ -1205,36 +1692,37 @@ void MainWindow::updateDialDisplay() {
     if (!dialColorPreview) return;
     if (!dialIconView) return;
     dialIconView->show();
+    qreal dpr = initialDpr;
     QColor currentColor = currentCanvas()->getPenColor();
     switch (currentDialMode) {
         case DialMode::PageSwitching:
             if (fastForwardMode){
-                dialDisplay->setText(QString("\n\nPage\n%1").arg(getCurrentPageForCanvas(currentCanvas()) + 1 + tempClicks * 8));
+                dialDisplay->setText(QString(tr("\n\nPage\n%1").arg(getCurrentPageForCanvas(currentCanvas()) + 1 + tempClicks * 8)));
             }
             else {
-                dialDisplay->setText(QString("\n\nPage\n%1").arg(getCurrentPageForCanvas(currentCanvas()) + 1 + tempClicks));
+                dialDisplay->setText(QString(tr("\n\nPage\n%1").arg(getCurrentPageForCanvas(currentCanvas()) + 1 + tempClicks)));
             }
             dialIconView->setPixmap(QPixmap(":/resources/reversed_icons/bookpage_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
             break;
         case DialMode::ThicknessControl:
-            dialDisplay->setText(QString("\n\nThickness\n%1").arg(currentCanvas()->getPenThickness()));
+            dialDisplay->setText(QString(tr("\n\nThickness\n%1").arg(currentCanvas()->getPenThickness())));
             dialIconView->setPixmap(QPixmap(":/resources/reversed_icons/thickness_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
             break;
         case DialMode::ZoomControl:
-            dialDisplay->setText(QString("\n\nZoom\n%1%").arg(zoomSlider->value()));
+            dialDisplay->setText(QString(tr("\n\nZoom\n%1%").arg(zoomSlider->value() * initialDpr)));
             dialIconView->setPixmap(QPixmap(":/resources/reversed_icons/zoom_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
             break;
         case DialMode::ColorAdjustment:
             dialIconView->hide();
             switch (selectedChannel) {
                 case 0:
-                    dialDisplay->setText(QString("\n\nAdjust Red\n#%1").arg(currentCanvas()->getPenColor().name().remove("#")));
+                    dialDisplay->setText(QString(tr("\n\nAdjust Red\n#%1").arg(currentCanvas()->getPenColor().name().remove("#"))));
                     break;
                 case 1:
-                    dialDisplay->setText(QString("\n\nAdjust Green\n#%1").arg(currentCanvas()->getPenColor().name().remove("#")));
+                    dialDisplay->setText(QString(tr("\n\nAdjust Green\n#%1").arg(currentCanvas()->getPenColor().name().remove("#"))));
                     break;
                 case 2:
-                    dialDisplay->setText(QString("\n\nAdjust Blue\n#%1").arg(currentCanvas()->getPenColor().name().remove("#")));
+                    dialDisplay->setText(QString(tr("\n\nAdjust Blue\n#%1").arg(currentCanvas()->getPenColor().name().remove("#"))));
                     break;
             }
             // dialDisplay->setText(QString("\n\nPen Color\n#%1").arg(currentCanvas()->getPenColor().name().remove("#")));
@@ -1244,15 +1732,15 @@ void MainWindow::updateDialDisplay() {
             // ✅ Convert ToolType to QString for display
             switch (currentCanvas()->getCurrentTool()) {
                 case ToolType::Pen:
-                    dialDisplay->setText("\n\n\nPen");
+                    dialDisplay->setText(tr("\n\n\nPen"));
                     dialIconView->setPixmap(QPixmap(":/resources/reversed_icons/pen_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
                     break;
                 case ToolType::Marker:
-                    dialDisplay->setText("\n\n\nMarker");
+                    dialDisplay->setText(tr("\n\n\nMarker"));
                     dialIconView->setPixmap(QPixmap(":/resources/reversed_icons/marker_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
                     break;
                 case ToolType::Eraser:
-                    dialDisplay->setText("\n\n\nEraser");
+                    dialDisplay->setText(tr("\n\n\nEraser"));
                     dialIconView->setPixmap(QPixmap(":/resources/reversed_icons/eraser_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
                     break;
             }
@@ -1262,14 +1750,15 @@ void MainWindow::updateDialDisplay() {
             dialIconView->hide();
             dialColorPreview->setStyleSheet(QString("background-color: %1; border-radius: 15px; border: 1px solid black;")
                                             .arg(colorPresets[currentPresetIndex].name()));
-            dialDisplay->setText(QString("\n\nPreset %1\n#%2")
+            dialDisplay->setText(QString(tr("\n\nPreset %1\n#%2"))
                                             .arg(currentPresetIndex + 1)  // ✅ Display preset index (1-based)
                                             .arg(colorPresets[currentPresetIndex].name().remove("#"))); // ✅ Display hex color
             // dialIconView->setPixmap(QPixmap(":/resources/reversed_icons/preset_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
             break;
         case DialMode::PanAndPageScroll:
             dialIconView->setPixmap(QPixmap(":/resources/icons/scroll_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-            dialDisplay->setText(QString("\n\nPage\n%1").arg(getCurrentPageForCanvas(currentCanvas()) + 1));
+            QString fullscreenStatus = controlBarVisible ? tr("Etr") : tr("Exit");
+            dialDisplay->setText(QString(tr("\n\nPage %1\n%2 FulScr")).arg(getCurrentPageForCanvas(currentCanvas()) + 1).arg(fullscreenStatus));
             break;
     }
 }
@@ -1324,24 +1813,24 @@ void MainWindow::handleDialInput(int angle) {
 
     if (currentClicks != previousClicks) {  // ✅ Play sound if a new boundary is crossed
         
-        if (dialClickSound) {
-            // dialClickSound->play();
-    
-            // ✅ Vibrate controller
-            SDL_GameController *controller = controllerManager->getController();
-            if (controller) {
-                SDL_GameControllerRumble(controller, 0xA000, 0xF000, 10);  // Vibrate shortly
-            }
-    
-            grossTotalClicks += 1;
-            tempClicks = currentClicks;
-            updateDialDisplay();
-    
-            if (isLowResPreviewEnabled()) {
-                int previewPage = qBound(1, getCurrentPageForCanvas(currentCanvas()) + currentClicks, 99999);
-                currentCanvas()->loadPdfPreviewAsync(previewPage);
-            }
+        
+        // dialClickSound->play();
+
+        // ✅ Vibrate controller
+        SDL_GameController *controller = controllerManager->getController();
+        if (controller) {
+            SDL_GameControllerRumble(controller, 0xA000, 0xF000, 10);  // Vibrate shortly
         }
+
+        grossTotalClicks += 1;
+        tempClicks = currentClicks;
+        updateDialDisplay();
+
+        if (isLowResPreviewEnabled()) {
+            int previewPage = qBound(1, getCurrentPageForCanvas(currentCanvas()) + currentClicks, 99999);
+            currentCanvas()->loadPdfPreviewAsync(previewPage);
+        }
+        
     }
 
     lastAngle = angle;  // ✅ Store last position
@@ -1367,7 +1856,7 @@ void MainWindow::onDialReleased() {
     
 
     if (totalClicks != 0 || grossTotalClicks != 0) {  // ✅ Only switch pages if movement happened
-        saveCurrentPage(); // autosave
+        // saveCurrentPage(); // autosave
 
         int currentPage = getCurrentPageForCanvas(currentCanvas()) + 1;
         int newPage = qBound(1, currentPage + totalClicks * pagesToAdvance, 99999);
@@ -1406,9 +1895,12 @@ void MainWindow::handleToolSelection(int angle) {
         lastToolIndex = toolIndex;  // ✅ Update last selected tool
 
         // ✅ Play click sound when tool changes
+        /*
         if (dialClickSound) {
-            // dialClickSound->play();
+            dialClickSound->play();
         }
+        */
+        
 
         SDL_GameController *controller = controllerManager->getController();
 
@@ -1433,6 +1925,76 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
     static QPoint lastMousePos;
     static QTimer *longPressTimer = nullptr;
 
+    // Handle resize events for canvas container
+    QWidget *container = canvasStack ? canvasStack->parentWidget() : nullptr;
+    if (obj == container && event->type() == QEvent::Resize) {
+        updateScrollbarPositions();
+        return false; // Let the event propagate
+    }
+
+    // Handle scrollbar visibility
+    if (obj == panXSlider || obj == panYSlider) {
+        if (event->type() == QEvent::Enter) {
+            // Mouse entered scrollbar area
+            if (scrollbarHideTimer->isActive()) {
+                scrollbarHideTimer->stop();
+            }
+            return false;
+        } 
+        else if (event->type() == QEvent::Leave) {
+            // Mouse left scrollbar area - start timer to hide
+            if (!scrollbarHideTimer->isActive()) {
+                scrollbarHideTimer->start();
+            }
+            return false;
+        }
+    }
+
+    // Check if this is a canvas event for scrollbar handling
+    InkCanvas* canvas = qobject_cast<InkCanvas*>(obj);
+    if (canvas) {
+        // Handle mouse movement for scrollbar visibility
+        if (event->type() == QEvent::MouseMove) {
+            QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
+            handleEdgeProximity(canvas, mouseEvent->pos());
+        }
+        // Handle tablet events for stylus hover
+        else if (event->type() == QEvent::TabletMove) {
+            QTabletEvent* tabletEvent = static_cast<QTabletEvent*>(event);
+            handleEdgeProximity(canvas, tabletEvent->pos());
+        }
+        // Handle wheel events for scrolling
+        else if (event->type() == QEvent::Wheel) {
+            QWheelEvent* wheelEvent = static_cast<QWheelEvent*>(event);
+            
+            // Show scrollbars when mouse wheel is used
+            bool needHorizontalScroll = panXSlider->maximum() > 0;
+            bool needVerticalScroll = panYSlider->maximum() > 0;
+            
+            if (wheelEvent->angleDelta().y() != 0 && needVerticalScroll) {
+                panYSlider->setVisible(true);
+                scrollbarsVisible = true;
+                if (scrollbarHideTimer->isActive()) {
+                    scrollbarHideTimer->stop();
+                }
+                scrollbarHideTimer->start();
+            }
+            
+            if (wheelEvent->angleDelta().x() != 0 && needHorizontalScroll) {
+                panXSlider->setVisible(true);
+                scrollbarsVisible = true;
+                if (scrollbarHideTimer->isActive()) {
+                    scrollbarHideTimer->stop();
+                }
+                scrollbarHideTimer->start();
+            }
+            
+            // Let the event propagate for normal scrolling
+            return false;
+        }
+    }
+
+    // Handle dial container drag events
     if (obj == dialContainer) {
         if (event->type() == QEvent::MouseButtonPress) {
             QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
@@ -1468,6 +2030,7 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
     return QObject::eventFilter(obj, event);
 }
 
+/*
 
 void MainWindow::initializeDialSound() {
     if (!dialClickSound) {
@@ -1476,18 +2039,29 @@ void MainWindow::initializeDialSound() {
         dialClickSound->setVolume(0.8);  // ✅ Set volume (0.0 - 1.0)
     }
 }
-
+*/
 void MainWindow::changeDialMode(DialMode mode) {
 
     if (!dialContainer) return;  // ✅ Ensure dial container exists
     currentDialMode = mode; // ✅ Set new mode
     updateDialDisplay();
 
-    dialHiddenButton->setEnabled(currentDialMode == ColorAdjustment);
+    // ✅ Enable dialHiddenButton for ColorAdjustment and PanAndPageScroll modes
+    dialHiddenButton->setEnabled(currentDialMode == ColorAdjustment || currentDialMode == PanAndPageScroll);
 
     // ✅ Disconnect previous slots
     disconnect(pageDial, &QDial::valueChanged, nullptr, nullptr);
     disconnect(pageDial, &QDial::sliderReleased, nullptr, nullptr);
+    
+    // ✅ Disconnect dialHiddenButton to reconnect with appropriate function
+    disconnect(dialHiddenButton, &QPushButton::clicked, nullptr, nullptr);
+    
+    // ✅ Connect dialHiddenButton to appropriate function based on mode
+    if (currentDialMode == ColorAdjustment) {
+        connect(dialHiddenButton, &QPushButton::clicked, this, &MainWindow::cycleColorChannel);
+    } else if (currentDialMode == PanAndPageScroll) {
+        connect(dialHiddenButton, &QPushButton::clicked, this, &MainWindow::toggleControlBar);
+    }
 
     dialColorPreview->hide();
     dialDisplay->setStyleSheet("background-color: black; color: white; font-size: 14px; border-radius: 40px;");
@@ -1545,12 +2119,12 @@ void MainWindow::handleDialZoom(int angle) {
 
     accumulatedRotation += delta;
 
-    if (abs(delta) < 3) {  
+    if (abs(delta) < 4) {  
         return;  
     }
 
     // ✅ Apply zoom dynamically (instead of waiting for release)
-    int newZoom = qBound(20, zoomSlider->value() + (delta / 4), 250);  
+    int newZoom = qBound(10, zoomSlider->value() + (delta / 4), 400);  
     zoomSlider->setValue(newZoom);
     updateZoom();  // ✅ Ensure zoom updates immediately
     updateDialDisplay(); 
@@ -1621,7 +2195,7 @@ void MainWindow::handleDialPanScroll(int angle) {
 void MainWindow::onPanScrollReleased() {
     // ✅ Perform page flip only when dial released and flip is pending
     if (pendingPageFlip != 0) {
-        saveCurrentPage();
+        // saveCurrentPage();
 
         int currentPage = getCurrentPageForCanvas(currentCanvas());
         int newPage = qBound(1, currentPage + pendingPageFlip + 1, 99999);
@@ -1689,9 +2263,9 @@ void MainWindow::handlePresetSelection(int angle) {
         
         QColor selectedColor = colorPresets[currentPresetIndex];
         currentCanvas()->setPenColor(selectedColor);
-        customColorButton->setText(selectedColor.name().toUpper());
-        customColorButton->setStyleSheet(QString("background-color: %1").arg(selectedColor.name()));
+        updateCustomColorButtonStyle(selectedColor);
         updateDialDisplay();
+        updateColorButtonStates();  // Update button states when preset is selected
         
         // if (dialClickSound) dialClickSound->play();  // ✅ Provide feedback
         SDL_GameController *controller = controllerManager->getController();
@@ -1739,9 +2313,9 @@ void MainWindow::handleDialColor(int angle) {
     }
 
     currentCanvas()->setPenColor(color);
-    customColorButton->setText(color.name().toUpper());
-    customColorButton->setStyleSheet(QString("background-color: %1").arg(color.name()));
+    updateCustomColorButtonStyle(color);
     updateDialDisplay(); 
+    updateColorButtonStates();  // Update button states when color is adjusted
 
     colorPreview->setStyleSheet(QString("border-radius: 15px; border: 1px solid black; background-color: %1;").arg(color.name()));
     
@@ -1814,16 +2388,64 @@ void MainWindow::setBenchmarkControlsVisible(bool visible) {
     benchmarkLabel->setVisible(visible);
 }
 
+bool MainWindow::areColorButtonsVisible() const {
+    return colorButtonsVisible;
+}
+
+void MainWindow::setColorButtonsVisible(bool visible) {
+    // redButton->setVisible(visible);
+    // blueButton->setVisible(visible);
+    yellowButton->setVisible(visible);
+    greenButton->setVisible(visible);
+    // blackButton->setVisible(visible);
+    whiteButton->setVisible(visible);
+
+    QSettings settings("SpeedyNote", "App");
+    settings.setValue("colorButtonsVisible", visible);
+    
+    // Update colorButtonsVisible flag and trigger layout update
+    colorButtonsVisible = visible;
+    
+    // Trigger layout update to adjust responsive thresholds
+    if (layoutUpdateTimer) {
+        layoutUpdateTimer->stop();
+        layoutUpdateTimer->start(50); // Quick update for settings change
+    } else {
+        updateToolbarLayout(); // Direct update if no timer exists yet
+    }
+}
+
+
+
 bool MainWindow::isScrollOnTopEnabled() const {
     return scrollOnTopEnabled;
 }
 
 void MainWindow::setScrollOnTopEnabled(bool enabled) {
     scrollOnTopEnabled = enabled;
+
+    QSettings settings("SpeedyNote", "App");
+    settings.setValue("scrollOnTopEnabled", enabled);
 }
 
+bool MainWindow::areTouchGesturesEnabled() const {
+    return touchGesturesEnabled;
+}
 
-
+void MainWindow::setTouchGesturesEnabled(bool enabled) {
+    touchGesturesEnabled = enabled;
+    
+    // Apply to all canvases
+    for (int i = 0; i < canvasStack->count(); ++i) {
+        InkCanvas *canvas = qobject_cast<InkCanvas*>(canvasStack->widget(i));
+        if (canvas) {
+            canvas->setTouchGesturesEnabled(enabled);
+        }
+    }
+    
+    QSettings settings("SpeedyNote", "App");
+    settings.setValue("touchGesturesEnabled", enabled);
+}
 
 void MainWindow::setTemporaryDialMode(DialMode mode) {
     if (temporaryDialMode == None) {
@@ -1867,14 +2489,20 @@ void MainWindow::setPressMapping(const QString &buttonName, const QString &actio
 
 
 DialMode MainWindow::dialModeFromString(const QString &mode) {
-    if (mode == "PageSwitching") return PageSwitching;
-    if (mode == "ZoomControl") return ZoomControl;
-    if (mode == "ThicknessControl") return ThicknessControl;
-    if (mode == "ColorAdjustment") return ColorAdjustment;
-    if (mode == "ToolSwitching") return ToolSwitching;
-    if (mode == "PresetSelection") return PresetSelection;
-    if (mode == "PanAndPageScroll") return PanAndPageScroll;
-    return PanAndPageScroll;
+    // Convert internal key to our existing DialMode enum
+    InternalDialMode internalMode = ButtonMappingHelper::internalKeyToDialMode(mode);
+    
+    switch (internalMode) {
+        case InternalDialMode::None: return PageSwitching; // Default fallback
+        case InternalDialMode::PageSwitching: return PageSwitching;
+        case InternalDialMode::ZoomControl: return ZoomControl;
+        case InternalDialMode::ThicknessControl: return ThicknessControl;
+        case InternalDialMode::ColorAdjustment: return ColorAdjustment;
+        case InternalDialMode::ToolSwitching: return ToolSwitching;
+        case InternalDialMode::PresetSelection: return PresetSelection;
+        case InternalDialMode::PanAndPageScroll: return PanAndPageScroll;
+    }
+    return PanAndPageScroll;  // Default fallback
 }
 
 // MainWindow.cpp
@@ -1906,25 +2534,137 @@ void MainWindow::saveButtonMappings() {
 void MainWindow::loadButtonMappings() {
     QSettings settings("SpeedyNote", "App");
 
+    // First, check if we need to migrate old settings
+    migrateOldButtonMappings();
+
     settings.beginGroup("ButtonHoldMappings");
     QStringList holdKeys = settings.allKeys();
     for (const QString &key : holdKeys) {
-        buttonHoldMapping[key] = settings.value(key, "None").toString();
+        buttonHoldMapping[key] = settings.value(key, "none").toString();
     }
     settings.endGroup();
 
     settings.beginGroup("ButtonPressMappings");
     QStringList pressKeys = settings.allKeys();
     for (const QString &key : pressKeys) {
-        QString value = settings.value(key, "None").toString();
+        QString value = settings.value(key, "none").toString();
         buttonPressMapping[key] = value;
 
-        // ✅ ADD THIS LINE
+        // ✅ Convert internal key to action enum
         buttonPressActionMapping[key] = stringToAction(value);
     }
     settings.endGroup();
 }
 
+void MainWindow::migrateOldButtonMappings() {
+    QSettings settings("SpeedyNote", "App");
+    
+    // Check if migration is needed by looking for old format strings
+    settings.beginGroup("ButtonHoldMappings");
+    QStringList holdKeys = settings.allKeys();
+    bool needsMigration = false;
+    
+    for (const QString &key : holdKeys) {
+        QString value = settings.value(key).toString();
+        // If we find old English strings, we need to migrate
+        if (value == "PageSwitching" || value == "ZoomControl" || value == "ThicknessControl" ||
+            value == "ColorAdjustment" || value == "ToolSwitching" || value == "PresetSelection" ||
+            value == "PanAndPageScroll") {
+            needsMigration = true;
+            break;
+        }
+    }
+    settings.endGroup();
+    
+    if (!needsMigration) {
+        settings.beginGroup("ButtonPressMappings");
+        QStringList pressKeys = settings.allKeys();
+        for (const QString &key : pressKeys) {
+            QString value = settings.value(key).toString();
+            // Check for old English action strings
+            if (value == "Toggle Fullscreen" || value == "Toggle Dial" || value == "Zoom 50%" ||
+                value == "Add Preset" || value == "Delete Page" || value == "Fast Forward" ||
+                value == "Open Control Panel" || value == "Custom Color") {
+                needsMigration = true;
+                break;
+            }
+        }
+        settings.endGroup();
+    }
+    
+    if (!needsMigration) return;
+    
+    // Perform migration
+    qDebug() << "Migrating old button mappings to new format...";
+    
+    // Migrate hold mappings
+    settings.beginGroup("ButtonHoldMappings");
+    holdKeys = settings.allKeys();
+    for (const QString &key : holdKeys) {
+        QString oldValue = settings.value(key).toString();
+        QString newValue = migrateOldDialModeString(oldValue);
+        if (newValue != oldValue) {
+            settings.setValue(key, newValue);
+        }
+    }
+    settings.endGroup();
+    
+    // Migrate press mappings
+    settings.beginGroup("ButtonPressMappings");
+    QStringList pressKeys = settings.allKeys();
+    for (const QString &key : pressKeys) {
+        QString oldValue = settings.value(key).toString();
+        QString newValue = migrateOldActionString(oldValue);
+        if (newValue != oldValue) {
+            settings.setValue(key, newValue);
+        }
+    }
+    settings.endGroup();
+    
+    qDebug() << "Button mapping migration completed.";
+}
+
+QString MainWindow::migrateOldDialModeString(const QString &oldString) {
+    // Convert old English strings to new internal keys
+    if (oldString == "None") return "none";
+    if (oldString == "PageSwitching") return "page_switching";
+    if (oldString == "ZoomControl") return "zoom_control";
+    if (oldString == "ThicknessControl") return "thickness_control";
+    if (oldString == "ColorAdjustment") return "color_adjustment";
+    if (oldString == "ToolSwitching") return "tool_switching";
+    if (oldString == "PresetSelection") return "preset_selection";
+    if (oldString == "PanAndPageScroll") return "pan_and_page_scroll";
+    return oldString; // Return as-is if not found (might already be new format)
+}
+
+QString MainWindow::migrateOldActionString(const QString &oldString) {
+    // Convert old English strings to new internal keys
+    if (oldString == "None") return "none";
+    if (oldString == "Toggle Fullscreen") return "toggle_fullscreen";
+    if (oldString == "Toggle Dial") return "toggle_dial";
+    if (oldString == "Zoom 50%") return "zoom_50";
+    if (oldString == "Zoom Out") return "zoom_out";
+    if (oldString == "Zoom 200%") return "zoom_200";
+    if (oldString == "Add Preset") return "add_preset";
+    if (oldString == "Delete Page") return "delete_page";
+    if (oldString == "Fast Forward") return "fast_forward";
+    if (oldString == "Open Control Panel") return "open_control_panel";
+    if (oldString == "Red") return "red_color";
+    if (oldString == "Blue") return "blue_color";
+    if (oldString == "Yellow") return "yellow_color";
+    if (oldString == "Green") return "green_color";
+    if (oldString == "Black") return "black_color";
+    if (oldString == "White") return "white_color";
+    if (oldString == "Custom Color") return "custom_color";
+    if (oldString == "Toggle Sidebar") return "toggle_sidebar";
+    if (oldString == "Save") return "save";
+    if (oldString == "Straight Line Tool") return "straight_line_tool";
+    if (oldString == "Rope Tool") return "rope_tool";
+    if (oldString == "Set Pen Tool") return "set_pen_tool";
+    if (oldString == "Set Marker Tool") return "set_marker_tool";
+    if (oldString == "Set Eraser Tool") return "set_eraser_tool";
+    return oldString; // Return as-is if not found (might already be new format)
+}
 
 void MainWindow::handleControllerButton(const QString &buttonName) {  // This is for single press functions
     ControllerAction action = buttonPressActionMapping.value(buttonName, ControllerAction::None);
@@ -1978,6 +2718,36 @@ void MainWindow::handleControllerButton(const QString &buttonName) {  // This is
         case ControllerAction::CustomColor:
             customColorButton->click();
             break;
+        case ControllerAction::ToggleSidebar:
+            toggleTabBarButton->click();
+            break;
+        case ControllerAction::Save:
+            saveButton->click();
+            break;
+        case ControllerAction::StraightLineTool:
+            straightLineToggleButton->click();
+            break;
+        case ControllerAction::RopeTool:
+            ropeToolButton->click();
+            break;
+        case ControllerAction::SetPenTool:
+            if (currentCanvas()) {
+                currentCanvas()->setTool(ToolType::Pen);
+                updateDialDisplay();
+            }
+            break;
+        case ControllerAction::SetMarkerTool:
+            if (currentCanvas()) {
+                currentCanvas()->setTool(ToolType::Marker);
+                updateDialDisplay();
+            }
+            break;
+        case ControllerAction::SetEraserTool:
+            if (currentCanvas()) {
+                currentCanvas()->setTool(ToolType::Eraser);
+                updateDialDisplay();
+            }
+            break;
         default:
             break;
     }
@@ -1986,10 +2756,10 @@ void MainWindow::handleControllerButton(const QString &buttonName) {  // This is
 
 void MainWindow::importNotebookFromFile(const QString &packageFile) {
 
-    QString destDir = QFileDialog::getExistingDirectory(this, "Select Working Directory for Notebook");
+    QString destDir = QFileDialog::getExistingDirectory(this, tr("Select Working Directory for Notebook"));
 
     if (destDir.isEmpty()) {
-        QMessageBox::warning(this, "Import Cancelled", "No directory selected. Notebook will not be opened.");
+        QMessageBox::warning(this, tr("Import Cancelled"), tr("No directory selected. Notebook will not be opened."));
         return;
     }
 
@@ -2001,4 +2771,767 @@ void MainWindow::importNotebookFromFile(const QString &packageFile) {
     // Change saveFolder in InkCanvas
     canvas->setSaveFolder(destDir);
     canvas->loadPage(0);
+}
+
+void MainWindow::setPdfDPI(int dpi) {
+    if (dpi != pdfRenderDPI) {
+        pdfRenderDPI = dpi;
+        savePdfDPI(dpi);
+
+        // Apply immediately to current canvas if needed
+        if (currentCanvas()) {
+            currentCanvas()->setPDFRenderDPI(dpi);
+            currentCanvas()->clearPdfCache();
+            currentCanvas()->loadPdfPage(getCurrentPageForCanvas(currentCanvas()));  // Optional: add this if needed
+            updateZoom();
+            updatePanRange();
+        }
+    }
+}
+
+void MainWindow::savePdfDPI(int dpi) {
+    QSettings settings("SpeedyNote", "App");
+    settings.setValue("pdfRenderDPI", dpi);
+}
+
+void MainWindow::loadUserSettings() {
+    QSettings settings("SpeedyNote", "App");
+
+    // Load low-res toggle
+    lowResPreviewEnabled = settings.value("lowResPreviewEnabled", true).toBool();
+    setLowResPreviewEnabled(lowResPreviewEnabled);
+
+    
+    colorButtonsVisible = settings.value("colorButtonsVisible", true).toBool();
+    setColorButtonsVisible(colorButtonsVisible);
+
+    scrollOnTopEnabled = settings.value("scrollOnTopEnabled", true).toBool();
+    setScrollOnTopEnabled(scrollOnTopEnabled);
+
+    touchGesturesEnabled = settings.value("touchGesturesEnabled", false).toBool();
+    setTouchGesturesEnabled(touchGesturesEnabled);
+    
+    // Load keyboard mappings
+    loadKeyboardMappings();
+}
+
+void MainWindow::toggleControlBar() {
+    // Proper fullscreen toggle: handle both sidebar and control bar
+    
+    if (controlBarVisible) {
+        // Going into fullscreen mode
+        
+        // First, remember current sidebar state
+        sidebarWasVisibleBeforeFullscreen = sidebarContainer->isVisible();
+        
+        // Hide sidebar if it's visible
+        if (sidebarContainer->isVisible()) {
+            sidebarContainer->setVisible(false);
+        }
+        
+        // Hide control bar
+        controlBarVisible = false;
+        controlBar->setVisible(false);
+        
+        // Hide floating popup widgets when control bar is hidden to prevent stacking
+        if (zoomFrame && zoomFrame->isVisible()) zoomFrame->hide();
+        if (thicknessFrame && thicknessFrame->isVisible()) thicknessFrame->hide();
+        
+        // Hide orphaned widgets that are not added to any layout
+        if (colorPreview) colorPreview->hide();
+        if (thicknessButton) thicknessButton->hide();
+        if (jumpToPageButton) jumpToPageButton->hide();
+        if (channelSelector) channelSelector->hide();
+        if (toolSelector) toolSelector->hide();
+        if (zoomButton) zoomButton->hide();
+        if (customColorInput) customColorInput->hide();
+        
+        // Find and hide local widgets that might be orphaned
+        QList<QComboBox*> comboBoxes = findChildren<QComboBox*>();
+        for (QComboBox* combo : comboBoxes) {
+            if (combo->parent() == this && !combo->isVisible()) {
+                // Already hidden, keep it hidden
+            } else if (combo->parent() == this) {
+                // This might be the orphaned dialModeSelector or similar
+                combo->hide();
+            }
+        }
+    } else {
+        // Coming out of fullscreen mode
+        
+        // Restore control bar
+        controlBarVisible = true;
+        controlBar->setVisible(true);
+        
+        // Restore sidebar to its previous state
+        sidebarContainer->setVisible(sidebarWasVisibleBeforeFullscreen);
+        
+        // Show orphaned widgets when control bar is visible
+        // Note: These are kept hidden normally since they're not in the layout
+        // Only show them if they were specifically intended to be visible
+    }
+    
+    // Update dial display to reflect new status
+    updateDialDisplay();
+    
+    // Force layout update to recalculate space
+    if (auto *canvas = currentCanvas()) {
+        QTimer::singleShot(0, this, [this, canvas]() {
+            canvas->setMaximumSize(canvas->getCanvasSize());
+        });
+    }
+}
+
+void MainWindow::handleTouchZoomChange(int newZoom) {
+    // Update zoom slider without triggering updateZoom again
+    zoomSlider->blockSignals(true);
+    zoomSlider->setValue(newZoom);
+    zoomSlider->blockSignals(false);
+    
+    // Show both scrollbars during gesture
+    if (panXSlider->maximum() > 0) {
+        panXSlider->setVisible(true);
+    }
+    if (panYSlider->maximum() > 0) {
+        panYSlider->setVisible(true);
+    }
+    scrollbarsVisible = true;
+    
+    // Update canvas zoom directly
+    InkCanvas *canvas = currentCanvas();
+    if (canvas) {
+        canvas->setZoom(newZoom);
+        canvas->setLastZoomLevel(newZoom);
+        updatePanRange();
+        updateThickness(thicknessSlider->value());
+        updateDialDisplay();
+    }
+}
+
+void MainWindow::handleTouchPanChange(int panX, int panY) {
+    // Clamp values to valid ranges
+    panX = qBound(panXSlider->minimum(), panX, panXSlider->maximum());
+    panY = qBound(panYSlider->minimum(), panY, panYSlider->maximum());
+    
+    // Show both scrollbars during gesture
+    if (panXSlider->maximum() > 0) {
+        panXSlider->setVisible(true);
+    }
+    if (panYSlider->maximum() > 0) {
+        panYSlider->setVisible(true);
+    }
+    scrollbarsVisible = true;
+    
+    // Update sliders without triggering their valueChanged signals
+    panXSlider->blockSignals(true);
+    panYSlider->blockSignals(true);
+    panXSlider->setValue(panX);
+    panYSlider->setValue(panY);
+    panXSlider->blockSignals(false);
+    panYSlider->blockSignals(false);
+    
+    // Update canvas pan directly
+    InkCanvas *canvas = currentCanvas();
+    if (canvas) {
+        canvas->setPanX(panX);
+        canvas->setPanY(panY);
+        canvas->setLastPanX(panX);
+        canvas->setLastPanY(panY);
+    }
+}
+
+// Now add two new slots to handle gesture end events
+void MainWindow::handleTouchGestureEnd() {
+    // Hide scrollbars immediately when touch gesture ends
+    panXSlider->setVisible(false);
+    panYSlider->setVisible(false);
+    scrollbarsVisible = false;
+}
+
+void MainWindow::updateColorButtonStates() {
+    // Check if there's a current canvas
+    if (!currentCanvas()) return;
+    
+    // Get current pen color
+    QColor currentColor = currentCanvas()->getPenColor();
+    
+    // Reset all color buttons to original style
+    redButton->setProperty("selected", false);
+    blueButton->setProperty("selected", false);
+    yellowButton->setProperty("selected", false);
+    greenButton->setProperty("selected", false);
+    blackButton->setProperty("selected", false);
+    whiteButton->setProperty("selected", false);
+    
+    // Set the selected property for the matching color button
+    if (currentColor == QColor("#EE0000")) {
+        redButton->setProperty("selected", true);
+    } else if (currentColor == QColor("#0033FF")) {
+        blueButton->setProperty("selected", true);
+    } else if (currentColor == QColor("#FFEE00")) {
+        yellowButton->setProperty("selected", true);
+    } else if (currentColor == QColor("#33EE00")) {
+        greenButton->setProperty("selected", true);
+    } else if (currentColor == QColor("#000000")) {
+        blackButton->setProperty("selected", true);
+    } else if (currentColor == QColor("#FFFFFF")) {
+        whiteButton->setProperty("selected", true);
+    }
+    
+    // Force style update
+    redButton->style()->unpolish(redButton);
+    redButton->style()->polish(redButton);
+    blueButton->style()->unpolish(blueButton);
+    blueButton->style()->polish(blueButton);
+    yellowButton->style()->unpolish(yellowButton);
+    yellowButton->style()->polish(yellowButton);
+    greenButton->style()->unpolish(greenButton);
+    greenButton->style()->polish(greenButton);
+    blackButton->style()->unpolish(blackButton);
+    blackButton->style()->polish(blackButton);
+    whiteButton->style()->unpolish(whiteButton);
+    whiteButton->style()->polish(whiteButton);
+}
+
+void MainWindow::selectColorButton(QPushButton* selectedButton) {
+    updateColorButtonStates();
+}
+
+QColor MainWindow::getContrastingTextColor(const QColor &backgroundColor) {
+    // Calculate relative luminance using the formula from WCAG 2.0
+    double r = backgroundColor.redF();
+    double g = backgroundColor.greenF();
+    double b = backgroundColor.blueF();
+    
+    // Gamma correction
+    r = (r <= 0.03928) ? r/12.92 : pow((r + 0.055)/1.055, 2.4);
+    g = (g <= 0.03928) ? g/12.92 : pow((g + 0.055)/1.055, 2.4);
+    b = (b <= 0.03928) ? b/12.92 : pow((b + 0.055)/1.055, 2.4);
+    
+    // Calculate luminance
+    double luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    
+    // Use white text for darker backgrounds
+    return (luminance < 0.5) ? Qt::white : Qt::black;
+}
+
+void MainWindow::updateCustomColorButtonStyle(const QColor &color) {
+    QColor textColor = getContrastingTextColor(color);
+    customColorButton->setStyleSheet(QString("background-color: %1; color: %2")
+        .arg(color.name())
+        .arg(textColor.name()));
+    customColorButton->setText(QString("%1").arg(color.name()).toUpper());
+}
+
+void MainWindow::updateStraightLineButtonState() {
+    // Check if there's a current canvas
+    if (!currentCanvas()) return;
+    
+    // Update the button state to match the canvas straight line mode
+    bool isEnabled = currentCanvas()->isStraightLineMode();
+    
+    // Set visual indicator that the button is active/inactive
+    if (straightLineToggleButton) {
+        straightLineToggleButton->setProperty("selected", isEnabled);
+        
+        // Force style update
+        straightLineToggleButton->style()->unpolish(straightLineToggleButton);
+        straightLineToggleButton->style()->polish(straightLineToggleButton);
+    }
+}
+
+void MainWindow::updateRopeToolButtonState() {
+    // Check if there's a current canvas
+    if (!currentCanvas()) return;
+
+    // Update the button state to match the canvas rope tool mode
+    bool isEnabled = currentCanvas()->isRopeToolMode();
+
+    // Set visual indicator that the button is active/inactive
+    if (ropeToolButton) {
+        ropeToolButton->setProperty("selected", isEnabled);
+
+        // Force style update
+        ropeToolButton->style()->unpolish(ropeToolButton);
+        ropeToolButton->style()->polish(ropeToolButton);
+    }
+}
+
+void MainWindow::updateDialButtonState() {
+    // Check if dial is visible
+    bool isDialVisible = dialContainer && dialContainer->isVisible();
+    
+    if (dialToggleButton) {
+        dialToggleButton->setProperty("selected", isDialVisible);
+        
+        // Force style update
+        dialToggleButton->style()->unpolish(dialToggleButton);
+        dialToggleButton->style()->polish(dialToggleButton);
+    }
+}
+
+void MainWindow::updateFastForwardButtonState() {
+    if (fastForwardButton) {
+        fastForwardButton->setProperty("selected", fastForwardMode);
+        
+        // Force style update
+        fastForwardButton->style()->unpolish(fastForwardButton);
+        fastForwardButton->style()->polish(fastForwardButton);
+    }
+}
+
+// Add this new method
+void MainWindow::updateScrollbarPositions() {
+    QWidget *container = canvasStack->parentWidget();
+    if (!container || !panXSlider || !panYSlider) return;
+    
+    // Add small margins for better visibility
+    const int margin = 3;
+    
+    // Get scrollbar dimensions
+    const int scrollbarWidth = panYSlider->width();
+    const int scrollbarHeight = panXSlider->height();
+    
+    // Calculate sizes based on container
+    int containerWidth = container->width();
+    int containerHeight = container->height();
+    
+    // Leave a bit of space for the corner
+    int cornerOffset = 15;
+    
+    // Position horizontal scrollbar at top
+    panXSlider->setGeometry(
+        cornerOffset + margin,  // Leave space at left corner
+        margin,
+        containerWidth - cornerOffset - margin*2,  // Full width minus corner and right margin
+        scrollbarHeight
+    );
+    
+    // Position vertical scrollbar at left
+    panYSlider->setGeometry(
+        margin,
+        cornerOffset + margin,  // Leave space at top corner
+        scrollbarWidth,
+        containerHeight - cornerOffset - margin*2  // Full height minus corner and bottom margin
+    );
+}
+
+// Add the new helper method for edge detection
+void MainWindow::handleEdgeProximity(InkCanvas* canvas, const QPoint& pos) {
+    if (!canvas) return;
+    
+    // Get canvas dimensions
+    int canvasWidth = canvas->width();
+    int canvasHeight = canvas->height();
+    
+    // Edge detection zones - show scrollbars when pointer is within 50px of edges
+    bool nearLeftEdge = pos.x() < 25;  // For vertical scrollbar
+    bool nearTopEdge = pos.y() < 25;   // For horizontal scrollbar - entire top edge
+    
+    // Only show scrollbars if canvas is larger than viewport
+    bool needHorizontalScroll = panXSlider->maximum() > 0;
+    bool needVerticalScroll = panYSlider->maximum() > 0;
+    
+    // Show/hide scrollbars based on pointer position
+    if (nearLeftEdge && needVerticalScroll) {
+        panYSlider->setVisible(true);
+        scrollbarsVisible = true;
+        if (scrollbarHideTimer->isActive()) {
+            scrollbarHideTimer->stop();
+        }
+        scrollbarHideTimer->start();
+    }
+    
+    if (nearTopEdge && needHorizontalScroll) {
+        panXSlider->setVisible(true);
+        scrollbarsVisible = true;
+        if (scrollbarHideTimer->isActive()) {
+            scrollbarHideTimer->stop();
+        }
+        scrollbarHideTimer->start();
+    }
+}
+
+void MainWindow::openRecentNotebooksDialog() {
+    RecentNotebooksDialog dialog(this, recentNotebooksManager, this);
+    dialog.exec();
+}
+
+void MainWindow::resizeEvent(QResizeEvent *event) {
+    QMainWindow::resizeEvent(event);
+    
+    // Use a timer to delay layout updates during resize to prevent excessive switching
+    if (!layoutUpdateTimer) {
+        layoutUpdateTimer = new QTimer(this);
+        layoutUpdateTimer->setSingleShot(true);
+        connect(layoutUpdateTimer, &QTimer::timeout, this, &MainWindow::updateToolbarLayout);
+    }
+    
+    layoutUpdateTimer->stop();
+    layoutUpdateTimer->start(100); // Wait 100ms after resize stops
+}
+
+void MainWindow::updateToolbarLayout() {
+    // Calculate scaled width using device pixel ratio
+    QScreen *screen = QGuiApplication::primaryScreen();
+    // qreal dpr = screen ? screen->devicePixelRatio() : 1.0;
+    int scaledWidth = width();
+    
+    // Dynamic threshold based on color button visibility
+    int threshold = areColorButtonsVisible() ? 1406 : 1311;
+    
+    // Debug output to understand what's happening
+    qDebug() << "Window width:" << scaledWidth << "Threshold:" << threshold << "Color buttons visible:" << areColorButtonsVisible();
+    
+    bool shouldBeTwoRows = scaledWidth <= threshold;
+    
+    qDebug() << "Should be two rows:" << shouldBeTwoRows << "Currently is two rows:" << isToolbarTwoRows;
+    
+    if (shouldBeTwoRows != isToolbarTwoRows) {
+        isToolbarTwoRows = shouldBeTwoRows;
+        
+        qDebug() << "Switching to" << (isToolbarTwoRows ? "two rows" : "single row");
+        
+        if (isToolbarTwoRows) {
+            createTwoRowLayout();
+        } else {
+            createSingleRowLayout();
+        }
+    }
+}
+
+void MainWindow::createSingleRowLayout() {
+    // Delete separator line if it exists (from previous 2-row layout)
+    if (separatorLine) {
+        delete separatorLine;
+        separatorLine = nullptr;
+    }
+    
+    // Create new single row layout first
+    QHBoxLayout *newLayout = new QHBoxLayout;
+    
+    // Add all widgets to single row (same order as before)
+    newLayout->addWidget(toggleTabBarButton);
+    newLayout->addWidget(selectFolderButton);
+    newLayout->addWidget(exportNotebookButton);
+    newLayout->addWidget(importNotebookButton);
+    newLayout->addWidget(loadPdfButton);
+    newLayout->addWidget(clearPdfButton);
+    newLayout->addWidget(backgroundButton);
+    newLayout->addWidget(saveButton);
+    newLayout->addWidget(saveAnnotatedButton);
+    newLayout->addWidget(openControlPanelButton);
+    newLayout->addWidget(openRecentNotebooksButton);
+    newLayout->addWidget(redButton);
+    newLayout->addWidget(blueButton);
+    
+    // Only add these color buttons if they're visible
+    if (areColorButtonsVisible()) {
+        newLayout->addWidget(yellowButton);
+        newLayout->addWidget(greenButton);
+    }
+    
+    newLayout->addWidget(blackButton);
+    newLayout->addWidget(whiteButton);
+    newLayout->addWidget(customColorButton);
+    newLayout->addWidget(straightLineToggleButton);
+    newLayout->addWidget(ropeToolButton);
+    newLayout->addWidget(dialToggleButton);
+    newLayout->addWidget(fastForwardButton);
+    newLayout->addWidget(btnPageSwitch);
+    newLayout->addWidget(btnPannScroll);
+    newLayout->addWidget(btnZoom);
+    newLayout->addWidget(btnThickness);
+    newLayout->addWidget(btnColor);
+    newLayout->addWidget(btnTool);
+    newLayout->addWidget(btnPresets);
+    newLayout->addWidget(addPresetButton);
+    newLayout->addWidget(fullscreenButton);
+    newLayout->addWidget(zoom50Button);
+    newLayout->addWidget(dezoomButton);
+    newLayout->addWidget(zoom200Button);
+    newLayout->addStretch();
+    newLayout->addWidget(pageInput);
+    newLayout->addWidget(benchmarkButton);
+    newLayout->addWidget(benchmarkLabel);
+    newLayout->addWidget(deletePageButton);
+    
+    // Safely replace the layout
+    QLayout* oldLayout = controlBar->layout();
+    if (oldLayout) {
+        // Remove all items from old layout (but don't delete widgets)
+        QLayoutItem* item;
+        while ((item = oldLayout->takeAt(0)) != nullptr) {
+            // Just removing, not deleting widgets
+        }
+        delete oldLayout;
+    }
+    
+    // Set the new layout
+    controlBar->setLayout(newLayout);
+    controlLayoutSingle = newLayout;
+    
+    // Clean up other layout pointers
+    controlLayoutVertical = nullptr;
+    controlLayoutFirstRow = nullptr;
+    controlLayoutSecondRow = nullptr;
+    
+    // Update pan range after layout change
+    updatePanRange();
+}
+
+void MainWindow::createTwoRowLayout() {
+    // Create new layouts first
+    QVBoxLayout *newVerticalLayout = new QVBoxLayout;
+    QHBoxLayout *newFirstRowLayout = new QHBoxLayout;
+    QHBoxLayout *newSecondRowLayout = new QHBoxLayout;
+    
+    // Add comfortable spacing and margins for 2-row layout
+    newFirstRowLayout->setContentsMargins(8, 8, 8, 6);  // More generous margins
+    newFirstRowLayout->setSpacing(3);  // Add spacing between buttons for less cramped feel
+    newSecondRowLayout->setContentsMargins(8, 6, 8, 8);  // More generous margins
+    newSecondRowLayout->setSpacing(3);  // Add spacing between buttons for less cramped feel
+    
+    // First row: up to customColorButton
+    newFirstRowLayout->addWidget(toggleTabBarButton);
+    newFirstRowLayout->addWidget(selectFolderButton);
+    newFirstRowLayout->addWidget(exportNotebookButton);
+    newFirstRowLayout->addWidget(importNotebookButton);
+    newFirstRowLayout->addWidget(loadPdfButton);
+    newFirstRowLayout->addWidget(clearPdfButton);
+    newFirstRowLayout->addWidget(backgroundButton);
+    newFirstRowLayout->addWidget(saveButton);
+    newFirstRowLayout->addWidget(saveAnnotatedButton);
+    newFirstRowLayout->addWidget(openControlPanelButton);
+    newFirstRowLayout->addWidget(openRecentNotebooksButton);
+    newFirstRowLayout->addWidget(redButton);
+    newFirstRowLayout->addWidget(blueButton);
+    
+    // Only add these color buttons if they're visible
+    if (areColorButtonsVisible()) {
+        newFirstRowLayout->addWidget(yellowButton);
+        newFirstRowLayout->addWidget(greenButton);
+    }
+    
+    newFirstRowLayout->addWidget(blackButton);
+    newFirstRowLayout->addWidget(whiteButton);
+    newFirstRowLayout->addWidget(customColorButton);
+    newFirstRowLayout->addStretch();
+    
+    // Create a separator line
+    if (!separatorLine) {
+        separatorLine = new QFrame();
+        separatorLine->setFrameShape(QFrame::HLine);
+        separatorLine->setFrameShadow(QFrame::Sunken);
+        separatorLine->setLineWidth(1);
+        separatorLine->setStyleSheet("QFrame { color: rgba(255, 255, 255, 255); }");
+    }
+    
+    // Second row: everything after customColorButton
+    newSecondRowLayout->addWidget(straightLineToggleButton);
+    newSecondRowLayout->addWidget(ropeToolButton);
+    newSecondRowLayout->addWidget(dialToggleButton);
+    newSecondRowLayout->addWidget(fastForwardButton);
+    newSecondRowLayout->addWidget(btnPageSwitch);
+    newSecondRowLayout->addWidget(btnPannScroll);
+    newSecondRowLayout->addWidget(btnZoom);
+    newSecondRowLayout->addWidget(btnThickness);
+    newSecondRowLayout->addWidget(btnColor);
+    newSecondRowLayout->addWidget(btnTool);
+    newSecondRowLayout->addWidget(btnPresets);
+    newSecondRowLayout->addWidget(addPresetButton);
+    newSecondRowLayout->addWidget(fullscreenButton);
+    newSecondRowLayout->addWidget(zoom50Button);
+    newSecondRowLayout->addWidget(dezoomButton);
+    newSecondRowLayout->addWidget(zoom200Button);
+    newSecondRowLayout->addStretch();
+    newSecondRowLayout->addWidget(pageInput);
+    newSecondRowLayout->addWidget(benchmarkButton);
+    newSecondRowLayout->addWidget(benchmarkLabel);
+    newSecondRowLayout->addWidget(deletePageButton);
+    
+    // Add layouts to vertical layout with separator
+    newVerticalLayout->addLayout(newFirstRowLayout);
+    newVerticalLayout->addWidget(separatorLine);
+    newVerticalLayout->addLayout(newSecondRowLayout);
+    newVerticalLayout->setContentsMargins(0, 0, 0, 0);
+    newVerticalLayout->setSpacing(0); // No spacing since we have our own separator
+    
+    // Safely replace the layout
+    QLayout* oldLayout = controlBar->layout();
+    if (oldLayout) {
+        // Remove all items from old layout (but don't delete widgets)
+        QLayoutItem* item;
+        while ((item = oldLayout->takeAt(0)) != nullptr) {
+            // Just removing, not deleting widgets
+        }
+        delete oldLayout;
+    }
+    
+    // Set the new layout
+    controlBar->setLayout(newVerticalLayout);
+    controlLayoutVertical = newVerticalLayout;
+    controlLayoutFirstRow = newFirstRowLayout;
+    controlLayoutSecondRow = newSecondRowLayout;
+    
+    // Clean up other layout pointer
+    controlLayoutSingle = nullptr;
+    
+    // Update pan range after layout change
+    updatePanRange();
+}
+
+// New: Keyboard mapping implementation
+void MainWindow::handleKeyboardShortcut(const QString &keySequence) {
+    ControllerAction action = keyboardActionMapping.value(keySequence, ControllerAction::None);
+    
+    // Use the same handler as Joy-Con buttons
+    switch (action) {
+        case ControllerAction::ToggleFullscreen:
+            fullscreenButton->click();
+            break;
+        case ControllerAction::ToggleDial:
+            toggleDial();
+            break;
+        case ControllerAction::Zoom50:
+            zoom50Button->click();
+            break;
+        case ControllerAction::ZoomOut:
+            dezoomButton->click();
+            break;
+        case ControllerAction::Zoom200:
+            zoom200Button->click();
+            break;
+        case ControllerAction::AddPreset:
+            addPresetButton->click();
+            break;
+        case ControllerAction::DeletePage:
+            deletePageButton->click();
+            break;
+        case ControllerAction::FastForward:
+            fastForwardButton->click();
+            break;
+        case ControllerAction::OpenControlPanel:
+            openControlPanelButton->click();
+            break;
+        case ControllerAction::RedColor:
+            redButton->click();
+            break;
+        case ControllerAction::BlueColor:
+            blueButton->click();
+            break;
+        case ControllerAction::YellowColor:
+            yellowButton->click();
+            break;
+        case ControllerAction::GreenColor:
+            greenButton->click();
+            break;
+        case ControllerAction::BlackColor:
+            blackButton->click();
+            break;
+        case ControllerAction::WhiteColor:
+            whiteButton->click();
+            break;
+        case ControllerAction::CustomColor:
+            customColorButton->click();
+            break;
+        case ControllerAction::ToggleSidebar:
+            toggleTabBarButton->click();
+            break;
+        case ControllerAction::Save:
+            saveButton->click();
+            break;
+        case ControllerAction::StraightLineTool:
+            straightLineToggleButton->click();
+            break;
+        case ControllerAction::RopeTool:
+            ropeToolButton->click();
+            break;
+        case ControllerAction::SetPenTool:
+            if (currentCanvas()) {
+                currentCanvas()->setTool(ToolType::Pen);
+                updateDialDisplay();
+            }
+            break;
+        case ControllerAction::SetMarkerTool:
+            if (currentCanvas()) {
+                currentCanvas()->setTool(ToolType::Marker);
+                updateDialDisplay();
+            }
+            break;
+        case ControllerAction::SetEraserTool:
+            if (currentCanvas()) {
+                currentCanvas()->setTool(ToolType::Eraser);
+                updateDialDisplay();
+            }
+            break;
+        default:
+            break;
+    }
+}
+
+void MainWindow::addKeyboardMapping(const QString &keySequence, const QString &action) {
+    keyboardMappings[keySequence] = action;
+    keyboardActionMapping[keySequence] = stringToAction(action);
+    saveKeyboardMappings();
+}
+
+void MainWindow::removeKeyboardMapping(const QString &keySequence) {
+    keyboardMappings.remove(keySequence);
+    keyboardActionMapping.remove(keySequence);
+    saveKeyboardMappings();
+}
+
+void MainWindow::saveKeyboardMappings() {
+    QSettings settings("SpeedyNote", "App");
+    settings.beginGroup("KeyboardMappings");
+    for (auto it = keyboardMappings.begin(); it != keyboardMappings.end(); ++it) {
+        settings.setValue(it.key(), it.value());
+    }
+    settings.endGroup();
+}
+
+void MainWindow::loadKeyboardMappings() {
+    QSettings settings("SpeedyNote", "App");
+    settings.beginGroup("KeyboardMappings");
+    QStringList keys = settings.allKeys();
+    for (const QString &key : keys) {
+        QString value = settings.value(key).toString();
+        keyboardMappings[key] = value;
+        keyboardActionMapping[key] = stringToAction(value);
+    }
+    settings.endGroup();
+}
+
+QMap<QString, QString> MainWindow::getKeyboardMappings() const {
+    return keyboardMappings;
+}
+
+void MainWindow::keyPressEvent(QKeyEvent *event) {
+    // Build key sequence string
+    QStringList modifiers;
+    
+    if (event->modifiers() & Qt::ControlModifier) modifiers << "Ctrl";
+    if (event->modifiers() & Qt::ShiftModifier) modifiers << "Shift";
+    if (event->modifiers() & Qt::AltModifier) modifiers << "Alt";
+    if (event->modifiers() & Qt::MetaModifier) modifiers << "Meta";
+    
+    QString keyString = QKeySequence(event->key()).toString();
+    
+    QString fullSequence;
+    if (!modifiers.isEmpty()) {
+        fullSequence = modifiers.join("+") + "+" + keyString;
+    } else {
+        fullSequence = keyString;
+    }
+    
+    // Check if this sequence is mapped
+    if (keyboardMappings.contains(fullSequence)) {
+        handleKeyboardShortcut(fullSequence);
+        event->accept();
+        return;
+    }
+    
+    // If not handled, pass to parent
+    QMainWindow::keyPressEvent(event);
 }

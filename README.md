@@ -16,6 +16,7 @@ _A lightweight, fast, and stylus-optimized note-taking app built for classic tab
 - 💾 **Portable `.snpkg` notebooks** for export/import & sharing
 - 🔎 **Zoom, pan, thickness, and color preset switching** via dial
 - 💡 **Designed for low-spec devices** (133Hz Sample Rate @ Intel Atom N450)
+- 🌏 **Supports multiple languages across the globe** (Covers half the global population)
 
 ---
 
@@ -85,6 +86,21 @@ SpeedyNote supports controller input, ideal for tablet users:
 ```bash
 rm -r build
 mkdir build
+# ✅ Update translation source files (ensure the .ts files exist already)
+& "C:\Qt\6.8.2\mingw_64\bin\lupdate.exe" . -ts ./resources/translations/app_fr.ts ./resources/translations/app_zh.ts ./resources/translations/app_es.ts
+& "C:\Qt\6.8.2\mingw_64\bin\linguist.exe" resources/translations/app_zh.ts
+& "C:\Qt\6.8.2\mingw_64\bin\linguist.exe" resources/translations/app_fr.ts
+& "C:\Qt\6.8.2\mingw_64\bin\linguist.exe" resources/translations/app_es.ts
+```
+4. (Optional) Modify translations in the GUI interface
+5. Run:
+```bash
+rm -r build
+mkdir build
+& "C:\Qt\6.8.2\mingw_64\bin\lrelease.exe" ./resources/translations/app_zh.ts ./resources/translations/app_fr.ts ./resources/translations/app_es.ts
+
+Copy-Item -Path "C:\Games\yourfolder\resources\translations\*.qm" -Destination "C:\Games\yourfolder\build" -Force
+
 cd .\build
 cmake -G "MinGW Makefiles" .. 
 cmake --build .  
@@ -93,3 +109,4 @@ Copy-Item -Path "C:\yourfolder\dllpack\*.dll" -Destination "C:\yourfolder\build"
 Copy-Item -Path "C:\yourfolder\bsdtar.exe" -Destination "C:\yourfolder\build" -Force
 ./NoteApp.exe
 cd ../
+```
