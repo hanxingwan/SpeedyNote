@@ -23,6 +23,7 @@
 #include <QMessageBox>
 #include <QDebug>
 #include <QToolTip> // For manual tooltip display
+#include <QWindow> // For tablet event safety checks
 // #include "HandwritingLineEdit.h"
 #include "ControlPanelDialog.h"
 #include "SDLControllerManager.h"
@@ -36,8 +37,12 @@ MainWindow::MainWindow(QWidget *parent)
     // Initialize DPR early
     initialDpr = getDevicePixelRatio();
     
-    // Enable tablet tracking for pen hover tooltips
-    setAttribute(Qt::WA_TabletTracking, true);
+    // Enable tablet tracking for pen hover tooltips (with safety check)
+    try {
+        setAttribute(Qt::WA_TabletTracking, true);
+    } catch (...) {
+        qDebug() << "Warning: Could not enable tablet tracking";
+    }
 
     // Initialize tooltip timer for pen hover throttling
     tooltipTimer = new QTimer(this);
@@ -1341,7 +1346,11 @@ void MainWindow::addNewTab() {
     
     // Install event filter to detect mouse movement for scrollbar visibility
     newCanvas->setMouseTracking(true);
-    newCanvas->setAttribute(Qt::WA_TabletTracking, true); // Enable tablet tracking
+    try {
+        newCanvas->setAttribute(Qt::WA_TabletTracking, true); // Enable tablet tracking
+    } catch (...) {
+        qDebug() << "Warning: Could not enable tablet tracking for canvas";
+    }
     newCanvas->installEventFilter(this);
     
     // ✅ Apply touch gesture setting
@@ -3556,14 +3565,33 @@ void MainWindow::keyPressEvent(QKeyEvent *event) {
 }
 
 void MainWindow::tabletEvent(QTabletEvent *event) {
+    // Guard against invalid window state
+    if (!windowHandle() || !windowHandle()->screen()) {
+        event->accept();
+        return;
+    }
+    
     // Handle pen hover to show tooltips - throttled approach
     if (event->type() == QEvent::TabletMove && event->pressure() == 0) {
         // Pen is hovering, find widget directly under cursor
         QPoint localPos = event->position().toPoint();
         QWidget *widget = childAt(localPos);
         
-        // Only process if we're over a different widget or no timer is running
+        // Generate hover events for proper button hover states
         if (widget != lastHoveredWidget) {
+            // Send leave event to previous widget
+            if (lastHoveredWidget) {
+                QEvent leaveEvent(QEvent::Leave);
+                QApplication::sendEvent(lastHoveredWidget, &leaveEvent);
+            }
+            
+            // Send enter event to new widget
+            if (widget) {
+                QEvent enterEvent(QEvent::Enter);
+                QApplication::sendEvent(widget, &enterEvent);
+            }
+            
+            // Handle tooltips
             tooltipTimer->stop();
             lastHoveredWidget = widget;
             
@@ -3576,19 +3604,39 @@ void MainWindow::tabletEvent(QTabletEvent *event) {
             }
         }
     } else if (event->type() == QEvent::TabletLeaveProximity) {
+        // Send leave event to last hovered widget
+        if (lastHoveredWidget) {
+            QEvent leaveEvent(QEvent::Leave);
+            QApplication::sendEvent(lastHoveredWidget, &leaveEvent);
+        }
+        
         // Hide tooltip when pen leaves proximity
         tooltipTimer->stop();
         lastHoveredWidget = nullptr;
         QToolTip::hideText();
     }
     
-    // Pass event to parent for normal tablet handling
-    QMainWindow::tabletEvent(event);
+    // Always try to pass to parent for normal tablet handling (but safely)
+    try {
+        if (windowHandle() && windowHandle()->screen()) {
+            QMainWindow::tabletEvent(event);
+        } else {
+            event->accept();
+        }
+    } catch (...) {
+        // Catch any exceptions and just accept the event
+        event->accept();
+    }
 }
 
 void MainWindow::showPendingTooltip() {
     if (lastHoveredWidget && !lastHoveredWidget->toolTip().isEmpty()) {
-        QToolTip::showText(pendingTooltipPos, lastHoveredWidget->toolTip(), lastHoveredWidget);
+        try {
+            QToolTip::showText(pendingTooltipPos, lastHoveredWidget->toolTip(), lastHoveredWidget);
+        } catch (...) {
+            // If tooltip display fails, just clear the reference
+            lastHoveredWidget = nullptr;
+        }
     }
 }
 
