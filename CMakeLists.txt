@@ -44,12 +44,19 @@ link_directories("C:/msys64/mingw64/lib")
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
+# ✅ Windows-specific resource file for executable icon
+if(WIN32)
+    enable_language(RC)
+    set(WIN_RESOURCES app_icon.rc)
+endif()
+
 # ✅ Build target
 add_executable(NoteApp
     Main.cpp MainWindow.cpp InkCanvas.cpp ControlPanelDialog.cpp SDLControllerManager.cpp ButtonMappingTypes.cpp ${QRCC_FILES}
     RecentNotebooksManager.cpp
     RecentNotebooksDialog.cpp
     KeyCaptureDialog.cpp
+    ${WIN_RESOURCES}  # Windows resource file for executable icon (only on Windows)
 )
 
 # ✅ Compile .ts → .qm using Qt's lrelease

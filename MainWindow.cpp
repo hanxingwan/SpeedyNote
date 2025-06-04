@@ -22,6 +22,7 @@
 #include <QSettings>
 #include <QMessageBox>
 #include <QDebug>
+#include <QToolTip> // For manual tooltip display
 // #include "HandwritingLineEdit.h"
 #include "ControlPanelDialog.h"
 #include "SDLControllerManager.h"
@@ -34,6 +35,16 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Initialize DPR early
     initialDpr = getDevicePixelRatio();
+    
+    // Enable tablet tracking for pen hover tooltips
+    setAttribute(Qt::WA_TabletTracking, true);
+
+    // Initialize tooltip timer for pen hover throttling
+    tooltipTimer = new QTimer(this);
+    tooltipTimer->setSingleShot(true);
+    tooltipTimer->setInterval(100); // 100ms delay
+    lastHoveredWidget = nullptr;
+    connect(tooltipTimer, &QTimer::timeout, this, &MainWindow::showPendingTooltip);
 
     // QString iconPath = QCoreApplication::applicationDirPath() + "/icon.ico";
     setWindowIcon(QIcon(":/resources/icons/mainicon.png"));
@@ -401,7 +412,7 @@ void MainWindow::setupUi() {
     zoomSlider->setValue(100);
     zoomSlider->setMaximumWidth(405);
 
-    connect(zoomSlider, &QSlider::valueChanged, this, &MainWindow::updateZoom);
+    connect(zoomSlider, &QSlider::valueChanged, this, &MainWindow::onZoomSliderChanged);
 
     QVBoxLayout *popupLayout = new QVBoxLayout();
     popupLayout->setContentsMargins(10, 5, 10, 5);
@@ -988,7 +999,7 @@ void MainWindow::updateZoom() {
         canvas->setZoom(zoomSlider->value());
         canvas->setLastZoomLevel(zoomSlider->value());  // ✅ Store zoom level per tab
         updatePanRange();
-        updateThickness(thicknessSlider->value());
+        // updateThickness(thicknessSlider->value()); // ✅ REMOVED: This was resetting thickness on page switch
         // updateDialDisplay();
     }
 }
@@ -1351,9 +1362,16 @@ void MainWindow::addNewTab() {
 
     QString tempDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/temp_session";
     newCanvas->setSaveFolder(tempDir);
-    newCanvas->setBackgroundStyle(BackgroundStyle::Grid);
-    newCanvas->setBackgroundColor(Qt::white);
-    newCanvas->setBackgroundDensity(30);  // The default bg settings are here
+    
+    // Load persistent background settings
+    BackgroundStyle defaultStyle;
+    QColor defaultColor;
+    int defaultDensity;
+    loadDefaultBackgroundSettings(defaultStyle, defaultColor, defaultDensity);
+    
+    newCanvas->setBackgroundStyle(defaultStyle);
+    newCanvas->setBackgroundColor(defaultColor);
+    newCanvas->setBackgroundDensity(defaultDensity);
     newCanvas->setPDFRenderDPI(getPdfDPI());
     
     // Update color button states for the new tab
@@ -2122,7 +2140,8 @@ void MainWindow::handleDialZoom(int angle) {
     int newZoom = qBound(10, zoomSlider->value() + (delta / 4), 400);  
     zoomSlider->setValue(newZoom);
     updateZoom();  // ✅ Ensure zoom updates immediately
-    updateDialDisplay(); 
+    updateThickness(thicknessSlider->value()); // ✅ Update thickness for manual zoom changes
+    updateDialDisplay();
 
     lastAngle = angle;
 }
@@ -2806,6 +2825,11 @@ void MainWindow::loadUserSettings() {
     touchGesturesEnabled = settings.value("touchGesturesEnabled", false).toBool();
     setTouchGesturesEnabled(touchGesturesEnabled);
     
+    // Initialize default background settings if they don't exist
+    if (!settings.contains("defaultBackgroundStyle")) {
+        saveDefaultBackgroundSettings(BackgroundStyle::Grid, Qt::white, 30);
+    }
+    
     // Load keyboard mappings
     loadKeyboardMappings();
 }
@@ -2898,7 +2922,7 @@ void MainWindow::handleTouchZoomChange(int newZoom) {
         canvas->setZoom(newZoom);
         canvas->setLastZoomLevel(newZoom);
         updatePanRange();
-        updateThickness(thicknessSlider->value());
+        // updateThickness(thicknessSlider->value()); // ✅ REMOVED: Don't reset thickness during touch zoom
         updateDialDisplay();
     }
 }
@@ -3529,4 +3553,66 @@ void MainWindow::keyPressEvent(QKeyEvent *event) {
     
     // If not handled, pass to parent
     QMainWindow::keyPressEvent(event);
+}
+
+void MainWindow::tabletEvent(QTabletEvent *event) {
+    // Handle pen hover to show tooltips - throttled approach
+    if (event->type() == QEvent::TabletMove && event->pressure() == 0) {
+        // Pen is hovering, find widget directly under cursor
+        QPoint localPos = event->position().toPoint();
+        QWidget *widget = childAt(localPos);
+        
+        // Only process if we're over a different widget or no timer is running
+        if (widget != lastHoveredWidget) {
+            tooltipTimer->stop();
+            lastHoveredWidget = widget;
+            
+            if (widget && !widget->toolTip().isEmpty()) {
+                // Store position for later tooltip display
+                pendingTooltipPos = mapToGlobal(localPos);
+                tooltipTimer->start();
+            } else {
+                QToolTip::hideText();
+            }
+        }
+    } else if (event->type() == QEvent::TabletLeaveProximity) {
+        // Hide tooltip when pen leaves proximity
+        tooltipTimer->stop();
+        lastHoveredWidget = nullptr;
+        QToolTip::hideText();
+    }
+    
+    // Pass event to parent for normal tablet handling
+    QMainWindow::tabletEvent(event);
+}
+
+void MainWindow::showPendingTooltip() {
+    if (lastHoveredWidget && !lastHoveredWidget->toolTip().isEmpty()) {
+        QToolTip::showText(pendingTooltipPos, lastHoveredWidget->toolTip(), lastHoveredWidget);
+    }
+}
+
+void MainWindow::onZoomSliderChanged(int value) {
+    // This handles manual zoom slider changes and preserves thickness
+    updateZoom();
+    updateThickness(thicknessSlider->value());
+}
+
+void MainWindow::saveDefaultBackgroundSettings(BackgroundStyle style, QColor color, int density) {
+    QSettings settings("SpeedyNote", "App");
+    settings.setValue("defaultBackgroundStyle", static_cast<int>(style));
+    settings.setValue("defaultBackgroundColor", color.name());
+    settings.setValue("defaultBackgroundDensity", density);
+}
+
+void MainWindow::loadDefaultBackgroundSettings(BackgroundStyle &style, QColor &color, int &density) {
+    QSettings settings("SpeedyNote", "App");
+    style = static_cast<BackgroundStyle>(settings.value("defaultBackgroundStyle", static_cast<int>(BackgroundStyle::Grid)).toInt());
+    color = QColor(settings.value("defaultBackgroundColor", "#FFFFFF").toString());
+    density = settings.value("defaultBackgroundDensity", 30).toInt();
+    
+    // Ensure valid values
+    if (!color.isValid()) color = Qt::white;
+    if (density < 10) density = 10;
+    if (density > 200) density = 200;
 }

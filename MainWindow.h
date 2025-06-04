@@ -25,6 +25,7 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QKeyEvent>
+#include <QTabletEvent>
 
 // #include "HandwritingLineEdit.h"
 
@@ -177,11 +178,14 @@ public:
     // void loadUserSettings();  // New
     void savePdfDPI(int dpi); // New
 
-    // Migration functions for old button mappings
+    // Background settings persistence
+    void saveDefaultBackgroundSettings(BackgroundStyle style, QColor color, int density);
+    void loadDefaultBackgroundSettings(BackgroundStyle &style, QColor &color, int &density);
+    
     void migrateOldButtonMappings();
     QString migrateOldDialModeString(const QString &oldString);
     QString migrateOldActionString(const QString &oldString);
-    
+
     InkCanvas* currentCanvas(); // Made public for RecentNotebooksDialog
     void saveCurrentPage(); // Made public for RecentNotebooksDialog
     void switchPage(int pageNumber); // Made public for RecentNotebooksDialog
@@ -208,6 +212,7 @@ private slots:
     void clearPdf();
 
     void updateZoom();
+    void onZoomSliderChanged(int value); // Handle manual zoom slider changes
     void applyZoom();
     void updatePanRange();
     void updatePanX(int value);
@@ -275,6 +280,8 @@ private slots:
     void updateCustomColorButtonStyle(const QColor &color);
 
     void openRecentNotebooksDialog(); // Added slot
+
+    void showPendingTooltip(); // Show tooltip with throttling
 
 private:
     InkCanvas *canvas;
@@ -419,6 +426,10 @@ private:
     QMap<QString, QString> keyboardMappings;  // keySequence -> action internal key
     QMap<QString, ControllerAction> keyboardActionMapping;  // keySequence -> action enum
 
+    // Tooltip handling for pen input
+    QTimer *tooltipTimer;
+    QWidget *lastHoveredWidget;
+    QPoint pendingTooltipPos;
 
     void handleButtonHeld(const QString &buttonName);
     void handleButtonReleased(const QString &buttonName);
@@ -471,6 +482,7 @@ private:
 protected:
     void resizeEvent(QResizeEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;  // New: Handle keyboard shortcuts
+    void tabletEvent(QTabletEvent *event) override; // Handle pen hover for tooltips
 };
 
 #endif // MAINWINDOW_H
