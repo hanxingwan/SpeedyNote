@@ -66,7 +66,7 @@ int main(int argc, char *argv[]) {
     QString notebookFile;
     if (argc >= 2) {
         notebookFile = QString::fromLocal8Bit(argv[1]);
-        qDebug() << "Notebook file received:" << notebookFile;
+        // qDebug() << "Notebook file received:" << notebookFile;
     }
 
     MainWindow w;

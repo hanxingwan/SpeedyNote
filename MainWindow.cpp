@@ -7,6 +7,8 @@
 #include <QApplication> 
 #include <QGuiApplication>
 #include <QLineEdit>
+#include <QTextEdit>
+#include <QPlainTextEdit>
 #include "ToolType.h" // Include the header file where ToolType is defined
 #include <QFileDialog>
 #include <QDateTime>
@@ -36,13 +38,6 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Initialize DPR early
     initialDpr = getDevicePixelRatio();
-    
-    // Enable tablet tracking for pen hover tooltips (with safety check)
-    try {
-        setAttribute(Qt::WA_TabletTracking, true);
-    } catch (...) {
-        qDebug() << "Warning: Could not enable tablet tracking";
-    }
 
     // Initialize tooltip timer for pen hover throttling
     tooltipTimer = new QTimer(this);
@@ -96,6 +91,17 @@ MainWindow::MainWindow(QWidget *parent)
     
     recentNotebooksManager = new RecentNotebooksManager(this); // Initialize manager
 
+    // Disable tablet tracking for now to prevent crashes
+    // TODO: Find a safer way to implement hover tooltips without tablet tracking
+    // QTimer::singleShot(100, this, [this]() {
+    //     try {
+    //         if (windowHandle() && windowHandle()->screen()) {
+    //             setAttribute(Qt::WA_TabletTracking, true);
+    //         }
+    //     } catch (...) {
+    //         // Silently ignore tablet tracking errors
+    //     }
+    // });
 }
 
 
@@ -1346,12 +1352,19 @@ void MainWindow::addNewTab() {
     
     // Install event filter to detect mouse movement for scrollbar visibility
     newCanvas->setMouseTracking(true);
-    try {
-        newCanvas->setAttribute(Qt::WA_TabletTracking, true); // Enable tablet tracking
-    } catch (...) {
-        qDebug() << "Warning: Could not enable tablet tracking for canvas";
-    }
     newCanvas->installEventFilter(this);
+    
+    // Disable tablet tracking for canvases for now to prevent crashes
+    // TODO: Find a safer way to implement hover tooltips without tablet tracking
+    // QTimer::singleShot(50, this, [newCanvas]() {
+    //     try {
+    //         if (newCanvas && newCanvas->window() && newCanvas->window()->windowHandle()) {
+    //             newCanvas->setAttribute(Qt::WA_TabletTracking, true);
+    //         }
+    //     } catch (...) {
+    //         // Silently ignore tablet tracking errors
+    //     }
+    // });
     
     // ✅ Apply touch gesture setting
     newCanvas->setTouchGesturesEnabled(touchGesturesEnabled);
@@ -1981,10 +1994,14 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
             QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
             handleEdgeProximity(canvas, mouseEvent->pos());
         }
-        // Handle tablet events for stylus hover
+        // Handle tablet events for stylus hover (safely)
         else if (event->type() == QEvent::TabletMove) {
-            QTabletEvent* tabletEvent = static_cast<QTabletEvent*>(event);
-            handleEdgeProximity(canvas, tabletEvent->position().toPoint());
+            try {
+                QTabletEvent* tabletEvent = static_cast<QTabletEvent*>(event);
+                handleEdgeProximity(canvas, tabletEvent->position().toPoint());
+            } catch (...) {
+                // Ignore tablet event errors to prevent crashes
+            }
         }
         // Handle wheel events for scrolling
         else if (event->type() == QEvent::Wheel) {
@@ -2618,7 +2635,7 @@ void MainWindow::migrateOldButtonMappings() {
     if (!needsMigration) return;
     
     // Perform migration
-    qDebug() << "Migrating old button mappings to new format...";
+    // qDebug() << "Migrating old button mappings to new format...";
     
     // Migrate hold mappings
     settings.beginGroup("ButtonHoldMappings");
@@ -2644,7 +2661,7 @@ void MainWindow::migrateOldButtonMappings() {
     }
     settings.endGroup();
     
-    qDebug() << "Button mapping migration completed.";
+   // qDebug() << "Button mapping migration completed.";
 }
 
 QString MainWindow::migrateOldDialModeString(const QString &oldString) {
@@ -3209,16 +3226,16 @@ void MainWindow::updateToolbarLayout() {
     int threshold = areColorButtonsVisible() ? 1406 : 1311;
     
     // Debug output to understand what's happening
-    qDebug() << "Window width:" << scaledWidth << "Threshold:" << threshold << "Color buttons visible:" << areColorButtonsVisible();
+    // qDebug() << "Window width:" << scaledWidth << "Threshold:" << threshold << "Color buttons visible:" << areColorButtonsVisible();
     
     bool shouldBeTwoRows = scaledWidth <= threshold;
     
-    qDebug() << "Should be two rows:" << shouldBeTwoRows << "Currently is two rows:" << isToolbarTwoRows;
+    // qDebug() << "Should be two rows:" << shouldBeTwoRows << "Currently is two rows:" << isToolbarTwoRows;
     
     if (shouldBeTwoRows != isToolbarTwoRows) {
         isToolbarTwoRows = shouldBeTwoRows;
         
-        qDebug() << "Switching to" << (isToolbarTwoRows ? "two rows" : "single row");
+        // qDebug() << "Switching to" << (isToolbarTwoRows ? "two rows" : "single row");
         
         if (isToolbarTwoRows) {
             createTwoRowLayout();
@@ -3536,6 +3553,23 @@ QMap<QString, QString> MainWindow::getKeyboardMappings() const {
 }
 
 void MainWindow::keyPressEvent(QKeyEvent *event) {
+    // Don't intercept keyboard events when text input widgets have focus
+    // This prevents conflicts with Windows TextInputFramework
+    QWidget *focusWidget = QApplication::focusWidget();
+    if (focusWidget) {
+        bool isTextInputWidget = qobject_cast<QLineEdit*>(focusWidget) || 
+                               qobject_cast<QSpinBox*>(focusWidget) || 
+                               qobject_cast<QTextEdit*>(focusWidget) ||
+                               qobject_cast<QPlainTextEdit*>(focusWidget) ||
+                               qobject_cast<QComboBox*>(focusWidget);
+        
+        if (isTextInputWidget) {
+            // Let text input widgets handle their own keyboard events
+            QMainWindow::keyPressEvent(event);
+            return;
+        }
+    }
+    
     // Build key sequence string
     QStringList modifiers;
     
@@ -3565,64 +3599,16 @@ void MainWindow::keyPressEvent(QKeyEvent *event) {
 }
 
 void MainWindow::tabletEvent(QTabletEvent *event) {
-    // Guard against invalid window state
-    if (!windowHandle() || !windowHandle()->screen()) {
-        event->accept();
+    // Since tablet tracking is disabled to prevent crashes, we now only handle
+    // basic tablet events that come through when stylus is touching the surface
+    if (!event) {
         return;
     }
     
-    // Handle pen hover to show tooltips - throttled approach
-    if (event->type() == QEvent::TabletMove && event->pressure() == 0) {
-        // Pen is hovering, find widget directly under cursor
-        QPoint localPos = event->position().toPoint();
-        QWidget *widget = childAt(localPos);
-        
-        // Generate hover events for proper button hover states
-        if (widget != lastHoveredWidget) {
-            // Send leave event to previous widget
-            if (lastHoveredWidget) {
-                QEvent leaveEvent(QEvent::Leave);
-                QApplication::sendEvent(lastHoveredWidget, &leaveEvent);
-            }
-            
-            // Send enter event to new widget
-            if (widget) {
-                QEvent enterEvent(QEvent::Enter);
-                QApplication::sendEvent(widget, &enterEvent);
-            }
-            
-            // Handle tooltips
-            tooltipTimer->stop();
-            lastHoveredWidget = widget;
-            
-            if (widget && !widget->toolTip().isEmpty()) {
-                // Store position for later tooltip display
-                pendingTooltipPos = mapToGlobal(localPos);
-                tooltipTimer->start();
-            } else {
-                QToolTip::hideText();
-            }
-        }
-    } else if (event->type() == QEvent::TabletLeaveProximity) {
-        // Send leave event to last hovered widget
-        if (lastHoveredWidget) {
-            QEvent leaveEvent(QEvent::Leave);
-            QApplication::sendEvent(lastHoveredWidget, &leaveEvent);
-        }
-        
-        // Hide tooltip when pen leaves proximity
-        tooltipTimer->stop();
-        lastHoveredWidget = nullptr;
-        QToolTip::hideText();
-    }
-    
-    // Always try to pass to parent for normal tablet handling (but safely)
+    // Just pass tablet events to parent safely without custom hover handling
+    // (hover tooltips will work through normal mouse events instead)
     try {
-        if (windowHandle() && windowHandle()->screen()) {
-            QMainWindow::tabletEvent(event);
-        } else {
-            event->accept();
-        }
+        QMainWindow::tabletEvent(event);
     } catch (...) {
         // Catch any exceptions and just accept the event
         event->accept();
@@ -3630,14 +3616,9 @@ void MainWindow::tabletEvent(QTabletEvent *event) {
 }
 
 void MainWindow::showPendingTooltip() {
-    if (lastHoveredWidget && !lastHoveredWidget->toolTip().isEmpty()) {
-        try {
-            QToolTip::showText(pendingTooltipPos, lastHoveredWidget->toolTip(), lastHoveredWidget);
-        } catch (...) {
-            // If tooltip display fails, just clear the reference
-            lastHoveredWidget = nullptr;
-        }
-    }
+    // This function is now unused since we disabled tablet tracking
+    // Tooltips will work through normal mouse hover events instead
+    // Keeping the function for potential future use
 }
 
 void MainWindow::onZoomSliderChanged(int value) {
