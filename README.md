@@ -2,7 +2,7 @@
 
 _A lightweight, fast, and stylus-optimized note-taking app built for classic tablet PCs, low-resolution screens, and vintage hardware._
 
-![cover](https://i.imgur.com/qENmB5x.png)
+![cover](https://i.imgur.com/UTNNbnM.png)
 
 ---
 
