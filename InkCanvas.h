@@ -27,6 +27,7 @@ signals:
     void zoomChanged(int newZoom);
     void panChanged(int panX, int panY);
     void touchGestureEnded(); // Signal emitted when touch gestures end
+    void ropeSelectionCompleted(const QPoint &position); // Signal emitted when rope tool selection is completed
 
 public:
     explicit InkCanvas(QWidget *parent = nullptr);
@@ -121,6 +122,10 @@ public:
     // Touch gesture support
     void setTouchGesturesEnabled(bool enabled) { touchGesturesEnabled = enabled; }
     bool areTouchGesturesEnabled() const { return touchGesturesEnabled; }
+
+    // Rope tool selection actions
+    void deleteRopeSelection(); // Delete the current rope tool selection
+    void cancelRopeSelection(); // Cancel the current rope tool selection
 
 protected:
     void paintEvent(QPaintEvent *event) override;

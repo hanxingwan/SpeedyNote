@@ -37,7 +37,7 @@
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false) {
 
-    setWindowTitle(tr("SpeedyNote Beta 0.4.12"));
+    setWindowTitle(tr("SpeedyNote Beta 0.4.13"));
 
     // Initialize DPR early
     initialDpr = getDevicePixelRatio();
@@ -736,9 +736,9 @@ void MainWindow::setupUi() {
     connect(btnPannScroll, &QPushButton::clicked, this, [this]() { changeDialMode(PanAndPageScroll); });
 
 
-    // ✅ Ensure at least one preset exists (black placeholder)
+    // ✅ Ensure at least one preset exists (theme-aware default color)
     // Initialize color presets based on dark/light mode
-    colorPresets.enqueue(QColor("#000000"));
+    colorPresets.enqueue(getDefaultPenColor());
     if (darkMode) {
         colorPresets.enqueue(QColor("#FF7755"));  // Light red for dark mode
         colorPresets.enqueue(QColor("#EECC00"));  // Light yellow for dark mode
@@ -783,8 +783,8 @@ void MainWindow::setupUi() {
 
     customColorButton = new QPushButton(this);
     customColorButton->setFixedSize(62, 30);
-    customColorButton->setText("#000000");
-    QColor initialColor = Qt::black;  // Default fallback color
+    QColor initialColor = getDefaultPenColor();  // Theme-aware default color
+    customColorButton->setText(initialColor.name().toUpper());
 
     if (currentCanvas()) {
         initialColor = currentCanvas()->getPenColor();
@@ -795,10 +795,24 @@ void MainWindow::setupUi() {
     QTimer::singleShot(0, this, [=]() {
         connect(customColorButton, &QPushButton::clicked, this, [=]() {
             if (!currentCanvas()) return;
+            
+            // Get the current custom color from the button text
+            QString buttonText = customColorButton->text();
+            QColor customColor(buttonText);
+            
+            // Check if the custom color is already the current pen color
+            if (currentCanvas()->getPenColor() == customColor) {
+                // Second click - show color picker dialog
             QColor chosen = QColorDialog::getColor(currentCanvas()->getPenColor(), this, "Select Pen Color");
             if (chosen.isValid()) {
                 currentCanvas()->setPenColor(chosen);
-                updateCustomColorButtonStyle(chosen);
+                    updateCustomColorButtonStyle(chosen);
+                updateDialDisplay();
+                    updateColorButtonStates();
+                }
+            } else {
+                // First click - apply the custom color
+                currentCanvas()->setPenColor(customColor);
                 updateDialDisplay();
                 updateColorButtonStates();
             }
@@ -1448,8 +1462,22 @@ void MainWindow::addNewTab() {
     // ✅ Create the close button (❌)
     QPushButton *closeButton = new QPushButton(tabWidget);
     closeButton->setFixedSize(10, 10); // Adjust button size
-    closeButton->setIcon(QIcon(":/resources/icons/cross.png")); // Set icon
-    closeButton->setStyleSheet("QPushButton { border: none; background: transparent; }"); // Hide button border
+    closeButton->setIcon(loadThemedIcon("cross")); // Set themed icon
+    closeButton->setStyleSheet(R"(
+        QPushButton { 
+            border: none; 
+            background: transparent; 
+            border-radius: 5px;
+        }
+        QPushButton:hover { 
+            background: rgba(255, 0, 0, 100); 
+            border-radius: 5px;
+        }
+        QPushButton:pressed { 
+            background: rgba(255, 0, 0, 150); 
+            border-radius: 5px;
+        }
+    )"); // Themed styling with hover and press effects
     
     // ✅ Create new InkCanvas instance EARLIER so it can be captured by the lambda
     InkCanvas *newCanvas = new InkCanvas(this);
@@ -1561,6 +1589,7 @@ void MainWindow::addNewTab() {
     connect(newCanvas, &InkCanvas::zoomChanged, this, &MainWindow::handleTouchZoomChange);
     connect(newCanvas, &InkCanvas::panChanged, this, &MainWindow::handleTouchPanChange);
     connect(newCanvas, &InkCanvas::touchGestureEnded, this, &MainWindow::handleTouchGestureEnd);
+    connect(newCanvas, &InkCanvas::ropeSelectionCompleted, this, &MainWindow::showRopeSelectionMenu);
     
     // Install event filter to detect mouse movement for scrollbar visibility
     newCanvas->setMouseTracking(true);
@@ -2659,6 +2688,10 @@ bool MainWindow::isDarkMode() {
     return bg.lightness() < 128;  // Lightness scale: 0 (black) - 255 (white)
 }
 
+QColor MainWindow::getDefaultPenColor() {
+    return isDarkMode() ? Qt::white : Qt::black;
+}
+
 QIcon MainWindow::loadThemedIcon(const QString& baseName) {
     QString path = isDarkMode()
         ? QString(":/resources/icons/%1_reversed.png").arg(baseName)
@@ -2818,6 +2851,22 @@ void MainWindow::updateTheme() {
     if (whiteButton) {
         QString whiteIconPath = darkMode ? ":/resources/icons/pen_light_white.png" : ":/resources/icons/pen_dark_white.png";
         whiteButton->setIcon(QIcon(whiteIconPath));
+    }
+    
+    // Update tab close button icons
+    if (tabList) {
+        for (int i = 0; i < tabList->count(); ++i) {
+            QListWidgetItem *item = tabList->item(i);
+            if (item) {
+                QWidget *tabWidget = tabList->itemWidget(item);
+                if (tabWidget) {
+                    QPushButton *closeButton = tabWidget->findChild<QPushButton*>();
+                    if (closeButton) {
+                        closeButton->setIcon(loadThemedIcon("cross"));
+                    }
+                }
+            }
+        }
     }
     
     // Update dial display
@@ -4117,4 +4166,34 @@ void MainWindow::loadDefaultBackgroundSettings(BackgroundStyle &style, QColor &c
     if (!color.isValid()) color = Qt::white;
     if (density < 10) density = 10;
     if (density > 200) density = 200;
+}
+
+void MainWindow::showRopeSelectionMenu(const QPoint &position) {
+    // Create context menu for rope tool selection
+    QMenu *contextMenu = new QMenu(this);
+    contextMenu->setAttribute(Qt::WA_DeleteOnClose);
+    
+    // Add Delete action
+    QAction *deleteAction = contextMenu->addAction(tr("Delete"));
+    deleteAction->setIcon(loadThemedIcon("trash"));
+    connect(deleteAction, &QAction::triggered, this, [this]() {
+        if (currentCanvas()) {
+            currentCanvas()->deleteRopeSelection();
+        }
+    });
+    
+    // Add Cancel action
+    QAction *cancelAction = contextMenu->addAction(tr("Cancel"));
+    cancelAction->setIcon(loadThemedIcon("cross"));
+    connect(cancelAction, &QAction::triggered, this, [this]() {
+        if (currentCanvas()) {
+            currentCanvas()->cancelRopeSelection();
+        }
+    });
+    
+    // Convert position from canvas coordinates to global coordinates
+    QPoint globalPos = currentCanvas()->mapToGlobal(position);
+    
+    // Show the menu at the specified position
+    contextMenu->popup(globalPos);
 }

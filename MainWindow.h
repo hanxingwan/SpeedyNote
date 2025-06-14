@@ -26,6 +26,7 @@
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QTabletEvent>
+#include <QMenu>
 
 // #include "HandwritingLineEdit.h"
 
@@ -165,6 +166,7 @@ public:
     void setCustomAccentColor(const QColor &color);
     bool isUsingCustomAccentColor() const { return useCustomAccentColor; }
     void setUseCustomAccentColor(bool use);
+    QColor getDefaultPenColor();
 
     SDLControllerManager *controllerManager = nullptr;
     QThread *controllerThread = nullptr;
@@ -304,6 +306,8 @@ private slots:
     void openRecentNotebooksDialog(); // Added slot
 
     void showPendingTooltip(); // Show tooltip with throttling
+    
+    void showRopeSelectionMenu(const QPoint &position); // Show context menu for rope tool selection
 
 private:
     InkCanvas *canvas;

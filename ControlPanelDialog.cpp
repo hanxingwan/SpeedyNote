@@ -108,7 +108,7 @@ void ControlPanelDialog::applyChanges() {
     canvas->setBackgroundDensity(densitySpin->value());
     canvas->update();
     canvas->saveBackgroundMetadata();
-    
+
     // ✅ Save these settings as defaults for new tabs
     if (mainWindowRef) {
         mainWindowRef->saveDefaultBackgroundSettings(style, selectedColor, densitySpin->value());
