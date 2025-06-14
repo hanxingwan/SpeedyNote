@@ -5,6 +5,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QCheckBox>
+#include <QSpacerItem>
 #include <QTableWidget>
 #include <QPushButton>
 #include <QColorDialog>
@@ -29,6 +30,7 @@ ControlPanelDialog::ControlPanelDialog(MainWindow *mainWindow, InkCanvas *target
     }
     createButtonMappingTab();
     createKeyboardMappingTab();
+    createThemeTab();
     // === Buttons ===
     applyButton = new QPushButton(tr("Apply"));
     okButton = new QPushButton(tr("OK"));
@@ -127,6 +129,12 @@ void ControlPanelDialog::applyChanges() {
 
         // ✅ Save to persistent settings
         mainWindowRef->saveButtonMappings();
+        
+        // ✅ Apply theme settings
+        mainWindowRef->setUseCustomAccentColor(useCustomAccentCheckbox->isChecked());
+        if (selectedAccentColor.isValid()) {
+            mainWindowRef->setCustomAccentColor(selectedAccentColor);
+        }
     }
 }
 
@@ -151,6 +159,15 @@ void ControlPanelDialog::loadFromCanvas() {
             int index = pressMappingCombos[buttonKey]->findText(displayString);
             if (index >= 0) pressMappingCombos[buttonKey]->setCurrentIndex(index);
         }
+        
+        // Load theme settings
+        useCustomAccentCheckbox->setChecked(mainWindowRef->isUsingCustomAccentColor());
+        
+        // Get the stored custom accent color
+        selectedAccentColor = mainWindowRef->getCustomAccentColor();
+        
+        accentColorButton->setStyleSheet(QString("background-color: %1").arg(selectedAccentColor.name()));
+        accentColorButton->setEnabled(useCustomAccentCheckbox->isChecked());
     }
 }
 
@@ -206,14 +223,14 @@ void ControlPanelDialog::createToolbarTab(){
     benchmarkNote->setStyleSheet("color: gray; font-size: 10px;");
     toolbarLayout->addWidget(benchmarkNote);
 
-    // ✅ Checkbox to show/hide color buttons
-    QCheckBox *colorButtonsVisibilityCheckbox = new QCheckBox(tr("Show Color Buttons"), toolbarTab);
-    colorButtonsVisibilityCheckbox->setChecked(mainWindowRef->areColorButtonsVisible());
-    toolbarLayout->addWidget(colorButtonsVisibilityCheckbox);
-    QLabel *colorButtonsNote = new QLabel(tr("This will show/hide the color buttons on the toolbar"));
-    colorButtonsNote->setWordWrap(true);
-    colorButtonsNote->setStyleSheet("color: gray; font-size: 10px;");
-    toolbarLayout->addWidget(colorButtonsNote);
+    // ✅ Checkbox to show/hide zoom buttons
+    QCheckBox *zoomButtonsVisibilityCheckbox = new QCheckBox(tr("Show Zoom Buttons"), toolbarTab);
+    zoomButtonsVisibilityCheckbox->setChecked(mainWindowRef->areZoomButtonsVisible());
+    toolbarLayout->addWidget(zoomButtonsVisibilityCheckbox);
+    QLabel *zoomButtonsNote = new QLabel(tr("This will show/hide the 0.5x, 1x, and 2x zoom buttons on the toolbar"));
+    zoomButtonsNote->setWordWrap(true);
+    zoomButtonsNote->setStyleSheet("color: gray; font-size: 10px;");
+    toolbarLayout->addWidget(zoomButtonsNote);
 
     QCheckBox *scrollOnTopCheckBox = new QCheckBox(tr("Scroll on Top after Page Switching"), toolbarTab);
     scrollOnTopCheckBox->setChecked(mainWindowRef->isScrollOnTopEnabled());
@@ -239,7 +256,7 @@ void ControlPanelDialog::createToolbarTab(){
 
     // Connect the checkbox
     connect(benchmarkVisibilityCheckbox, &QCheckBox::toggled, mainWindowRef, &MainWindow::setBenchmarkControlsVisible);
-    connect(colorButtonsVisibilityCheckbox, &QCheckBox::toggled, mainWindowRef, &MainWindow::setColorButtonsVisible);
+    connect(zoomButtonsVisibilityCheckbox, &QCheckBox::toggled, mainWindowRef, &MainWindow::setZoomButtonsVisible);
     connect(scrollOnTopCheckBox, &QCheckBox::toggled, mainWindowRef, &MainWindow::setScrollOnTopEnabled);
     connect(touchGesturesCheckbox, &QCheckBox::toggled, mainWindowRef, &MainWindow::setTouchGesturesEnabled);
 }
@@ -327,6 +344,47 @@ void ControlPanelDialog::createKeyboardMappingTab() {
     }
     
     tabWidget->addTab(keyboardTab, tr("Keyboard Shortcuts"));
+}
+
+void ControlPanelDialog::createThemeTab() {
+    themeTab = new QWidget(this);
+    QVBoxLayout *layout = new QVBoxLayout(themeTab);
+    
+    // Custom accent color
+    useCustomAccentCheckbox = new QCheckBox(tr("Use Custom Accent Color"), themeTab);
+    layout->addWidget(useCustomAccentCheckbox);
+    
+    QLabel *accentColorLabel = new QLabel(tr("Accent Color:"), themeTab);
+    accentColorButton = new QPushButton(themeTab);
+    accentColorButton->setFixedSize(100, 30);
+    connect(accentColorButton, &QPushButton::clicked, this, &ControlPanelDialog::chooseAccentColor);
+    
+    QHBoxLayout *accentColorLayout = new QHBoxLayout();
+    accentColorLayout->addWidget(accentColorLabel);
+    accentColorLayout->addWidget(accentColorButton);
+    accentColorLayout->addStretch();
+    layout->addLayout(accentColorLayout);
+    
+    QLabel *accentColorNote = new QLabel(tr("When enabled, use a custom accent color instead of the system accent color for the toolbar, dial, and tab selection."));
+    accentColorNote->setWordWrap(true);
+    accentColorNote->setStyleSheet("color: gray; font-size: 10px;");
+    layout->addWidget(accentColorNote);
+    
+    // Enable/disable accent color button based on checkbox
+    connect(useCustomAccentCheckbox, &QCheckBox::toggled, accentColorButton, &QPushButton::setEnabled);
+    connect(useCustomAccentCheckbox, &QCheckBox::toggled, accentColorLabel, &QLabel::setEnabled);
+    
+    layout->addStretch();
+    
+    tabWidget->addTab(themeTab, tr("Theme"));
+}
+
+void ControlPanelDialog::chooseAccentColor() {
+    QColor chosen = QColorDialog::getColor(selectedAccentColor, this, tr("Select Accent Color"));
+    if (chosen.isValid()) {
+        selectedAccentColor = chosen;
+        accentColorButton->setStyleSheet(QString("background-color: %1").arg(selectedAccentColor.name()));
+    }
 }
 
 void ControlPanelDialog::addKeyboardMapping() {

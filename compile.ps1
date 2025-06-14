@@ -10,7 +10,7 @@ Copy-Item -Path "C:\Games\notecpp_2rowlowres_legacy\resources\translations\*.qm"
 
 cd .\build
 cmake -G "MinGW Makefiles" .. 
-cmake --build . -- -j8
+cmake --build . -- -j16
 
 
 # ✅ Optionally, copy compiled .qm files into build or embed them via qrc

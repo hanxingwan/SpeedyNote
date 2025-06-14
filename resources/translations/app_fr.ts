@@ -27,11 +27,6 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../ButtonMappingTypes.cpp" line="93"/>
-        <source>Color Adjustment</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <location filename="../../ButtonMappingTypes.cpp" line="94"/>
         <source>Tool Switching</source>
         <translation type="unfinished"></translation>
@@ -220,213 +215,246 @@
 <context>
     <name>ControlPanelDialog</name>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="17"/>
+        <location filename="../../ControlPanelDialog.cpp" line="18"/>
         <source>Canvas Control Panel</source>
         <translation type="unfinished">Panneau de commande</translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="24"/>
+        <location filename="../../ControlPanelDialog.cpp" line="25"/>
         <source>Background</source>
         <translation type="unfinished">Contexte</translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="27"/>
+        <location filename="../../ControlPanelDialog.cpp" line="28"/>
         <source>Performance</source>
         <translation type="unfinished">Performance</translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="33"/>
+        <location filename="../../ControlPanelDialog.cpp" line="35"/>
         <source>Apply</source>
         <translation type="unfinished">Postuler</translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="34"/>
+        <location filename="../../ControlPanelDialog.cpp" line="36"/>
         <source>OK</source>
         <translation type="unfinished">D&apos;ACCORD</translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="35"/>
+        <location filename="../../ControlPanelDialog.cpp" line="37"/>
         <source>Cancel</source>
         <translation type="unfinished">Annuler</translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="62"/>
+        <location filename="../../ControlPanelDialog.cpp" line="64"/>
         <source>Background Style:</source>
         <translation type="unfinished">Style d&apos;arrière-plan&#xa0;:</translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="64"/>
+        <location filename="../../ControlPanelDialog.cpp" line="66"/>
         <source>None</source>
         <translation type="unfinished">Aucun</translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="65"/>
+        <location filename="../../ControlPanelDialog.cpp" line="67"/>
         <source>Grid</source>
         <translation type="unfinished">Grille</translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="66"/>
+        <location filename="../../ControlPanelDialog.cpp" line="68"/>
         <source>Lines</source>
         <translation type="unfinished">Lignes</translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="68"/>
+        <location filename="../../ControlPanelDialog.cpp" line="70"/>
         <source>Background Color:</source>
         <translation type="unfinished">Couleur d&apos;arrière-plan&#xa0;:</translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="72"/>
+        <location filename="../../ControlPanelDialog.cpp" line="74"/>
         <source>Density:</source>
         <translation type="unfinished">Espacement:</translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="90"/>
+        <location filename="../../ControlPanelDialog.cpp" line="92"/>
         <source>Select Background Color</source>
         <translation type="unfinished">Sélectionnez la couleur d&apos;arrière-plan</translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="157"/>
+        <location filename="../../ControlPanelDialog.cpp" line="179"/>
         <source>Enable Low-Resolution PDF Previews</source>
         <translation type="unfinished">Activer les aperçus PDF de basse résolution</translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="162"/>
+        <location filename="../../ControlPanelDialog.cpp" line="184"/>
         <source>Disabling this may improve dial smoothness on low-end devices.</source>
         <translation type="unfinished">La désactivation de cette option peut améliorer la fluidité de la numérotation sur les appareils bas de gamme.</translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="166"/>
+        <location filename="../../ControlPanelDialog.cpp" line="188"/>
         <source>PDF Rendering DPI:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="175"/>
+        <location filename="../../ControlPanelDialog.cpp" line="197"/>
         <source>Adjust how the PDF is rendered. Higher DPI means better quality but slower performance. DO NOT CHANGE THIS OPTION WHEN MULTIPLE TABS ARE OPEN. THIS MAY LEAD TO UNDEFINED BEHAVIOR!</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="196"/>
+        <location filename="../../ControlPanelDialog.cpp" line="218"/>
         <source>Show Benchmark Controls</source>
         <translation type="unfinished">Afficher les contrôles de référence</translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="199"/>
+        <location filename="../../ControlPanelDialog.cpp" line="221"/>
         <source>This will show/hide the benchmark controls on the toolbar. Press the clock button to start/stop the benchmark.</source>
         <translation type="unfinished">Cela affichera/masquera les contrôles de référence sur la barre d&apos;outils. Appuyez sur le bouton d&apos;horloge pour démarrer/arrêter le benchmark.</translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="205"/>
         <source>Show Color Buttons</source>
-        <translation type="unfinished">Afficher les boutons de couleur</translation>
+        <translation type="obsolete">Afficher les boutons de couleur</translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="208"/>
         <source>This will show/hide the color buttons on the toolbar</source>
-        <translation type="unfinished">Cela affichera/masquera certains des boutons de couleur de la barre d&apos;outils</translation>
+        <translation type="obsolete">Cela affichera/masquera certains des boutons de couleur de la barre d&apos;outils</translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="213"/>
+        <location filename="../../ControlPanelDialog.cpp" line="227"/>
+        <source>Show Zoom Buttons</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../ControlPanelDialog.cpp" line="230"/>
+        <source>This will show/hide the 0.5x, 1x, and 2x zoom buttons on the toolbar</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../ControlPanelDialog.cpp" line="235"/>
         <source>Scroll on Top after Page Switching</source>
         <translation type="unfinished">Faites défiler vers le haut après le changement de page</translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="216"/>
+        <location filename="../../ControlPanelDialog.cpp" line="238"/>
         <source>Enabling this will make the page scroll to the top after switching to a new page.</source>
         <translation type="unfinished">L&apos;activation de cette option fera défiler la page vers le haut après le passage à une nouvelle page.</translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="222"/>
+        <location filename="../../ControlPanelDialog.cpp" line="244"/>
         <source>Enable Touch Gestures</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="225"/>
+        <location filename="../../ControlPanelDialog.cpp" line="247"/>
         <source>Enable pinch to zoom and touch panning on the canvas. When disabled, only pen input is accepted.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="232"/>
+        <location filename="../../ControlPanelDialog.cpp" line="254"/>
         <source>Features</source>
         <translation type="unfinished">Fonctionnalités</translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="262"/>
+        <location filename="../../ControlPanelDialog.cpp" line="284"/>
         <source>Hold:</source>
         <translation type="unfinished">Tenir:</translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="268"/>
+        <location filename="../../ControlPanelDialog.cpp" line="290"/>
         <source>Press:</source>
         <translation type="unfinished">Presse:</translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="276"/>
+        <location filename="../../ControlPanelDialog.cpp" line="298"/>
         <source>Button Mapping</source>
         <translation type="unfinished">Mappage des boutons</translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="284"/>
+        <location filename="../../ControlPanelDialog.cpp" line="306"/>
         <source>Configure custom keyboard shortcuts for application actions:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="290"/>
+        <location filename="../../ControlPanelDialog.cpp" line="312"/>
         <source>Key Sequence</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="290"/>
+        <location filename="../../ControlPanelDialog.cpp" line="312"/>
         <source>Action</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="298"/>
+        <location filename="../../ControlPanelDialog.cpp" line="320"/>
         <source>Add Mapping</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="299"/>
-        <location filename="../../ControlPanelDialog.cpp" line="385"/>
+        <location filename="../../ControlPanelDialog.cpp" line="321"/>
+        <location filename="../../ControlPanelDialog.cpp" line="448"/>
         <source>Remove Mapping</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="324"/>
+        <location filename="../../ControlPanelDialog.cpp" line="346"/>
         <source>Keyboard Shortcuts</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="341"/>
+        <location filename="../../ControlPanelDialog.cpp" line="354"/>
+        <source>Use Custom Accent Color</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../ControlPanelDialog.cpp" line="357"/>
+        <source>Accent Color:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../ControlPanelDialog.cpp" line="368"/>
+        <source>When enabled, use a custom accent color instead of the system accent color for the toolbar, dial, and tab selection.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../ControlPanelDialog.cpp" line="379"/>
+        <source>Theme</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../ControlPanelDialog.cpp" line="383"/>
+        <source>Select Accent Color</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../ControlPanelDialog.cpp" line="404"/>
         <source>Key Already Mapped</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="342"/>
+        <location filename="../../ControlPanelDialog.cpp" line="405"/>
         <source>The key sequence &apos;%1&apos; is already mapped. Please choose a different key combination.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="349"/>
+        <location filename="../../ControlPanelDialog.cpp" line="412"/>
         <source>Select Action</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="350"/>
+        <location filename="../../ControlPanelDialog.cpp" line="413"/>
         <source>Choose the action to perform when &apos;%1&apos; is pressed:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="375"/>
+        <location filename="../../ControlPanelDialog.cpp" line="438"/>
         <source>No Selection</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="375"/>
+        <location filename="../../ControlPanelDialog.cpp" line="438"/>
         <source>Please select a mapping to remove.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../ControlPanelDialog.cpp" line="386"/>
+        <location filename="../../ControlPanelDialog.cpp" line="449"/>
         <source>Are you sure you want to remove the keyboard shortcut &apos;%1&apos;?</source>
         <translation type="unfinished"></translation>
     </message>
@@ -566,223 +594,247 @@
         <translation type="obsolete">SpeedyNote Beta 0.4.2</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="33"/>
-        <source>SpeedyNote Beta 0.4.10</source>
+        <location filename="../../MainWindow.cpp" line="40"/>
+        <source>SpeedyNote Beta 0.4.12</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="131"/>
+        <location filename="../../MainWindow.cpp" line="156"/>
         <source>Load PDF</source>
         <translation type="unfinished">Télécharger le PDF</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="132"/>
+        <location filename="../../MainWindow.cpp" line="157"/>
         <source>Clear PDF</source>
         <translation type="unfinished">PDF clair</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="141"/>
+        <location filename="../../MainWindow.cpp" line="166"/>
         <source>Export Notebook Into .SNPKG File</source>
         <translation type="unfinished">Exporter le bloc-notes dans un fichier .SNPKG</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="147"/>
+        <location filename="../../MainWindow.cpp" line="172"/>
         <source>Import Notebook From .SNPKG File</source>
         <translation type="unfinished">Importer un bloc-notes dans un fichier .SNPKG</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="150"/>
+        <location filename="../../MainWindow.cpp" line="175"/>
         <source>Export Notebook</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="158"/>
+        <location filename="../../MainWindow.cpp" line="183"/>
         <source>Import Notebook</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="169"/>
+        <location filename="../../MainWindow.cpp" line="194"/>
         <source>Toggle Benchmark</source>
         <translation type="unfinished">Basculer l&apos;indice de référence</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="175"/>
+        <location filename="../../MainWindow.cpp" line="200"/>
         <source>Show/Hide Tabs</source>
         <translation type="unfinished">Afficher/Masquer les onglets</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="184"/>
-        <location filename="../../MainWindow.cpp" line="917"/>
-        <location filename="../../MainWindow.cpp" line="1428"/>
+        <location filename="../../MainWindow.cpp" line="209"/>
+        <location filename="../../MainWindow.cpp" line="1041"/>
+        <location filename="../../MainWindow.cpp" line="1673"/>
         <source>Select Save Folder</source>
         <translation type="unfinished">Sélectionnez Enregistrer le dossier</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="193"/>
+        <location filename="../../MainWindow.cpp" line="218"/>
         <source>Save Current Page</source>
         <translation type="unfinished">Sauvegarder la page actuelle</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="201"/>
+        <location filename="../../MainWindow.cpp" line="226"/>
         <source>Save Page with Background</source>
         <translation type="unfinished">Enregistrer la page avec l&apos;arrière-plan</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="207"/>
+        <location filename="../../MainWindow.cpp" line="232"/>
         <source>Toggle Fullscreen</source>
         <translation type="unfinished">Passer en mode plein écran</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="330"/>
+        <location filename="../../MainWindow.cpp" line="366"/>
+        <source>Pen Tool</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../MainWindow.cpp" line="373"/>
+        <source>Marker Tool</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../MainWindow.cpp" line="380"/>
+        <source>Eraser Tool</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../MainWindow.cpp" line="388"/>
         <source>Set Background Pic</source>
         <translation type="unfinished">Définir l&apos;image d&apos;arrière-plan</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="339"/>
+        <location filename="../../MainWindow.cpp" line="397"/>
         <source>Toggle Straight Line Mode</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="359"/>
+        <location filename="../../MainWindow.cpp" line="417"/>
         <source>Toggle Rope Tool Mode</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="379"/>
+        <location filename="../../MainWindow.cpp" line="437"/>
         <source>Delete Current Page</source>
         <translation type="unfinished">Supprimer la page actuelle</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="415"/>
+        <location filename="../../MainWindow.cpp" line="473"/>
         <source>Set Zoom to 50%</source>
         <translation type="unfinished">Réglez le zoom à 50&#xa0;%</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="421"/>
+        <location filename="../../MainWindow.cpp" line="479"/>
         <source>Set Zoom to 100%</source>
         <translation type="unfinished">Réglez le zoom à 100&#xa0;%</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="427"/>
+        <location filename="../../MainWindow.cpp" line="485"/>
         <source>Set Zoom to 200%</source>
         <translation type="unfinished">Réglez le zoom à 200&#xa0;%</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="582"/>
+        <location filename="../../MainWindow.cpp" line="626"/>
+        <source>Previous Page</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../MainWindow.cpp" line="642"/>
+        <source>Next Page</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../MainWindow.cpp" line="656"/>
         <source>Toggle Magic Dial</source>
         <translation type="unfinished">Activer/désactiver le MagicDial</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="596"/>
+        <location filename="../../MainWindow.cpp" line="670"/>
         <source>Toggle Fast Forward 8x</source>
         <translation type="unfinished">Basculer l&apos;avance rapide 8x</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="632"/>
+        <location filename="../../MainWindow.cpp" line="700"/>
         <source>Set Dial Mode to Page Switching</source>
         <translation type="unfinished">Régler le mode de numérotation sur Changement de page</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="636"/>
+        <location filename="../../MainWindow.cpp" line="704"/>
         <source>Set Dial Mode to Zoom Ctrl</source>
         <translation type="unfinished">Régler le mode de numérotation sur Contrôle du zoom</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="640"/>
+        <location filename="../../MainWindow.cpp" line="708"/>
         <source>Set Dial Mode to Pen Tip Thickness Ctrl</source>
         <translation type="unfinished">Réglez le mode de numérotation sur le contrôle de l&apos;épaisseur de la pointe du stylet</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="644"/>
         <source>Set Dial Mode to Color Adjustment</source>
-        <translation type="unfinished">Réglez le mode de numérotation sur Réglage des couleurs</translation>
+        <translation type="obsolete">Réglez le mode de numérotation sur Réglage des couleurs</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="648"/>
+        <location filename="../../MainWindow.cpp" line="713"/>
         <source>Set Dial Mode to Tool Switching</source>
         <translation type="unfinished">Régler le mode de numérotation sur la commutation d&apos;outils</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="652"/>
+        <location filename="../../MainWindow.cpp" line="717"/>
         <source>Set Dial Mode to Color Preset Selection</source>
         <translation type="unfinished">Réglez le mode de numérotation sur la sélection de préréglage de couleur</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="656"/>
+        <location filename="../../MainWindow.cpp" line="721"/>
         <source>Slide and turn pages with the dial</source>
         <translation type="unfinished">Faites glisser et tournez les pages avec le cadran</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="678"/>
+        <location filename="../../MainWindow.cpp" line="751"/>
         <source>Add Current Color to Presets</source>
         <translation type="unfinished">Ajouter la couleur actuelle aux préréglages</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="685"/>
+        <location filename="../../MainWindow.cpp" line="758"/>
         <source>Open Control Panel</source>
         <translation type="unfinished">Ouvrir le panneau de configuration</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="699"/>
+        <location filename="../../MainWindow.cpp" line="772"/>
         <source>Open Recent Notebooks</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="882"/>
+        <location filename="../../MainWindow.cpp" line="952"/>
         <source>PR:N/A</source>
         <translation type="unfinished">PR:N/A</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="888"/>
+        <location filename="../../MainWindow.cpp" line="958"/>
         <source>PR:%1 Hz</source>
         <translation type="unfinished">PR:%1 Hz</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="974"/>
+        <location filename="../../MainWindow.cpp" line="1187"/>
         <source>Select Background Image</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="1129"/>
+        <location filename="../../MainWindow.cpp" line="1349"/>
         <source>Cannot Load PDF</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="1130"/>
+        <location filename="../../MainWindow.cpp" line="1350"/>
         <source>Please select a permanent save folder before loading a PDF.
 
 Click the folder icon to choose a location for your notebook.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="1134"/>
+        <location filename="../../MainWindow.cpp" line="1354"/>
         <source>Select PDF</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="1229"/>
+        <location filename="../../MainWindow.cpp" line="1455"/>
         <source>Notice</source>
         <translation type="unfinished">Remarquer</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="1229"/>
+        <location filename="../../MainWindow.cpp" line="1455"/>
         <source>At least one tab must remain open.</source>
         <translation type="unfinished">Au moins un onglet doit rester ouvert.</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="1425"/>
+        <location filename="../../MainWindow.cpp" line="1670"/>
         <source>Unsaved Notebook</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="1426"/>
+        <location filename="../../MainWindow.cpp" line="1671"/>
         <source>This notebook is still using a temporary session folder.
 Please select a permanent folder to avoid data loss.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="1699"/>
-        <location filename="../../MainWindow.cpp" line="1702"/>
+        <location filename="../../MainWindow.cpp" line="1977"/>
+        <location filename="../../MainWindow.cpp" line="1980"/>
         <source>
 
 Page
@@ -793,7 +845,7 @@ Page
 %1</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="1707"/>
+        <location filename="../../MainWindow.cpp" line="1985"/>
         <source>
 
 Thickness
@@ -804,7 +856,7 @@ Thickness
 %1</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="1711"/>
+        <location filename="../../MainWindow.cpp" line="1989"/>
         <source>
 
 Zoom
@@ -815,40 +867,37 @@ Zoom
 %1%</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="1718"/>
         <source>
 
 Adjust Red
 #%1</source>
-        <translation type="unfinished">
+        <translation type="obsolete">
 
 Ajuster le rouge
 #%1</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="1721"/>
         <source>
 
 Adjust Green
 #%1</source>
-        <translation type="unfinished">
+        <translation type="obsolete">
 
 Ajuster le vert
 #%1</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="1724"/>
         <source>
 
 Adjust Blue
 #%1</source>
-        <translation type="unfinished">
+        <translation type="obsolete">
 
 Ajuster le bleu
 #%1</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="1734"/>
+        <location filename="../../MainWindow.cpp" line="1997"/>
         <source>
 
 
@@ -859,7 +908,7 @@ Pen</source>
 Stylo</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="1738"/>
+        <location filename="../../MainWindow.cpp" line="2001"/>
         <source>
 
 
@@ -870,7 +919,7 @@ Marker</source>
 Marqueur</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="1742"/>
+        <location filename="../../MainWindow.cpp" line="2005"/>
         <source>
 
 
@@ -881,7 +930,7 @@ Eraser</source>
 Gomme</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="1752"/>
+        <location filename="../../MainWindow.cpp" line="2015"/>
         <source>
 
 Preset %1
@@ -892,17 +941,17 @@ Préréglage %1
 #%2</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="1759"/>
+        <location filename="../../MainWindow.cpp" line="2022"/>
         <source>Etr</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="1759"/>
+        <location filename="../../MainWindow.cpp" line="2022"/>
         <source>Exit</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="1760"/>
+        <location filename="../../MainWindow.cpp" line="2023"/>
         <source>
 
 Page %1
@@ -910,17 +959,17 @@ Page %1
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="2754"/>
+        <location filename="../../MainWindow.cpp" line="3131"/>
         <source>Select Working Directory for Notebook</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="2757"/>
+        <location filename="../../MainWindow.cpp" line="3134"/>
         <source>Import Cancelled</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="2757"/>
+        <location filename="../../MainWindow.cpp" line="3134"/>
         <source>No directory selected. Notebook will not be opened.</source>
         <translation type="unfinished"></translation>
     </message>

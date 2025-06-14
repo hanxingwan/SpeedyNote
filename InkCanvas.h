@@ -104,6 +104,7 @@ public:
     void saveBackgroundMetadata();  // ✅ Save background metadata
 
     int getBufferWidth() const { return buffer.width(); }
+    QPixmap getBuffer() const { return buffer; } // Get buffer for concurrent saving
 
     void exportNotebook(const QString &destinationFile);
     void importNotebook(const QString &packageFile);
@@ -111,6 +112,7 @@ public:
     void importNotebookTo(const QString &packageFile, const QString &destFolder);
 
     bool isEdited() const { return edited; }  // ✅ Check if the canvas has been edited
+    void setEdited(bool state) { edited = state; }  // ✅ Set the edited state
 
     void setPDFRenderDPI(int dpi) { pdfRenderDPI = dpi; }  // ✅ Set PDF render DPI
 

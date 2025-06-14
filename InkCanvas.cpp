@@ -1585,4 +1585,4 @@ QRect InkCanvas::mapRectBufferToWidgetLogical(const QRectF& physicalBufferRect) 
     );
     
     return widgetRect.toRect();
-}
+    }
