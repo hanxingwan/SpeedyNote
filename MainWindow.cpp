@@ -1209,6 +1209,7 @@ void MainWindow::selectBackground() {
     QString filePath = QFileDialog::getOpenFileName(this, tr("Select Background Image"), "", "Images (*.png *.jpg *.jpeg)");
     if (!filePath.isEmpty()) {
         currentCanvas()->setBackground(filePath, getCurrentPageForCanvas(currentCanvas()));
+        updateZoom(); // ✅ Update zoom and pan range after background is set
     }
 }
 
@@ -1377,6 +1378,7 @@ void MainWindow::loadPdf() {
     if (!filePath.isEmpty()) {
         currentCanvas()->loadPdf(filePath);
         updateTabLabel(); // ✅ Update the tab name after assigning a PDF
+        updateZoom(); // ✅ Update zoom and pan range after PDF is loaded
     }
 }
 
@@ -1385,6 +1387,7 @@ void MainWindow::clearPdf() {
     if (!canvas) return;
     
     canvas->clearPdf();
+    updateZoom(); // ✅ Update zoom and pan range after PDF is cleared
 }
 
 
@@ -3290,6 +3293,7 @@ void MainWindow::importNotebookFromFile(const QString &packageFile) {
     // Change saveFolder in InkCanvas
     canvas->setSaveFolder(destDir);
     canvas->loadPage(0);
+    updateZoom(); // ✅ Update zoom and pan range after importing notebook
 }
 
 void MainWindow::setPdfDPI(int dpi) {
