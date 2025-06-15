@@ -6,7 +6,7 @@ QString ButtonMappingHelper::dialModeToInternalKey(InternalDialMode mode) {
         case InternalDialMode::PageSwitching: return "page_switching";
         case InternalDialMode::ZoomControl: return "zoom_control";
         case InternalDialMode::ThicknessControl: return "thickness_control";
-        case InternalDialMode::ColorAdjustment: return "color_adjustment";
+
         case InternalDialMode::ToolSwitching: return "tool_switching";
         case InternalDialMode::PresetSelection: return "preset_selection";
         case InternalDialMode::PanAndPageScroll: return "pan_and_page_scroll";
@@ -49,7 +49,7 @@ InternalDialMode ButtonMappingHelper::internalKeyToDialMode(const QString &key) 
     if (key == "page_switching") return InternalDialMode::PageSwitching;
     if (key == "zoom_control") return InternalDialMode::ZoomControl;
     if (key == "thickness_control") return InternalDialMode::ThicknessControl;
-    if (key == "color_adjustment") return InternalDialMode::ColorAdjustment;
+
     if (key == "tool_switching") return InternalDialMode::ToolSwitching;
     if (key == "preset_selection") return InternalDialMode::PresetSelection;
     if (key == "pan_and_page_scroll") return InternalDialMode::PanAndPageScroll;
@@ -90,7 +90,7 @@ QStringList ButtonMappingHelper::getTranslatedDialModes() {
         tr("Page Switching"),
         tr("Zoom Control"),
         tr("Thickness Control"),
-        tr("Color Adjustment"),
+
         tr("Tool Switching"),
         tr("Preset Selection"),
         tr("Pan and Page Scroll")
@@ -148,7 +148,7 @@ QStringList ButtonMappingHelper::getInternalDialModeKeys() {
         "page_switching",
         "zoom_control",
         "thickness_control",
-        "color_adjustment",
+
         "tool_switching",
         "preset_selection",
         "pan_and_page_scroll"

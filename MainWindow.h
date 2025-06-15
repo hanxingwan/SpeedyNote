@@ -25,6 +25,8 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QKeyEvent>
+#include <QTabletEvent>
+#include <QMenu>
 
 // #include "HandwritingLineEdit.h"
 
@@ -33,7 +35,6 @@ enum DialMode {
     PageSwitching,
     ZoomControl,
     ThicknessControl,
-    ColorAdjustment,
     ToolSwitching,
     PresetSelection,
     PanAndPageScroll
@@ -144,17 +145,42 @@ public:
     bool areBenchmarkControlsVisible() const;
     void setBenchmarkControlsVisible(bool visible);
 
-    bool colorButtonsVisible = true;
-    bool areColorButtonsVisible() const;
-    void setColorButtonsVisible(bool visible);
+    bool zoomButtonsVisible = true;
+    bool areZoomButtonsVisible() const;
+    void setZoomButtonsVisible(bool visible);
 
     bool scrollOnTopEnabled = false;
     bool isScrollOnTopEnabled() const;
     void setScrollOnTopEnabled(bool enabled);
 
-    bool touchGesturesEnabled = false;
+    bool touchGesturesEnabled = true;
     bool areTouchGesturesEnabled() const;
     void setTouchGesturesEnabled(bool enabled);
+
+    // Theme settings
+    QColor customAccentColor;
+    bool useCustomAccentColor = false;
+    
+    // Dark mode settings
+    enum class DarkModeOption {
+        Auto,    // Detect from system
+        Light,   // Force light mode
+        Dark     // Force dark mode
+    };
+    DarkModeOption darkModeOption = DarkModeOption::Auto;
+    
+    QColor getAccentColor() const;
+    QColor getCustomAccentColor() const { return customAccentColor; }
+    void setCustomAccentColor(const QColor &color);
+    bool isUsingCustomAccentColor() const { return useCustomAccentColor; }
+    void setUseCustomAccentColor(bool use);
+    
+    // Dark mode methods
+    DarkModeOption getDarkModeOption() const { return darkModeOption; }
+    void setDarkModeOption(DarkModeOption option);
+    bool isDarkMode(); // Made public for ControlPanelDialog
+    
+    QColor getDefaultPenColor();
 
     SDLControllerManager *controllerManager = nullptr;
     QThread *controllerThread = nullptr;
@@ -177,16 +203,27 @@ public:
     // void loadUserSettings();  // New
     void savePdfDPI(int dpi); // New
 
-    // Migration functions for old button mappings
+    // Background settings persistence
+    void saveDefaultBackgroundSettings(BackgroundStyle style, QColor color, int density);
+    void loadDefaultBackgroundSettings(BackgroundStyle &style, QColor &color, int &density);
+    
+    void saveThemeSettings();
+    void loadThemeSettings();
+    void updateTheme(); // Apply current theme settings
+    
     void migrateOldButtonMappings();
     QString migrateOldDialModeString(const QString &oldString);
     QString migrateOldActionString(const QString &oldString);
-    
+
     InkCanvas* currentCanvas(); // Made public for RecentNotebooksDialog
     void saveCurrentPage(); // Made public for RecentNotebooksDialog
+    void saveCurrentPageConcurrent(); // Concurrent version for smooth page flipping
     void switchPage(int pageNumber); // Made public for RecentNotebooksDialog
+    void switchPageWithDirection(int pageNumber, int direction); // Enhanced page switching with direction tracking
     void updateTabLabel(); // Made public for RecentNotebooksDialog
     QSpinBox *pageInput; // Made public for RecentNotebooksDialog
+    QPushButton *prevPageButton; // Previous page button
+    QPushButton *nextPageButton; // Next page button
     
     // New: Keyboard mapping methods (made public for ControlPanelDialog)
     void addKeyboardMapping(const QString &keySequence, const QString &action);
@@ -208,6 +245,7 @@ private slots:
     void clearPdf();
 
     void updateZoom();
+    void onZoomSliderChanged(int value); // Handle manual zoom slider changes
     void applyZoom();
     void updatePanRange();
     void updatePanX(int value);
@@ -224,8 +262,12 @@ private slots:
     void toggleThicknessSlider(); // Added function to toggle thickness slider
     void toggleFullscreen();
     void showJumpToPageDialog();
+    void goToPreviousPage(); // Go to previous page
+    void goToNextPage();     // Go to next page
+    void onPageInputChanged(int newPage); // Handle spinbox page changes with direction tracking
 
     void toggleDial();  // ✅ Show/Hide dial
+    void positionDialContainer(); // ✅ Position dial container intelligently
     void handleDialInput(int angle);  // ✅ Handle touch input
     void onDialReleased();
     // void processPageSwitch();
@@ -236,23 +278,19 @@ private slots:
     void handleDialThickness(int angle); // Added function to handle thickness control
     void onZoomReleased();
     void onThicknessReleased(); // Added function to handle thickness control
-    void handleDialColor(int angle); // Added function to handle color adjustment
-    void onColorReleased(); // Added function to handle color adjustment
     // void updateCustomColor();
-    void updateSelectedChannel(int index);
     void updateDialDisplay();
     // void handleModeSelection(int angle);
 
     void handleToolSelection(int angle);
     void onToolReleased();
-    void cycleColorChannel();
+
 
     void handlePresetSelection(int angle);
     void onPresetReleased();
     void addColorPreset();
     qreal getDevicePixelRatio(); 
 
-    bool isDarkMode();
     QIcon loadThemedIcon(const QString& baseName);
 
     void handleDialPanScroll(int angle);  // Add missing function declaration
@@ -270,11 +308,19 @@ private slots:
     void updateRopeToolButtonState(); // New slot for rope tool button
     void updateDialButtonState();     // New method for dial toggle button
     void updateFastForwardButtonState(); // New method for fast forward toggle button
+    void updateToolButtonStates();   // New method for tool button states
+    void setPenTool();               // Set pen tool
+    void setMarkerTool();            // Set marker tool
+    void setEraserTool();            // Set eraser tool
 
     QColor getContrastingTextColor(const QColor &backgroundColor);
     void updateCustomColorButtonStyle(const QColor &color);
 
     void openRecentNotebooksDialog(); // Added slot
+
+    void showPendingTooltip(); // Show tooltip with throttling
+    
+    void showRopeSelectionMenu(const QPoint &position); // Show context menu for rope tool selection
 
 private:
     InkCanvas *canvas;
@@ -298,6 +344,9 @@ private:
     QSlider *thicknessSlider; // Added thickness slider
     QFrame *thicknessFrame; // Added thickness frame
     QComboBox *toolSelector;
+    QPushButton *penToolButton;    // Individual pen tool button
+    QPushButton *markerToolButton; // Individual marker tool button
+    QPushButton *eraserToolButton; // Individual eraser tool button
     QPushButton *deletePageButton;
     QPushButton *selectFolderButton; // Button to select folder
     QPushButton *saveButton; // Button to save file
@@ -359,16 +408,14 @@ private:
     DialMode currentDialMode = PageSwitching; ✅ Default mode
 
     QComboBox *dialModeSelector; ✅ Mode selector
-    QComboBox *channelSelector; ✅ Channel selector
-    int selectedChannel = 0; ✅ Default channel
+
     */
     
     DialMode currentDialMode = PanAndPageScroll; // ✅ Default mode
     DialMode temporaryDialMode = None;
 
     QComboBox *dialModeSelector; // ✅ Mode selector
-    QComboBox *channelSelector; // ✅ Channel selector
-    int selectedChannel = 0; // ✅ Default channel
+
     QPushButton *colorPreview; // ✅ Color preview
 
     QLabel *dialDisplay = nullptr; // ✅ Display for dial mode
@@ -382,7 +429,7 @@ private:
     QPushButton *btnPageSwitch;
     QPushButton *btnZoom;
     QPushButton *btnThickness;
-    QPushButton *btnColor;
+
     QPushButton *btnTool;
     QPushButton *btnPresets;
     QPushButton *btnPannScroll;
@@ -404,6 +451,7 @@ private:
 
     bool controlBarVisible = true;  // Track controlBar visibility state
     void toggleControlBar();        // Function to toggle controlBar visibility
+    void cycleZoomLevels();         // Function to cycle through 0.5x, 1x, 2x zoom levels
     bool sidebarWasVisibleBeforeFullscreen = true;  // Track sidebar state before fullscreen
 
     int accumulatedRotationAfterLimit = 0; 
@@ -419,6 +467,10 @@ private:
     QMap<QString, QString> keyboardMappings;  // keySequence -> action internal key
     QMap<QString, ControllerAction> keyboardActionMapping;  // keySequence -> action enum
 
+    // Tooltip handling for pen input
+    QTimer *tooltipTimer;
+    QWidget *lastHoveredWidget;
+    QPoint pendingTooltipPos;
 
     void handleButtonHeld(const QString &buttonName);
     void handleButtonReleased(const QString &buttonName);
@@ -471,6 +523,7 @@ private:
 protected:
     void resizeEvent(QResizeEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;  // New: Handle keyboard shortcuts
+    void tabletEvent(QTabletEvent *event) override; // Handle pen hover for tooltips
 };
 
 #endif // MAINWINDOW_H

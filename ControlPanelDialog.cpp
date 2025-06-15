@@ -5,6 +5,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QCheckBox>
+#include <QSpacerItem>
 #include <QTableWidget>
 #include <QPushButton>
 #include <QColorDialog>
@@ -16,6 +17,9 @@ ControlPanelDialog::ControlPanelDialog(MainWindow *mainWindow, InkCanvas *target
 
     setWindowTitle(tr("Canvas Control Panel"));
     resize(400, 200);
+    
+    // Apply dark theme if needed
+    applyTheme();
 
     tabWidget = new QTabWidget(this);
 
@@ -29,6 +33,7 @@ ControlPanelDialog::ControlPanelDialog(MainWindow *mainWindow, InkCanvas *target
     }
     createButtonMappingTab();
     createKeyboardMappingTab();
+    createThemeTab();
     // === Buttons ===
     applyButton = new QPushButton(tr("Apply"));
     okButton = new QPushButton(tr("OK"));
@@ -107,6 +112,11 @@ void ControlPanelDialog::applyChanges() {
     canvas->update();
     canvas->saveBackgroundMetadata();
 
+    // ✅ Save these settings as defaults for new tabs
+    if (mainWindowRef) {
+        mainWindowRef->saveDefaultBackgroundSettings(style, selectedColor, densitySpin->value());
+    }
+
     // ✅ Apply button mappings back to MainWindow with internal keys
     if (mainWindowRef) {
         for (const QString &buttonKey : holdMappingCombos.keys()) {
@@ -122,6 +132,20 @@ void ControlPanelDialog::applyChanges() {
 
         // ✅ Save to persistent settings
         mainWindowRef->saveButtonMappings();
+        
+        // ✅ Apply theme settings
+        mainWindowRef->setUseCustomAccentColor(useCustomAccentCheckbox->isChecked());
+        if (selectedAccentColor.isValid()) {
+            mainWindowRef->setCustomAccentColor(selectedAccentColor);
+        }
+        
+        // Apply dark mode setting
+        int darkModeValue = darkModeCombo->currentData().toInt();
+        MainWindow::DarkModeOption darkModeOption = static_cast<MainWindow::DarkModeOption>(darkModeValue);
+        mainWindowRef->setDarkModeOption(darkModeOption);
+        
+        // Refresh dialog theme
+        applyTheme();
     }
 }
 
@@ -145,6 +169,22 @@ void ControlPanelDialog::loadFromCanvas() {
             QString displayString = ButtonMappingHelper::internalKeyToDisplay(internalKey, false);  // false = isAction
             int index = pressMappingCombos[buttonKey]->findText(displayString);
             if (index >= 0) pressMappingCombos[buttonKey]->setCurrentIndex(index);
+        }
+        
+        // Load theme settings
+        useCustomAccentCheckbox->setChecked(mainWindowRef->isUsingCustomAccentColor());
+        
+        // Get the stored custom accent color
+        selectedAccentColor = mainWindowRef->getCustomAccentColor();
+        
+        accentColorButton->setStyleSheet(QString("background-color: %1").arg(selectedAccentColor.name()));
+        accentColorButton->setEnabled(useCustomAccentCheckbox->isChecked());
+        
+        // Load dark mode setting
+        MainWindow::DarkModeOption currentDarkMode = mainWindowRef->getDarkModeOption();
+        int darkModeIndex = darkModeCombo->findData(static_cast<int>(currentDarkMode));
+        if (darkModeIndex >= 0) {
+            darkModeCombo->setCurrentIndex(darkModeIndex);
         }
     }
 }
@@ -201,14 +241,14 @@ void ControlPanelDialog::createToolbarTab(){
     benchmarkNote->setStyleSheet("color: gray; font-size: 10px;");
     toolbarLayout->addWidget(benchmarkNote);
 
-    // ✅ Checkbox to show/hide color buttons
-    QCheckBox *colorButtonsVisibilityCheckbox = new QCheckBox(tr("Show Color Buttons"), toolbarTab);
-    colorButtonsVisibilityCheckbox->setChecked(mainWindowRef->areColorButtonsVisible());
-    toolbarLayout->addWidget(colorButtonsVisibilityCheckbox);
-    QLabel *colorButtonsNote = new QLabel(tr("This will show/hide the color buttons on the toolbar"));
-    colorButtonsNote->setWordWrap(true);
-    colorButtonsNote->setStyleSheet("color: gray; font-size: 10px;");
-    toolbarLayout->addWidget(colorButtonsNote);
+    // ✅ Checkbox to show/hide zoom buttons
+    QCheckBox *zoomButtonsVisibilityCheckbox = new QCheckBox(tr("Show Zoom Buttons"), toolbarTab);
+    zoomButtonsVisibilityCheckbox->setChecked(mainWindowRef->areZoomButtonsVisible());
+    toolbarLayout->addWidget(zoomButtonsVisibilityCheckbox);
+    QLabel *zoomButtonsNote = new QLabel(tr("This will show/hide the 0.5x, 1x, and 2x zoom buttons on the toolbar"));
+    zoomButtonsNote->setWordWrap(true);
+    zoomButtonsNote->setStyleSheet("color: gray; font-size: 10px;");
+    toolbarLayout->addWidget(zoomButtonsNote);
 
     QCheckBox *scrollOnTopCheckBox = new QCheckBox(tr("Scroll on Top after Page Switching"), toolbarTab);
     scrollOnTopCheckBox->setChecked(mainWindowRef->isScrollOnTopEnabled());
@@ -234,7 +274,7 @@ void ControlPanelDialog::createToolbarTab(){
 
     // Connect the checkbox
     connect(benchmarkVisibilityCheckbox, &QCheckBox::toggled, mainWindowRef, &MainWindow::setBenchmarkControlsVisible);
-    connect(colorButtonsVisibilityCheckbox, &QCheckBox::toggled, mainWindowRef, &MainWindow::setColorButtonsVisible);
+    connect(zoomButtonsVisibilityCheckbox, &QCheckBox::toggled, mainWindowRef, &MainWindow::setZoomButtonsVisible);
     connect(scrollOnTopCheckBox, &QCheckBox::toggled, mainWindowRef, &MainWindow::setScrollOnTopEnabled);
     connect(touchGesturesCheckbox, &QCheckBox::toggled, mainWindowRef, &MainWindow::setTouchGesturesEnabled);
 }
@@ -324,6 +364,68 @@ void ControlPanelDialog::createKeyboardMappingTab() {
     tabWidget->addTab(keyboardTab, tr("Keyboard Shortcuts"));
 }
 
+void ControlPanelDialog::createThemeTab() {
+    themeTab = new QWidget(this);
+    QVBoxLayout *layout = new QVBoxLayout(themeTab);
+    
+    // Dark mode selection
+    QLabel *darkModeLabel = new QLabel(tr("Dark Mode:"), themeTab);
+    darkModeCombo = new QComboBox(themeTab);
+    darkModeCombo->addItem(tr("Auto (System)"), static_cast<int>(MainWindow::DarkModeOption::Auto));
+    darkModeCombo->addItem(tr("Light Mode"), static_cast<int>(MainWindow::DarkModeOption::Light));
+    darkModeCombo->addItem(tr("Dark Mode"), static_cast<int>(MainWindow::DarkModeOption::Dark));
+    
+    QHBoxLayout *darkModeLayout = new QHBoxLayout();
+    darkModeLayout->addWidget(darkModeLabel);
+    darkModeLayout->addWidget(darkModeCombo);
+    darkModeLayout->addStretch();
+    layout->addLayout(darkModeLayout);
+    
+    QLabel *darkModeNote = new QLabel(tr("Choose how the application appearance is determined. Auto detects from system settings, but may not work on older Windows versions."));
+    darkModeNote->setWordWrap(true);
+    darkModeNote->setStyleSheet("color: gray; font-size: 10px;");
+    layout->addWidget(darkModeNote);
+    
+    // Add some spacing
+    layout->addSpacing(15);
+    
+    // Custom accent color
+    useCustomAccentCheckbox = new QCheckBox(tr("Use Custom Accent Color"), themeTab);
+    layout->addWidget(useCustomAccentCheckbox);
+    
+    QLabel *accentColorLabel = new QLabel(tr("Accent Color:"), themeTab);
+    accentColorButton = new QPushButton(themeTab);
+    accentColorButton->setFixedSize(100, 30);
+    connect(accentColorButton, &QPushButton::clicked, this, &ControlPanelDialog::chooseAccentColor);
+    
+    QHBoxLayout *accentColorLayout = new QHBoxLayout();
+    accentColorLayout->addWidget(accentColorLabel);
+    accentColorLayout->addWidget(accentColorButton);
+    accentColorLayout->addStretch();
+    layout->addLayout(accentColorLayout);
+    
+    QLabel *accentColorNote = new QLabel(tr("When enabled, use a custom accent color instead of the system accent color for the toolbar, dial, and tab selection."));
+    accentColorNote->setWordWrap(true);
+    accentColorNote->setStyleSheet("color: gray; font-size: 10px;");
+    layout->addWidget(accentColorNote);
+    
+    // Enable/disable accent color button based on checkbox
+    connect(useCustomAccentCheckbox, &QCheckBox::toggled, accentColorButton, &QPushButton::setEnabled);
+    connect(useCustomAccentCheckbox, &QCheckBox::toggled, accentColorLabel, &QLabel::setEnabled);
+    
+    layout->addStretch();
+    
+    tabWidget->addTab(themeTab, tr("Theme"));
+}
+
+void ControlPanelDialog::chooseAccentColor() {
+    QColor chosen = QColorDialog::getColor(selectedAccentColor, this, tr("Select Accent Color"));
+    if (chosen.isValid()) {
+        selectedAccentColor = chosen;
+        accentColorButton->setStyleSheet(QString("background-color: %1").arg(selectedAccentColor.name()));
+    }
+}
+
 void ControlPanelDialog::addKeyboardMapping() {
     // Step 1: Capture key sequence
     KeyCaptureDialog captureDialog(this);
@@ -394,5 +496,135 @@ void ControlPanelDialog::removeKeyboardMapping() {
         
         // Remove from table
         keyboardTable->removeRow(currentRow);
+    }
+}
+
+void ControlPanelDialog::applyTheme() {
+    if (!mainWindowRef) return;
+    
+    bool isDark = mainWindowRef->isDarkMode();
+    
+    // Only apply manual styling when not using auto mode
+    if (mainWindowRef->getDarkModeOption() != MainWindow::DarkModeOption::Auto) {
+        // Define theme colors
+        QColor backgroundColor = isDark ? QColor("#2b2b2b") : QColor("#f0f0f0");
+        QColor textColor = isDark ? QColor("#ffffff") : QColor("#000000");
+        QColor buttonColor = isDark ? QColor("#404040") : QColor("#e0e0e0");
+        QColor borderColor = isDark ? QColor("#555555") : QColor("#cccccc");
+        QColor hoverColor = isDark ? QColor("#505050") : QColor("#d0d0d0");
+        
+        QString dialogStyle = QString(R"(
+            QDialog {
+                background-color: %1;
+                color: %2;
+            }
+            QWidget {
+                background-color: %1;
+                color: %2;
+            }
+            QPushButton {
+                background-color: %3;
+                color: %2;
+                border: 1px solid %4;
+                padding: 6px;
+                border-radius: 3px;
+            }
+            QPushButton:hover {
+                background-color: %5;
+            }
+            QPushButton:pressed {
+                background-color: %4;
+            }
+            QTabWidget::pane {
+                background-color: %1;
+                border: 1px solid %4;
+            }
+            QTabBar::tab {
+                background-color: %3;
+                color: %2;
+                padding: 8px 16px;
+                border: 1px solid %4;
+                border-bottom: none;
+            }
+            QTabBar::tab:selected {
+                background-color: %1;
+                border-bottom: 1px solid %1;
+            }
+            QTabBar::tab:hover {
+                background-color: %5;
+            }
+            QLabel {
+                color: %2;
+                background-color: transparent;
+            }
+            QSpinBox, QLineEdit, QComboBox {
+                background-color: %3;
+                color: %2;
+                border: 1px solid %4;
+                padding: 4px;
+                border-radius: 2px;
+            }
+            QSpinBox:focus, QLineEdit:focus, QComboBox:focus {
+                border: 2px solid %6;
+            }
+            QComboBox::drop-down {
+                border: none;
+                background-color: %3;
+            }
+            QComboBox::down-arrow {
+                border: 2px solid %2;
+                border-radius: 1px;
+                width: 6px;
+                height: 6px;
+                border-top: none;
+                border-right: none;
+                margin-right: 8px;
+            }
+            QCheckBox {
+                color: %2;
+                spacing: 8px;
+            }
+            QCheckBox::indicator {
+                width: 16px;
+                height: 16px;
+                background-color: %3;
+                border: 1px solid %4;
+                border-radius: 2px;
+            }
+            QCheckBox::indicator:checked {
+                background-color: %6;
+                border: 1px solid %6;
+            }
+            QTableWidget {
+                background-color: %3;
+                color: %2;
+                border: 1px solid %4;
+                gridline-color: %4;
+            }
+            QTableWidget::item {
+                padding: 4px;
+                border-bottom: 1px solid %4;
+            }
+            QTableWidget::item:selected {
+                background-color: %6;
+                color: %1;
+            }
+            QHeaderView::section {
+                background-color: %3;
+                color: %2;
+                border: 1px solid %4;
+                padding: 4px;
+            }
+        )").arg(backgroundColor.name())
+           .arg(textColor.name())
+           .arg(buttonColor.name())
+           .arg(borderColor.name())
+           .arg(hoverColor.name())
+           .arg(mainWindowRef->getAccentColor().name());
+        
+        setStyleSheet(dialogStyle);
+    } else {
+        // Clear manual styling when using auto mode
+        setStyleSheet("");
     }
 }

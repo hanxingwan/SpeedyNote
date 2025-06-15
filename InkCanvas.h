@@ -27,6 +27,7 @@ signals:
     void zoomChanged(int newZoom);
     void panChanged(int panX, int panY);
     void touchGestureEnded(); // Signal emitted when touch gestures end
+    void ropeSelectionCompleted(const QPoint &position); // Signal emitted when rope tool selection is completed
 
 public:
     explicit InkCanvas(QWidget *parent = nullptr);
@@ -104,6 +105,7 @@ public:
     void saveBackgroundMetadata();  // ✅ Save background metadata
 
     int getBufferWidth() const { return buffer.width(); }
+    QPixmap getBuffer() const { return buffer; } // Get buffer for concurrent saving
 
     void exportNotebook(const QString &destinationFile);
     void importNotebook(const QString &packageFile);
@@ -111,6 +113,7 @@ public:
     void importNotebookTo(const QString &packageFile, const QString &destFolder);
 
     bool isEdited() const { return edited; }  // ✅ Check if the canvas has been edited
+    void setEdited(bool state) { edited = state; }  // ✅ Set the edited state
 
     void setPDFRenderDPI(int dpi) { pdfRenderDPI = dpi; }  // ✅ Set PDF render DPI
 
@@ -119,6 +122,10 @@ public:
     // Touch gesture support
     void setTouchGesturesEnabled(bool enabled) { touchGesturesEnabled = enabled; }
     bool areTouchGesturesEnabled() const { return touchGesturesEnabled; }
+
+    // Rope tool selection actions
+    void deleteRopeSelection(); // Delete the current rope tool selection
+    void cancelRopeSelection(); // Cancel the current rope tool selection
 
 protected:
     void paintEvent(QPaintEvent *event) override;

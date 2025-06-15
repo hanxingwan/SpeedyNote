@@ -10,6 +10,7 @@
 #include <QColor>
 #include <QTableWidget>
 #include <QHeaderView>
+#include <QCheckBox>
 
 #include "InkCanvas.h" // Needed for BackgroundStyle enum
 #include "MainWindow.h"
@@ -67,6 +68,20 @@ private:
     QTableWidget *keyboardTable;
     QPushButton *addKeyboardMappingButton;
     QPushButton *removeKeyboardMappingButton;
+    
+    // Theme widgets
+    QWidget *themeTab;
+
+    QCheckBox *useCustomAccentCheckbox;
+    QPushButton *accentColorButton;
+    QColor selectedAccentColor;
+    
+    // Dark mode controls
+    QComboBox *darkModeCombo;
+    
+    void createThemeTab();
+    void chooseAccentColor();
+    void applyTheme(); // Apply dark theme styling
 };
 
 #endif // CONTROLPANELDIALOG_H

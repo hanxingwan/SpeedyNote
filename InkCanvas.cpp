@@ -21,6 +21,7 @@
 #include <QTouchEvent>
 #include <QtMath>
 #include <QPainterPath>
+#include <QTimer>
 
 #include <QtConcurrent/QtConcurrentRun>
 #include <QFuture>
@@ -31,6 +32,7 @@
 #include <QProcess>
 #include <QTemporaryDir>
 #include <QMessageBox>
+#include <QTextCodec>
 
 #include <poppler-qt5.h>
 
@@ -38,7 +40,13 @@
 
 
 InkCanvas::InkCanvas(QWidget *parent) 
-    : QWidget(parent), drawing(false), penColor(Qt::black), penThickness(5.0), zoomFactor(100), panOffsetX(0), panOffsetY(0), currentTool(ToolType::Pen) {    
+    : QWidget(parent), drawing(false), penColor(Qt::black), penThickness(5.0), zoomFactor(100), panOffsetX(0), panOffsetY(0), currentTool(ToolType::Pen) {
+    
+    // Set theme-aware default pen color
+    MainWindow *mainWindow = qobject_cast<MainWindow*>(parent);
+    if (mainWindow) {
+        penColor = mainWindow->getDefaultPenColor();
+    }    
     setAttribute(Qt::WA_StaticContents);
     setTabletTracking(true);
     setAttribute(Qt::WA_AcceptTouchEvents);  // Enable touch events
@@ -96,6 +104,7 @@ void InkCanvas::loadPdf(const QString &pdfPath) {
             QFile file(metadataFile);
             if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
                 QTextStream out(&file);
+                out.setCodec("UTF-8"); // Set UTF-8 codec for Qt5
                 out << pdfPath;  // Store the absolute path of the PDF
                 file.close();
             }
@@ -350,8 +359,8 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
         painter.restore();
     }
 
-    // Draw selection rectangle if in rope tool mode and selecting or moving
-    if (ropeToolMode && (selectingWithRope || movingSelection)) {
+    // Draw selection rectangle if in rope tool mode and selecting, moving, or has a selection
+    if (ropeToolMode && (selectingWithRope || movingSelection || (!selectionBuffer.isNull() && !selectionRect.isEmpty()))) {
         painter.save(); // Save painter state for overlays
         painter.resetTransform(); // Reset transform to draw directly in logical widget coordinates
         
@@ -361,7 +370,7 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
             selectionPen.setWidthF(1.5); // Width in logical pixels
             painter.setPen(selectionPen);
             painter.drawPolygon(lassoPathPoints); // lassoPathPoints are logical widget coordinates
-        } else if (movingSelection && !selectionBuffer.isNull() && !selectionRect.isEmpty()) {
+        } else if (!selectionBuffer.isNull() && !selectionRect.isEmpty()) {
             // selectionRect is in logical widget coordinates.
             // selectionBuffer is in buffer coordinates, we need to handle scaling correctly
             QPixmap scaledBuffer = selectionBuffer;
@@ -452,11 +461,8 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
             straightLineStartPoint = lastPoint;
         }
         if (ropeToolMode) {
-            if (movingSelection && selectionRect.contains(lastPoint.toPoint())) { // lastPoint is QPointF
-                // Already moving, do nothing on press (movement handled by move events)
-                 lastMovePoint = lastPoint; // Update lastMovePoint
-            } else if (!selectionBuffer.isNull() && selectionRect.contains(lastPoint.toPoint())) {
-                // Start moving an existing selection
+            if (!selectionBuffer.isNull() && selectionRect.contains(lastPoint.toPoint())) {
+                // Start moving an existing selection (or continue if already moving)
                 movingSelection = true;
                 selectingWithRope = false;
                 lastMovePoint = lastPoint;
@@ -676,10 +682,20 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
                         
                         // Update the area of the selection on screen
                         update(logicalSelectionRect.adjusted(-2,-2,2,2).toRect());
+                        
+                        // Emit signal for context menu at the center of the selection with a delay
+                        // This allows the user to immediately start moving the selection if desired
+                        QPoint menuPosition = selectionRect.center();
+                        QTimer::singleShot(500, this, [this, menuPosition]() {
+                            // Only show menu if selection still exists and hasn't been moved
+                            if (!selectionBuffer.isNull() && !selectionRect.isEmpty() && !movingSelection) {
+                                emit ropeSelectionCompleted(menuPosition);
+                            }
+                        });
                     }
                 }
                 lassoPathPoints.clear(); // Ready for next selection, or move
-                selectingWithRope = false; 
+                selectingWithRope = false;
                 // Now, if the user presses inside selectionRect, movingSelection will become true.
             } else if (movingSelection) {
                 if (!selectionBuffer.isNull() && !selectionRect.isEmpty()) {
@@ -897,6 +913,7 @@ void InkCanvas::setSaveFolder(const QString &folderPath) {
         QFile file(bgMetaFile);
         if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
             QTextStream in(&file);
+            in.setCodec("UTF-8"); // Set UTF-8 codec for Qt5
             while (!in.atEnd()) {
                 QString line = in.readLine().trimmed();
                 if (line.startsWith("style=")) {
@@ -927,6 +944,7 @@ void InkCanvas::setSaveFolder(const QString &folderPath) {
     }
 
     QTextStream in(&file);
+    in.setCodec("UTF-8"); // Set UTF-8 codec for Qt5
     QString storedPdfPath = in.readLine().trimmed();
     file.close();
 
@@ -1020,6 +1038,7 @@ void InkCanvas::loadPage(int pageNumber) {
             QFile file(metadataFile);
             if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
                 QTextStream in(&file);
+                in.setCodec("UTF-8"); // Set UTF-8 codec for Qt5
                 in >> bgWidth >> bgHeight;
                 file.close();
             }
@@ -1104,6 +1123,7 @@ void InkCanvas::setBackground(const QString &filePath, int pageNumber) {
         QFile file(metadataFile);
         if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
             QTextStream out(&file);
+            out.setCodec("UTF-8"); // Set UTF-8 codec for Qt5
             out << bgImage.width() << " " << bgImage.height();
             file.close();
         }
@@ -1232,6 +1252,7 @@ void InkCanvas::saveBackgroundMetadata() {
     QFile file(bgMetaFile);
     if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
         QTextStream out(&file);
+        out.setCodec("UTF-8"); // Set UTF-8 codec for Qt5
         QString styleStr = "None";
         if (backgroundStyle == BackgroundStyle::Grid) styleStr = "Grid";
         else if (backgroundStyle == BackgroundStyle::Lines) styleStr = "Lines";
@@ -1276,6 +1297,7 @@ void InkCanvas::exportNotebook(const QString &destinationFile) {
     QFile listFile(tempFileList);
     if (listFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
         QTextStream out(&listFile);
+        out.setCodec("UTF-8"); // Set UTF-8 codec for Qt5
         for (const QString &file : files) {
             out << file << "\n";
         }
@@ -1369,6 +1391,7 @@ void InkCanvas::loadNotebookId() {
         QFile file(idFile);
         if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
             QTextStream in(&file);
+            in.setCodec("UTF-8"); // Set UTF-8 codec for Qt5
             notebookId = in.readLine().trimmed();
         }
     } else {
@@ -1383,6 +1406,7 @@ void InkCanvas::saveNotebookId() {
     QFile file(idFile);
     if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
         QTextStream out(&file);
+        out.setCodec("UTF-8"); // Set UTF-8 codec for Qt5
         out << notebookId;
     }
 }
@@ -1585,4 +1609,50 @@ QRect InkCanvas::mapRectBufferToWidgetLogical(const QRectF& physicalBufferRect) 
     );
     
     return widgetRect.toRect();
+}
+
+// Rope tool selection actions
+void InkCanvas::deleteRopeSelection() {
+    if (!selectionBuffer.isNull() && !selectionRect.isEmpty()) {
+        // Simply clear the selection without pasting it back
+        selectionBuffer = QPixmap();
+        selectionRect = QRect();
+        exactSelectionRectF = QRectF();
+        movingSelection = false;
+        selectingWithRope = false;
+        
+        // Mark as edited since we deleted content
+        if (!edited) {
+            edited = true;
+        }
+        
+        // Update the entire canvas to remove selection visuals
+        update();
+    }
+}
+
+void InkCanvas::cancelRopeSelection() {
+    if (!selectionBuffer.isNull() && !selectionRect.isEmpty()) {
+        // Paste the selection back to its current location (where user moved it)
+        QPainter painter(&buffer);
+        // Use the current selection position
+        QPointF currentTopLeft = exactSelectionRectF.isEmpty() ? selectionRect.topLeft() : exactSelectionRectF.topLeft();
+        QPointF bufferDest = mapLogicalWidgetToPhysicalBuffer(currentTopLeft);
+        painter.drawPixmap(bufferDest.toPoint(), selectionBuffer);
+        painter.end();
+        
+        // Store selection buffer size for update calculation
+        QSize selectionSize = selectionBuffer.size();
+        
+        // Clear the selection
+        selectionBuffer = QPixmap();
+        selectionRect = QRect();
+        exactSelectionRectF = QRectF();
+        movingSelection = false;
+        selectingWithRope = false;
+        
+        // Update the restored area
+        QRectF bufferRestoreRect(bufferDest, selectionSize);
+        update(mapRectBufferToWidgetLogical(bufferRestoreRect).adjusted(-2,-2,2,2));
+    }
 }

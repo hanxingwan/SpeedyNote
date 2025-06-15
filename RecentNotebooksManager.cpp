@@ -8,6 +8,7 @@
 #include <QApplication>
 #include <QRegularExpression>
 #include <QTextStream>
+#include <QTextCodec>
 
 RecentNotebooksManager::RecentNotebooksManager(QObject *parent)
     : QObject(parent), settings("SpeedyNote", "App") {
@@ -105,6 +106,7 @@ void RecentNotebooksManager::generateAndSaveCoverPreview(const QString& folderPa
         QFile idFile(folderPath + "/.notebook_id.txt");
         if (idFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
             QTextStream in(&idFile);
+            in.setCodec("UTF-8"); // Set UTF-8 codec for Qt5
             notebookIdStr = in.readLine().trimmed();
             idFile.close();
         }
@@ -157,6 +159,7 @@ QString RecentNotebooksManager::getNotebookDisplayName(const QString& folderPath
         QFile file(metadataFile);
         if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
             QTextStream in(&file);
+            in.setCodec("UTF-8"); // Set UTF-8 codec for Qt5
             QString pdfPath = in.readLine().trimmed();
             file.close();
             if (!pdfPath.isEmpty()) {

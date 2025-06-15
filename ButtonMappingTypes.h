@@ -11,7 +11,6 @@ enum class InternalDialMode {
     PageSwitching,
     ZoomControl,
     ThicknessControl,
-    ColorAdjustment,
     ToolSwitching,
     PresetSelection,
     PanAndPageScroll
