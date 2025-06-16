@@ -15,6 +15,7 @@
 #include "InkCanvas.h" // Needed for BackgroundStyle enum
 #include "MainWindow.h"
 #include "KeyCaptureDialog.h"
+#include "ControllerMappingDialog.h" // New: Include controller mapping dialog
 
 class ControlPanelDialog : public QDialog {
     Q_OBJECT
@@ -27,6 +28,7 @@ private slots:
     void chooseColor();
     void addKeyboardMapping();       // New: add keyboard shortcut
     void removeKeyboardMapping();    // New: remove keyboard shortcut
+    void openControllerMapping();    // New: open controller mapping dialog
 
 private:
     InkCanvas *canvas;
@@ -61,6 +63,7 @@ private:
     QMap<QString, QComboBox*> pressMappingCombos;
 
     void createButtonMappingTab();
+    void createControllerMappingTab(); // New: create controller mapping tab
     void createKeyboardMappingTab();  // New: keyboard mapping tab
 
     // Keyboard mapping widgets

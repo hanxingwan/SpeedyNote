@@ -22,6 +22,7 @@
 #include <QtMath>
 #include <QPainterPath>
 #include <QTimer>
+#include <QAction>
 
 #include <QtConcurrent/QtConcurrentRun>
 #include <QFuture>
@@ -39,7 +40,7 @@
 
 
 InkCanvas::InkCanvas(QWidget *parent) 
-    : QWidget(parent), drawing(false), penColor(Qt::black), penThickness(5.0), zoomFactor(100), panOffsetX(0), panOffsetY(0), currentTool(ToolType::Pen) {
+    : QWidget(parent), drawing(false), penColor(Qt::black), penThickness(5.0), zoomFactor(100), panOffsetX(0), panOffsetY(0), currentTool(ToolType::Pen) {    
     
     // Set theme-aware default pen color
     MainWindow *mainWindow = qobject_cast<MainWindow*>(parent);
@@ -68,6 +69,12 @@ InkCanvas::InkCanvas(QWidget *parent)
     QCache<int, QPixmap> pdfCache(10);
     pdfCache.setMaxCost(10);  // ✅ Ensures the cache holds at most 5 pages
     // No need to set auto-delete, QCache will handle deletion automatically
+    
+    // Initialize PDF text selection throttling timer (60 FPS = ~16.67ms)
+    pdfTextSelectionTimer = new QTimer(this);
+    pdfTextSelectionTimer->setSingleShot(true);
+    pdfTextSelectionTimer->setInterval(16); // ~60 FPS
+    connect(pdfTextSelectionTimer, &QTimer::timeout, this, &InkCanvas::processPendingTextSelection);
 }
 
 InkCanvas::~InkCanvas() {
@@ -138,6 +145,10 @@ void InkCanvas::loadPdfPage(int pageNumber) {
     if (pdfCache.contains(pageNumber)) {
         backgroundImage = *pdfCache.object(pageNumber);
         loadPage(pageNumber);  // Load annotations
+        
+        // Load text boxes for PDF text selection
+        loadPdfTextBoxes(pageNumber);
+        
         update();
         return;
     }
@@ -163,7 +174,12 @@ void InkCanvas::loadPdfPage(int pageNumber) {
     } else {
         backgroundImage = QPixmap();  // Clear background when out of range
     }
+    
     loadPage(pageNumber);  // Load existing canvas annotations
+    
+    // Load text boxes for PDF text selection
+    loadPdfTextBoxes(pageNumber);
+    
     update();
 }
 
@@ -405,6 +421,10 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
         painter.restore(); // Restore painter state to what it was for drawing the main buffer
     }
     
+
+    
+
+    
     // Restore the painter state
     painter.restore();
     
@@ -424,9 +444,122 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
     // Fill the outside region with the background color
     painter.setClipRegion(outsideRegion);
     painter.fillRect(widgetRect, palette().window().color());
+    
+    // Reset clipping for overlay elements that should appear on top
+    painter.setClipping(false);
+    
+
+    
+    // Draw PDF text selection overlay on top of everything
+    if (pdfTextSelectionEnabled && isPdfLoaded) {
+        painter.save(); // Save painter state for PDF text overlay
+        painter.resetTransform(); // Reset transform to draw directly in logical widget coordinates
+        
+        // Draw selection rectangle if actively selecting
+        if (pdfTextSelecting) {
+            QPen selectionPen(Qt::DashLine);
+            selectionPen.setColor(QColor(0, 120, 215)); // Blue selection rectangle
+            selectionPen.setWidthF(2.0); // Make it more visible
+            painter.setPen(selectionPen);
+            
+            QBrush selectionBrush(QColor(0, 120, 215, 30)); // Semi-transparent blue fill
+            painter.setBrush(selectionBrush);
+            
+            QRectF selectionRect(pdfSelectionStart, pdfSelectionEnd);
+            selectionRect = selectionRect.normalized();
+            painter.drawRect(selectionRect);
+        }
+        
+        // Draw highlights for selected text boxes
+        if (!selectedTextBoxes.isEmpty()) {
+            QColor highlightColor = QColor(255, 255, 0, 100); // Semi-transparent yellow
+            painter.setBrush(highlightColor);
+            painter.setPen(Qt::NoPen);
+            
+            // Draw highlight rectangles for selected text boxes
+            for (const Poppler::TextBox* textBox : selectedTextBoxes) {
+                if (textBox) {
+                    // Convert PDF coordinates to widget coordinates
+                    QRectF pdfRect = textBox->boundingBox();
+                    QPointF topLeft = mapPdfToWidgetCoordinates(pdfRect.topLeft());
+                    QPointF bottomRight = mapPdfToWidgetCoordinates(pdfRect.bottomRight());
+                    QRectF widgetRect(topLeft, bottomRight);
+                    widgetRect = widgetRect.normalized();
+                    
+                    painter.drawRect(widgetRect);
+                }
+            }
+        }
+        
+        painter.restore(); // Restore painter state
+    }
 }
 
 void InkCanvas::tabletEvent(QTabletEvent *event) {
+    // ✅ PRIORITY: Handle PDF text selection with stylus when enabled
+    // This redirects stylus input to text selection instead of drawing
+    if (pdfTextSelectionEnabled && isPdfLoaded) {
+        if (event->type() == QEvent::TabletPress) {
+            pdfTextSelecting = true;
+            pdfSelectionStart = event->position();
+            pdfSelectionEnd = pdfSelectionStart;
+            
+            // Clear any existing selected text boxes without resetting pdfTextSelecting
+            selectedTextBoxes.clear();
+            
+            setCursor(Qt::IBeamCursor); // Ensure cursor is correct
+            update(); // Refresh display
+            event->accept();
+            return;
+        } else if (event->type() == QEvent::TabletMove && pdfTextSelecting) {
+            pdfSelectionEnd = event->position();
+            
+            // Store pending selection for throttled processing (60 FPS throttling)
+            pendingSelectionStart = pdfSelectionStart;
+            pendingSelectionEnd = pdfSelectionEnd;
+            hasPendingSelection = true;
+            
+            // Start timer if not already running (throttled to 60 FPS)
+            if (!pdfTextSelectionTimer->isActive()) {
+                pdfTextSelectionTimer->start();
+            }
+            
+            // NOTE: No direct update() call here - let the timer handle updates at 60 FPS
+            event->accept();
+            return;
+        } else if (event->type() == QEvent::TabletRelease && pdfTextSelecting) {
+            pdfSelectionEnd = event->position();
+            
+            // Process any pending selection immediately on release
+            if (pdfTextSelectionTimer && pdfTextSelectionTimer->isActive()) {
+                pdfTextSelectionTimer->stop();
+                if (hasPendingSelection) {
+                    updatePdfTextSelection(pendingSelectionStart, pendingSelectionEnd);
+                    hasPendingSelection = false;
+                }
+            } else {
+                // Update selection with final position
+                updatePdfTextSelection(pdfSelectionStart, pdfSelectionEnd);
+            }
+            
+            pdfTextSelecting = false;
+            
+            // Check for link clicks if no text was selected
+            QString selectedText = getSelectedPdfText();
+            if (selectedText.isEmpty()) {
+                handlePdfLinkClick(event->position());
+            } else {
+                // Show context menu for text selection
+                QPoint globalPos = mapToGlobal(event->position().toPoint());
+                showPdfTextSelectionMenu(globalPos);
+            }
+            
+            event->accept();
+            return;
+        }
+    }
+    
+    // ✅ NORMAL STYLUS BEHAVIOR: Only reached when PDF text selection is OFF
     // Hardware eraser detection
     static bool hardwareEraserActive = false;
     bool wasUsingHardwareEraser = false;
@@ -717,6 +850,8 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
                 }
             }
         }
+        
+
     }
     event->accept();
 }
@@ -768,17 +903,91 @@ QRectF InkCanvas::calculatePreviewRect(const QPointF &start, const QPointF &oldE
 }
 
 void InkCanvas::mousePressEvent(QMouseEvent *event) {
-    // Ignore mouse/touch input on canvas
+    // Handle PDF text selection when enabled (mouse/touch fallback - stylus handled in tabletEvent)
+    if (pdfTextSelectionEnabled && isPdfLoaded) {
+        if (event->button() == Qt::LeftButton) {
+            pdfTextSelecting = true;
+            pdfSelectionStart = event->position();
+            pdfSelectionEnd = pdfSelectionStart;
+            
+            // Clear any existing selected text boxes without resetting pdfTextSelecting
+            selectedTextBoxes.clear();
+            
+            setCursor(Qt::IBeamCursor); // Ensure cursor is correct
+            update(); // Refresh display
+            event->accept();
+            return;
+        }
+    }
+    
+    // Ignore mouse/touch input on canvas for drawing (drawing only works with tablet/stylus)
     event->ignore();
 }
 
 void InkCanvas::mouseMoveEvent(QMouseEvent *event) {
-    // Ignore mouse/touch input on canvas
+    // Handle PDF text selection when enabled (mouse/touch fallback - stylus handled in tabletEvent)
+    if (pdfTextSelectionEnabled && isPdfLoaded && pdfTextSelecting) {
+        pdfSelectionEnd = event->position();
+        
+        // Store pending selection for throttled processing
+        pendingSelectionStart = pdfSelectionStart;
+        pendingSelectionEnd = pdfSelectionEnd;
+        hasPendingSelection = true;
+        
+        // Start timer if not already running (throttled to 60 FPS)
+        if (!pdfTextSelectionTimer->isActive()) {
+            pdfTextSelectionTimer->start();
+        }
+        
+        event->accept();
+        return;
+    }
+    
+    // Update cursor based on mode when not actively selecting
+    if (pdfTextSelectionEnabled && isPdfLoaded && !pdfTextSelecting) {
+        setCursor(Qt::IBeamCursor);
+    }
+    
     event->ignore();
 }
 
 void InkCanvas::mouseReleaseEvent(QMouseEvent *event) {
-    // Ignore mouse/touch input on canvas
+    // Handle PDF text selection when enabled (mouse/touch fallback - stylus handled in tabletEvent)
+    if (pdfTextSelectionEnabled && isPdfLoaded && pdfTextSelecting) {
+        if (event->button() == Qt::LeftButton) {
+            pdfSelectionEnd = event->position();
+            
+            // Process any pending selection immediately on release
+            if (pdfTextSelectionTimer && pdfTextSelectionTimer->isActive()) {
+                pdfTextSelectionTimer->stop();
+                if (hasPendingSelection) {
+                    updatePdfTextSelection(pendingSelectionStart, pendingSelectionEnd);
+                    hasPendingSelection = false;
+                }
+            } else {
+                // Update selection with final position
+                updatePdfTextSelection(pdfSelectionStart, pdfSelectionEnd);
+            }
+            
+            pdfTextSelecting = false;
+            
+            // Check for link clicks if no text was selected
+            QString selectedText = getSelectedPdfText();
+            if (selectedText.isEmpty()) {
+                handlePdfLinkClick(event->position());
+            } else {
+                // Show context menu for text selection
+                QPoint globalPos = mapToGlobal(event->position().toPoint());
+                showPdfTextSelectionMenu(globalPos);
+            }
+            
+            event->accept();
+            return;
+        }
+    }
+    
+
+    
     event->ignore();
 }
 
@@ -1643,6 +1852,335 @@ void InkCanvas::cancelRopeSelection() {
         
         // Update the restored area
         QRectF bufferRestoreRect(bufferDest, selectionSize);
-        update(mapRectBufferToWidgetLogical(bufferRestoreRect).adjusted(-2,-2,2,2));
+        painter.drawPixmap(bufferRestoreRect, selectionBuffer, selectionBuffer.rect());
+        
+        painter.restore();
     }
 }
+
+// PDF text selection implementation
+void InkCanvas::clearPdfTextSelection() {
+    // Clear selection state
+    selectedTextBoxes.clear();
+    pdfTextSelecting = false;
+    
+    // Cancel any pending throttled updates
+    if (pdfTextSelectionTimer && pdfTextSelectionTimer->isActive()) {
+        pdfTextSelectionTimer->stop();
+    }
+    hasPendingSelection = false;
+    
+    // Refresh display
+    update();
+}
+
+QString InkCanvas::getSelectedPdfText() const {
+    if (selectedTextBoxes.isEmpty()) {
+        return QString();
+    }
+    
+    // Pre-allocate string with estimated size for efficiency
+    QString selectedText;
+    selectedText.reserve(selectedTextBoxes.size() * 20); // Estimate ~20 chars per text box
+    
+    // Build text with space separators
+    for (const Poppler::TextBox* textBox : selectedTextBoxes) {
+        if (textBox && !textBox->text().isEmpty()) {
+            if (!selectedText.isEmpty()) {
+                selectedText += " ";
+            }
+            selectedText += textBox->text();
+        }
+    }
+    
+    return selectedText;
+}
+
+void InkCanvas::loadPdfTextBoxes(int pageNumber) {
+    // Clear existing text boxes
+    qDeleteAll(currentPdfTextBoxes);
+    currentPdfTextBoxes.clear();
+    
+    if (!pdfDocument || pageNumber < 0 || pageNumber >= pdfDocument->numPages()) {
+        return;
+    }
+    
+    // Get the page for text operations
+    currentPdfPageForText = std::unique_ptr<Poppler::Page>(pdfDocument->page(pageNumber));
+    if (!currentPdfPageForText) {
+        return;
+    }
+    
+    // Load text boxes for the page
+    auto textBoxVector = currentPdfPageForText->textList();
+    currentPdfTextBoxes.clear();
+    for (auto& textBox : textBoxVector) {
+        currentPdfTextBoxes.append(textBox.release()); // Transfer ownership to QList
+    }
+}
+
+QPointF InkCanvas::mapWidgetToPdfCoordinates(const QPointF &widgetPoint) {
+    if (!currentPdfPageForText || backgroundImage.isNull()) {
+        return QPointF();
+    }
+    
+    // Use the same zoom factor as in paintEvent (internalZoomFactor for smooth animations)
+    qreal zoom = internalZoomFactor / 100.0;
+    
+    // Calculate the scaled canvas size (same as in paintEvent)
+    qreal scaledCanvasWidth = buffer.width() * zoom;
+    qreal scaledCanvasHeight = buffer.height() * zoom;
+    
+    // Calculate centering offsets (same as in paintEvent)
+    qreal centerOffsetX = 0;
+    qreal centerOffsetY = 0;
+    
+    // Center horizontally if canvas is smaller than widget
+    if (scaledCanvasWidth < width()) {
+        centerOffsetX = (width() - scaledCanvasWidth) / 2.0;
+    }
+    
+    // Center vertically if canvas is smaller than widget
+    if (scaledCanvasHeight < height()) {
+        centerOffsetY = (height() - scaledCanvasHeight) / 2.0;
+    }
+    
+    // Reverse the transformations applied in paintEvent
+    QPointF adjustedPoint = widgetPoint;
+    adjustedPoint -= QPointF(centerOffsetX, centerOffsetY);
+    adjustedPoint /= zoom;
+    adjustedPoint += QPointF(panOffsetX, panOffsetY);
+    
+    // Convert to PDF coordinates
+    // Since Poppler renders the PDF in Qt coordinate system (top-left origin),
+    // we don't need to flip the Y coordinate
+    QSizeF pdfPageSize = currentPdfPageForText->pageSizeF();
+    QSizeF imageSize = backgroundImage.size();
+    
+    // Scale from image coordinates to PDF coordinates
+    qreal scaleX = pdfPageSize.width() / imageSize.width();
+    qreal scaleY = pdfPageSize.height() / imageSize.height();
+    
+    QPointF pdfPoint;
+    pdfPoint.setX(adjustedPoint.x() * scaleX);
+    pdfPoint.setY(adjustedPoint.y() * scaleY); // No Y-axis flipping needed
+    
+    return pdfPoint;
+}
+
+QPointF InkCanvas::mapPdfToWidgetCoordinates(const QPointF &pdfPoint) {
+    if (!currentPdfPageForText || backgroundImage.isNull()) {
+        return QPointF();
+    }
+    
+    // Convert from PDF coordinates to image coordinates
+    QSizeF pdfPageSize = currentPdfPageForText->pageSizeF();
+    QSizeF imageSize = backgroundImage.size();
+    
+    // Scale from PDF coordinates to image coordinates
+    qreal scaleX = imageSize.width() / pdfPageSize.width();
+    qreal scaleY = imageSize.height() / pdfPageSize.height();
+    
+    QPointF imagePoint;
+    imagePoint.setX(pdfPoint.x() * scaleX);
+    imagePoint.setY(pdfPoint.y() * scaleY); // No Y-axis flipping needed
+    
+    // Use the same zoom factor as in paintEvent (internalZoomFactor for smooth animations)
+    qreal zoom = internalZoomFactor / 100.0;
+    
+    // Apply the same transformations as in paintEvent
+    QPointF widgetPoint = imagePoint;
+    widgetPoint -= QPointF(panOffsetX, panOffsetY);
+    widgetPoint *= zoom;
+    
+    // Calculate the scaled canvas size (same as in paintEvent)
+    qreal scaledCanvasWidth = buffer.width() * zoom;
+    qreal scaledCanvasHeight = buffer.height() * zoom;
+    
+    // Calculate centering offsets (same as in paintEvent)
+    qreal centerOffsetX = 0;
+    qreal centerOffsetY = 0;
+    
+    // Center horizontally if canvas is smaller than widget
+    if (scaledCanvasWidth < width()) {
+        centerOffsetX = (width() - scaledCanvasWidth) / 2.0;
+    }
+    
+    // Center vertically if canvas is smaller than widget
+    if (scaledCanvasHeight < height()) {
+        centerOffsetY = (height() - scaledCanvasHeight) / 2.0;
+    }
+    
+    widgetPoint += QPointF(centerOffsetX, centerOffsetY);
+    
+    return widgetPoint;
+}
+
+void InkCanvas::updatePdfTextSelection(const QPointF &start, const QPointF &end) {
+    // Early return if PDF is not loaded or no text boxes available
+    if (!isPdfLoaded || currentPdfTextBoxes.isEmpty()) {
+        return;
+    }
+    
+    // Clear previous selection efficiently
+    selectedTextBoxes.clear();
+    
+    // Create normalized selection rectangle in widget coordinates
+    QRectF widgetSelectionRect(start, end);
+    widgetSelectionRect = widgetSelectionRect.normalized();
+    
+    // Convert to PDF coordinate space
+    QPointF pdfTopLeft = mapWidgetToPdfCoordinates(widgetSelectionRect.topLeft());
+    QPointF pdfBottomRight = mapWidgetToPdfCoordinates(widgetSelectionRect.bottomRight());
+    QRectF pdfSelectionRect(pdfTopLeft, pdfBottomRight);
+    pdfSelectionRect = pdfSelectionRect.normalized();
+    
+    // Reserve space for efficiency if we expect many selections
+    selectedTextBoxes.reserve(qMin(currentPdfTextBoxes.size(), 50));
+    
+    // Find intersecting text boxes with optimized loop
+    for (const Poppler::TextBox* textBox : currentPdfTextBoxes) {
+        if (textBox && textBox->boundingBox().intersects(pdfSelectionRect)) {
+            selectedTextBoxes.append(const_cast<Poppler::TextBox*>(textBox));
+        }
+    }
+    
+    // Only emit signal and update if we have selected text
+    if (!selectedTextBoxes.isEmpty()) {
+        QString selectedText = getSelectedPdfText();
+        if (!selectedText.isEmpty()) {
+            emit pdfTextSelected(selectedText);
+        }
+    }
+    
+    // Trigger repaint to show selection
+    update();
+}
+
+QList<Poppler::TextBox*> InkCanvas::getTextBoxesInSelection(const QPointF &start, const QPointF &end) {
+    QList<Poppler::TextBox*> selectedBoxes;
+    
+    if (!currentPdfPageForText) {
+        // qDebug() << "PDF text selection: No current page for text";
+        return selectedBoxes;
+    }
+    
+    // Convert widget coordinates to PDF coordinates
+    QPointF pdfStart = mapWidgetToPdfCoordinates(start);
+    QPointF pdfEnd = mapWidgetToPdfCoordinates(end);
+    
+    // qDebug() << "PDF text selection: Widget coords" << start << "to" << end;
+    // qDebug() << "PDF text selection: PDF coords" << pdfStart << "to" << pdfEnd;
+    
+    // Create selection rectangle in PDF coordinates
+    QRectF selectionRect(pdfStart, pdfEnd);
+    selectionRect = selectionRect.normalized();
+    
+    // qDebug() << "PDF text selection: Selection rect in PDF coords:" << selectionRect;
+    
+    // Find text boxes that intersect with the selection
+    int intersectionCount = 0;
+    for (Poppler::TextBox* textBox : currentPdfTextBoxes) {
+        if (textBox) {
+            QRectF textBoxRect = textBox->boundingBox();
+            bool intersects = textBoxRect.intersects(selectionRect);
+            
+            if (intersects) {
+                selectedBoxes.append(textBox);
+                intersectionCount++;
+                // qDebug() << "PDF text selection: Text box intersects:" << textBox->text() 
+                //          << "at" << textBoxRect;
+            }
+        }
+    }
+    
+    // qDebug() << "PDF text selection: Found" << intersectionCount << "intersecting text boxes";
+    
+    return selectedBoxes;
+}
+
+void InkCanvas::handlePdfLinkClick(const QPointF &position) {
+    if (!isPdfLoaded || !currentPdfPageForText) {
+        return;
+    }
+    
+    // Convert widget coordinates to PDF coordinates
+    QPointF pdfPoint = mapWidgetToPdfCoordinates(position);
+    
+    // Get PDF page size for reference
+    QSizeF pdfPageSize = currentPdfPageForText->pageSizeF();
+    
+    // Convert to normalized coordinates (0.0 to 1.0) to match Poppler's link coordinate system
+    QPointF normalizedPoint(pdfPoint.x() / pdfPageSize.width(), pdfPoint.y() / pdfPageSize.height());
+    
+    // Get links for the current page
+    auto links = currentPdfPageForText->links();
+    
+    for (const auto& link : links) {
+        QRectF linkArea = link->linkArea();
+        
+        // Normalize the rectangle to handle negative width/height
+        QRectF normalizedLinkArea = linkArea.normalized();
+        
+        // Check if the normalized rectangle contains the normalized point
+        if (normalizedLinkArea.contains(normalizedPoint)) {
+            // Handle different types of links
+            if (link->linkType() == Poppler::Link::Goto) {
+                Poppler::LinkGoto* gotoLink = static_cast<Poppler::LinkGoto*>(link.get());
+                if (gotoLink && gotoLink->destination().pageNumber() >= 0) {
+                    int targetPage = gotoLink->destination().pageNumber() - 1; // Convert to 0-based
+                    emit pdfLinkClicked(targetPage);
+                    return;
+                }
+            }
+            // Add other link types as needed (URI, etc.)
+        }
+    }
+}
+
+void InkCanvas::showPdfTextSelectionMenu(const QPoint &position) {
+    QString selectedText = getSelectedPdfText();
+    if (selectedText.isEmpty()) {
+        return; // No text selected, don't show menu
+    }
+    
+    // Create context menu
+    QMenu *contextMenu = new QMenu(this);
+    contextMenu->setAttribute(Qt::WA_DeleteOnClose);
+    
+    // Add Copy action
+    QAction *copyAction = contextMenu->addAction(tr("Copy"));
+    copyAction->setIcon(QIcon(":/resources/icons/copy.png")); // You may need to add this icon
+    connect(copyAction, &QAction::triggered, this, [selectedText]() {
+        QClipboard *clipboard = QGuiApplication::clipboard();
+        clipboard->setText(selectedText);
+    });
+    
+    // Add separator
+    contextMenu->addSeparator();
+    
+    // Add Cancel action
+    QAction *cancelAction = contextMenu->addAction(tr("Cancel"));
+    cancelAction->setIcon(QIcon(":/resources/icons/cross.png"));
+    connect(cancelAction, &QAction::triggered, this, [this]() {
+        clearPdfTextSelection();
+    });
+    
+    // Show the menu at the specified position
+    contextMenu->popup(position);
+}
+
+void InkCanvas::processPendingTextSelection() {
+    if (!hasPendingSelection) {
+        return;
+    }
+    
+    // Process the pending selection update
+    updatePdfTextSelection(pendingSelectionStart, pendingSelectionEnd);
+    hasPendingSelection = false;
+}
+
+
+
+
+

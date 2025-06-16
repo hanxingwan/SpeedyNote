@@ -41,7 +41,8 @@ enum class InternalControllerAction {
     RopeTool,            // New: Toggle rope tool
     SetPenTool,          // New: Set tool to pen
     SetMarkerTool,       // New: Set tool to marker
-    SetEraserTool        // New: Set tool to eraser
+    SetEraserTool,       // New: Set tool to eraser
+    TogglePdfTextSelection // New: Toggle PDF text selection mode
 };
 
 class ButtonMappingHelper {

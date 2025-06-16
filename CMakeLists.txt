@@ -56,6 +56,7 @@ add_executable(NoteApp
     RecentNotebooksManager.cpp
     RecentNotebooksDialog.cpp
     KeyCaptureDialog.cpp
+    ControllerMappingDialog.cpp
     ${WIN_RESOURCES}  # Windows resource file for executable icon (only on Windows)
 )
 

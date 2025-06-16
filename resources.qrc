@@ -39,6 +39,8 @@
     <file>resources/icons/pdfdelete_reversed.png</file>
     <file>resources/icons/folder.png</file>
     <file>resources/icons/folder_reversed.png</file>
+    <file>resources/icons/ibeam.png</file>
+    <file>resources/icons/ibeam_reversed.png</file>
     <file>resources/icons/straightLine.png</file>
     <file>resources/icons/straightLine_reversed.png</file>
     <file>resources/icons/trash.png</file>
@@ -65,6 +67,7 @@
     <file>resources/icons/fastforward_reversed.png</file>
     <file>resources/icons/color.png</file>
     <file>resources/icons/color_reversed.png</file>
+    <file>resources/icons/copy.png</file>
     <file>resources/icons/preset.png</file>
     <file>resources/icons/preset_reversed.png</file>
     <file>resources/icons/savepreset.png</file>

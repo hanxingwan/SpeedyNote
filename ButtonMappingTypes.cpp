@@ -40,6 +40,7 @@ QString ButtonMappingHelper::actionToInternalKey(InternalControllerAction action
         case InternalControllerAction::SetPenTool: return "set_pen_tool";
         case InternalControllerAction::SetMarkerTool: return "set_marker_tool";
         case InternalControllerAction::SetEraserTool: return "set_eraser_tool";
+        case InternalControllerAction::TogglePdfTextSelection: return "toggle_pdf_text_selection";
     }
     return "none";
 }
@@ -81,6 +82,7 @@ InternalControllerAction ButtonMappingHelper::internalKeyToAction(const QString 
     if (key == "set_pen_tool") return InternalControllerAction::SetPenTool;
     if (key == "set_marker_tool") return InternalControllerAction::SetMarkerTool;
     if (key == "set_eraser_tool") return InternalControllerAction::SetEraserTool;
+    if (key == "toggle_pdf_text_selection") return InternalControllerAction::TogglePdfTextSelection;
     return InternalControllerAction::None;
 }
 
@@ -122,7 +124,8 @@ QStringList ButtonMappingHelper::getTranslatedActions() {
         tr("Rope Tool"),
         tr("Set Pen Tool"),
         tr("Set Marker Tool"),
-        tr("Set Eraser Tool")
+        tr("Set Eraser Tool"),
+        tr("Toggle PDF Text Selection")
     };
 }
 
@@ -180,7 +183,8 @@ QStringList ButtonMappingHelper::getInternalActionKeys() {
         "rope_tool",
         "set_pen_tool",
         "set_marker_tool",
-        "set_eraser_tool"
+        "set_eraser_tool",
+        "toggle_pdf_text_selection"
     };
 }
 

@@ -1,5 +1,6 @@
 #include "ControlPanelDialog.h"
 #include "ButtonMappingTypes.h"
+#include "SDLControllerManager.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -29,6 +30,7 @@ ControlPanelDialog::ControlPanelDialog(MainWindow *mainWindow, InkCanvas *target
         createToolbarTab();
     }
     createButtonMappingTab();
+    createControllerMappingTab();
     createKeyboardMappingTab();
     createThemeTab();
     // === Buttons ===
@@ -458,4 +460,75 @@ void ControlPanelDialog::removeKeyboardMapping() {
         // Remove from table
         keyboardTable->removeRow(currentRow);
     }
+}
+
+void ControlPanelDialog::createControllerMappingTab() {
+    controllerMappingTab = new QWidget(this);
+    QVBoxLayout *layout = new QVBoxLayout(controllerMappingTab);
+    
+    // Instructions
+    QLabel *instructionLabel = new QLabel(tr("Configure physical controller button mappings for your Joy-Con or other controller:"), controllerMappingTab);
+    instructionLabel->setWordWrap(true);
+    layout->addWidget(instructionLabel);
+    
+    QLabel *noteLabel = new QLabel(tr("Note: This maps your physical controller buttons to the logical Joy-Con functions used by the application. "
+                                     "After setting up the physical mapping, you can configure what actions each logical button performs in the 'Button Mapping' tab."), controllerMappingTab);
+    noteLabel->setWordWrap(true);
+    noteLabel->setStyleSheet("color: gray; font-size: 10px; margin-bottom: 10px;");
+    layout->addWidget(noteLabel);
+    
+    // Button to open controller mapping dialog
+    QPushButton *openMappingButton = new QPushButton(tr("Configure Controller Mapping"), controllerMappingTab);
+    openMappingButton->setMinimumHeight(40);
+    connect(openMappingButton, &QPushButton::clicked, this, &ControlPanelDialog::openControllerMapping);
+    layout->addWidget(openMappingButton);
+    
+    // Status information
+    QLabel *statusLabel = new QLabel(tr("Current controller status:"), controllerMappingTab);
+    statusLabel->setStyleSheet("font-weight: bold; margin-top: 20px;");
+    layout->addWidget(statusLabel);
+    
+    // Check if controller is connected
+    if (mainWindowRef && mainWindowRef->getControllerManager()) {
+        if (mainWindowRef->getControllerManager()->getJoystick()) {
+            QLabel *connectedLabel = new QLabel(tr("✓ Controller connected"), controllerMappingTab);
+            connectedLabel->setStyleSheet("color: green;");
+            layout->addWidget(connectedLabel);
+        } else {
+            QLabel *disconnectedLabel = new QLabel(tr("✗ No controller detected"), controllerMappingTab);
+            disconnectedLabel->setStyleSheet("color: red;");
+            layout->addWidget(disconnectedLabel);
+            
+            QLabel *helpLabel = new QLabel(tr("Please connect your controller and restart the application."), controllerMappingTab);
+            helpLabel->setStyleSheet("color: gray; font-size: 10px;");
+            layout->addWidget(helpLabel);
+        }
+    }
+    
+    layout->addStretch();
+    
+    tabWidget->addTab(controllerMappingTab, tr("Controller Mapping"));
+}
+
+void ControlPanelDialog::openControllerMapping() {
+    if (!mainWindowRef) {
+        QMessageBox::warning(this, tr("Error"), tr("MainWindow reference not available."));
+        return;
+    }
+    
+    SDLControllerManager *controllerManager = mainWindowRef->getControllerManager();
+    if (!controllerManager) {
+        QMessageBox::warning(this, tr("Controller Not Available"), 
+            tr("Controller manager is not available. Please ensure a controller is connected and restart the application."));
+        return;
+    }
+    
+    if (!controllerManager->getJoystick()) {
+        QMessageBox::warning(this, tr("No Controller Detected"), 
+            tr("No controller is currently connected. Please connect your controller and restart the application."));
+        return;
+    }
+    
+    ControllerMappingDialog dialog(controllerManager, this);
+    dialog.exec();
 }

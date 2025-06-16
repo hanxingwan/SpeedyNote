@@ -13,6 +13,8 @@
 #include <poppler-qt6.h>
 #include <QCache>
 #include <QTimer>
+#include <QMenu>
+#include <QClipboard>
 
 enum class BackgroundStyle {
     None,
@@ -28,6 +30,8 @@ signals:
     void panChanged(int panX, int panY);
     void touchGestureEnded(); // Signal emitted when touch gestures end
     void ropeSelectionCompleted(const QPoint &position); // Signal emitted when rope tool selection is completed
+    void pdfLinkClicked(int targetPage); // Signal emitted when a PDF link is clicked
+    void pdfTextSelected(const QString &text); // Signal emitted when PDF text is selected
 
 public:
     explicit InkCanvas(QWidget *parent = nullptr);
@@ -127,6 +131,31 @@ public:
     void deleteRopeSelection(); // Delete the current rope tool selection
     void cancelRopeSelection(); // Cancel the current rope tool selection
 
+    // PDF text selection and link functionality
+    void setPdfTextSelectionEnabled(bool enabled) { 
+        pdfTextSelectionEnabled = enabled; 
+        
+        // Enable mouse tracking for PDF text selection
+        setMouseTracking(enabled);
+        
+        // Change cursor when entering/exiting text selection mode
+        if (enabled && isPdfLoaded) {
+            setCursor(Qt::IBeamCursor);
+        } else {
+            setCursor(Qt::ArrowCursor);
+        }
+        
+        // Clear any existing selection when disabling
+        if (!enabled) {
+            clearPdfTextSelection();
+        }
+        
+        update(); // Refresh the display
+    }
+    bool isPdfTextSelectionEnabled() const { return pdfTextSelectionEnabled; }
+    void clearPdfTextSelection(); // Clear current PDF text selection
+    QString getSelectedPdfText() const; // Get currently selected PDF text
+
 protected:
     void paintEvent(QPaintEvent *event) override;
     void tabletEvent(QTabletEvent *event) override;
@@ -213,6 +242,34 @@ private:
     BackgroundStyle backgroundStyle = BackgroundStyle::None;
     QColor backgroundColor = Qt::transparent;
     int backgroundDensity = 40;  // pixels between lines
+
+    bool pdfTextSelectionEnabled = false;
+    
+    // PDF text selection members
+    bool pdfTextSelecting = false; // True when actively selecting text
+    QPointF pdfSelectionStart; // Start point of text selection (logical widget coordinates)
+    QPointF pdfSelectionEnd; // End point of text selection (logical widget coordinates)
+    QList<Poppler::TextBox*> currentPdfTextBoxes; // Text boxes for current page
+    QList<Poppler::TextBox*> selectedTextBoxes; // Currently selected text boxes
+    std::unique_ptr<Poppler::Page> currentPdfPageForText; // Current PDF page for text operations
+    
+    // PDF text selection throttling (60 FPS)
+    QTimer* pdfTextSelectionTimer = nullptr; // Timer for throttling text selection updates
+    QPointF pendingSelectionStart; // Pending selection start point
+    QPointF pendingSelectionEnd; // Pending selection end point
+    bool hasPendingSelection = false; // True if there's a pending selection update
+    
+    // Helper methods for PDF text selection
+    void loadPdfTextBoxes(int pageNumber); // Load text boxes for a page
+    QPointF mapWidgetToPdfCoordinates(const QPointF &widgetPoint); // Map widget coordinates to PDF coordinates
+    QPointF mapPdfToWidgetCoordinates(const QPointF &pdfPoint); // Map PDF coordinates to widget coordinates
+    void updatePdfTextSelection(const QPointF &start, const QPointF &end); // Update text selection
+    void handlePdfLinkClick(const QPointF &clickPoint); // Handle PDF link clicks
+    void showPdfTextSelectionMenu(const QPoint &position); // Show context menu for PDF text selection
+    QList<Poppler::TextBox*> getTextBoxesInSelection(const QPointF &start, const QPointF &end); // Get text boxes in selection area
+    
+private slots:
+    void processPendingTextSelection(); // Process pending text selection updates (throttled to 60 FPS)
 };
 
 #endif // INKCANVAS_H

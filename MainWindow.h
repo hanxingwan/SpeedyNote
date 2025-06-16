@@ -64,7 +64,8 @@ enum class ControllerAction {
     RopeTool,
     SetPenTool,
     SetMarkerTool,
-    SetEraserTool
+    SetEraserTool,
+    TogglePdfTextSelection
 };
 
 static QString actionToString(ControllerAction action) {
@@ -92,6 +93,7 @@ static QString actionToString(ControllerAction action) {
         case ControllerAction::SetPenTool: return "Set Pen Tool";
         case ControllerAction::SetMarkerTool: return "Set Marker Tool";
         case ControllerAction::SetEraserTool: return "Set Eraser Tool";
+        case ControllerAction::TogglePdfTextSelection: return "Toggle PDF Text Selection";
         default: return "None";
     }
 }
@@ -125,6 +127,7 @@ static ControllerAction stringToAction(const QString &str) {
         case InternalControllerAction::SetPenTool: return ControllerAction::SetPenTool;
         case InternalControllerAction::SetMarkerTool: return ControllerAction::SetMarkerTool;
         case InternalControllerAction::SetEraserTool: return ControllerAction::SetEraserTool;
+        case InternalControllerAction::TogglePdfTextSelection: return ControllerAction::TogglePdfTextSelection;
     }
     return ControllerAction::None;
 }
@@ -215,6 +218,14 @@ public:
     void addKeyboardMapping(const QString &keySequence, const QString &action);
     void removeKeyboardMapping(const QString &keySequence);
     QMap<QString, QString> getKeyboardMappings() const;
+    
+    // Controller access
+    SDLControllerManager* getControllerManager() const { return controllerManager; }
+
+    void updateDialButtonState();     // Update dial button state when switching tabs
+    void updateFastForwardButtonState(); // Update fast forward button state when switching tabs
+    void updateToolButtonStates();   // Update tool button states when switching tabs
+    void updatePdfTextSelectButtonState(); // Update PDF text selection button state when switching tabs
 
 private slots:
     void toggleBenchmark();
@@ -279,6 +290,7 @@ private slots:
 
     bool isDarkMode();
     QIcon loadThemedIcon(const QString& baseName);
+    QString createButtonStyle(bool darkMode);
 
     void handleDialPanScroll(int angle);  // Add missing function declaration
     void onPanScrollReleased();           // Add missing function declaration
@@ -293,18 +305,16 @@ private slots:
     void selectColorButton(QPushButton* selectedButton);
     void updateStraightLineButtonState();
     void updateRopeToolButtonState(); // New slot for rope tool button
-    void updateDialButtonState();     // New method for dial toggle button
-    void updateFastForwardButtonState(); // New method for fast forward toggle button
-    void updateToolButtonStates();   // New method for tool button states
+
     void setPenTool();               // Set pen tool
     void setMarkerTool();            // Set marker tool
     void setEraserTool();            // Set eraser tool
 
     QColor getContrastingTextColor(const QColor &backgroundColor);
     void updateCustomColorButtonStyle(const QColor &color);
-
+    
     void openRecentNotebooksDialog(); // Added slot
-
+    
     void showPendingTooltip(); // Show tooltip with throttling
     
     void showRopeSelectionMenu(const QPoint &position); // Show context menu for rope tool selection
@@ -344,6 +354,7 @@ private:
 
     QPushButton *loadPdfButton;
     QPushButton *clearPdfButton;
+    QPushButton *pdfTextSelectButton; // Button to toggle PDF text selection mode
     QPushButton *toggleTabBarButton;
 
     QMap<InkCanvas*, int> pageMap;
@@ -449,7 +460,7 @@ private:
     QMap<QString, QString> buttonHoldMapping;
     QMap<QString, QString> buttonPressMapping;
     QMap<QString, ControllerAction> buttonPressActionMapping;
-    
+
     // New: Keyboard mapping support
     QMap<QString, QString> keyboardMappings;  // keySequence -> action internal key
     QMap<QString, ControllerAction> keyboardActionMapping;  // keySequence -> action enum

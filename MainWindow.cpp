@@ -37,7 +37,7 @@
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false) {
 
-    setWindowTitle(tr("SpeedyNote Beta 0.4.13"));
+    setWindowTitle(tr("SpeedyNote Beta 0.5.0"));
 
     // Initialize DPR early
     initialDpr = getDevicePixelRatio();
@@ -117,37 +117,9 @@ MainWindow::MainWindow(QWidget *parent)
 
 void MainWindow::setupUi() {
     
-
-    QString buttonStyle = R"(
-        QPushButton {
-            background: transparent; /* Make buttons blend with toolbar */
-            border: none; /* Remove default button borders */
-            padding: 6px; /* Ensure padding remains */
-        }
-
-        QPushButton:hover {
-            background: rgba(255, 255, 255, 50); /* Subtle highlight on hover */
-        }
-
-        QPushButton:pressed {
-            background: rgba(0, 0, 0, 50); /* Darken on click */
-        }
-
-        QPushButton[selected="true"] {
-            background: rgba(255, 255, 255, 100);
-            border: 2px solid rgba(255, 255, 255, 150);
-            padding: 4px;
-            border-radius: 4px;
-        }
-
-        QPushButton[selected="true"]:hover {
-            background: rgba(255, 255, 255, 120);
-        }
-
-        QPushButton[selected="true"]:pressed {
-            background: rgba(0, 0, 0, 50);
-        }
-    )";
+    // Create theme-aware button style
+    bool darkMode = isDarkMode();
+    QString buttonStyle = createButtonStyle(darkMode);
 
 
     loadPdfButton = new QPushButton(this);
@@ -164,6 +136,25 @@ void MainWindow::setupUi() {
     clearPdfButton->setToolTip(tr("Clear PDF"));
     connect(loadPdfButton, &QPushButton::clicked, this, &MainWindow::loadPdf);
     connect(clearPdfButton, &QPushButton::clicked, this, &MainWindow::clearPdf);
+
+    pdfTextSelectButton = new QPushButton(this);
+    pdfTextSelectButton->setFixedSize(26, 30);
+    QIcon pdfTextIcon(loadThemedIcon("ibeam"));
+    pdfTextSelectButton->setIcon(pdfTextIcon);
+    pdfTextSelectButton->setStyleSheet(buttonStyle);
+    pdfTextSelectButton->setToolTip(tr("Toggle PDF Text Selection"));
+    connect(pdfTextSelectButton, &QPushButton::clicked, this, [this]() {
+        if (!currentCanvas()) return;
+        
+        bool newMode = !currentCanvas()->isPdfTextSelectionEnabled();
+        currentCanvas()->setPdfTextSelectionEnabled(newMode);
+        updatePdfTextSelectButtonState();
+        
+        // Clear any existing selection when toggling
+        if (!newMode) {
+            currentCanvas()->clearPdfTextSelection();
+        }
+    });
 
     exportNotebookButton = new QPushButton(this);
     exportNotebookButton->setFixedSize(26, 30);
@@ -242,8 +233,7 @@ void MainWindow::setupUi() {
     // ✅ Connect button click to toggleFullscreen() function
     connect(fullscreenButton, &QPushButton::clicked, this, &MainWindow::toggleFullscreen);
 
-    // Determine if we're in dark mode to choose appropriate icons and colors
-    bool darkMode = isDarkMode();
+    // Use the darkMode variable already declared at the beginning of setupUi()
 
     redButton = new QPushButton(this);
     redButton->setFixedSize(18, 30);  // Half width
@@ -828,6 +818,7 @@ void MainWindow::setupUi() {
     controlLayout->addWidget(importNotebookButton);
     controlLayout->addWidget(loadPdfButton);
     controlLayout->addWidget(clearPdfButton);
+    controlLayout->addWidget(pdfTextSelectButton);
     controlLayout->addWidget(backgroundButton);
     controlLayout->addWidget(saveButton);
     controlLayout->addWidget(saveAnnotatedButton);
@@ -1393,7 +1384,7 @@ void MainWindow::clearPdf() {
 
 void MainWindow::switchTab(int index) {
     if (!canvasStack || !tabList || !pageInput || !zoomSlider || !panXSlider || !panYSlider) {
-        qDebug() << "Error: switchTab() called before UI was fully initialized!";
+        // qDebug() << "Error: switchTab() called before UI was fully initialized!";
         return;
     }
 
@@ -1438,6 +1429,7 @@ void MainWindow::switchTab(int index) {
             updateColorButtonStates();  // Update button states when switching tabs
             updateStraightLineButtonState();  // Update straight line button state when switching tabs
             updateRopeToolButtonState(); // Update rope tool button state when switching tabs
+            updatePdfTextSelectButtonState(); // Update PDF text selection button state when switching tabs
             updateDialButtonState();     // Update dial button state when switching tabs
             updateFastForwardButtonState(); // Update fast forward button state when switching tabs
             updateToolButtonStates();   // Update tool button states when switching tabs
@@ -1593,6 +1585,13 @@ void MainWindow::addNewTab() {
     connect(newCanvas, &InkCanvas::panChanged, this, &MainWindow::handleTouchPanChange);
     connect(newCanvas, &InkCanvas::touchGestureEnded, this, &MainWindow::handleTouchGestureEnd);
     connect(newCanvas, &InkCanvas::ropeSelectionCompleted, this, &MainWindow::showRopeSelectionMenu);
+    connect(newCanvas, &InkCanvas::pdfLinkClicked, this, [this](int targetPage) {
+        // Navigate to the target page when a PDF link is clicked
+        if (targetPage >= 0 && targetPage < 9999) {
+            switchPageWithDirection(targetPage + 1, (targetPage + 1 > getCurrentPageForCanvas(currentCanvas()) + 1) ? 1 : -1);
+            pageInput->setValue(targetPage + 1);
+        }
+    });
     
     // Install event filter to detect mouse movement for scrollbar visibility
     newCanvas->setMouseTracking(true);
@@ -1623,6 +1622,7 @@ void MainWindow::addNewTab() {
     updateDialDisplay();
     updateStraightLineButtonState();  // Initialize straight line button state for the new tab
     updateRopeToolButtonState(); // Initialize rope tool button state for the new tab
+    updatePdfTextSelectButtonState(); // Initialize PDF text selection button state for the new tab
     updateDialButtonState();     // Initialize dial button state for the new tab
     updateFastForwardButtonState(); // Initialize fast forward button state for the new tab
     updateToolButtonStates();   // Initialize tool button states for the new tab
@@ -2154,9 +2154,13 @@ void MainWindow::handleDialInput(int angle) {
             dialClickSound->play();
     
             // ✅ Vibrate controller
-            SDL_GameController *controller = controllerManager->getController();
-            if (controller) {
-                SDL_GameControllerRumble(controller, 0xA000, 0xF000, 10);  // Vibrate shortly
+            SDL_Joystick *joystick = controllerManager->getJoystick();
+            if (joystick) {
+                // Note: SDL_JoystickRumble requires SDL 2.0.9+
+                // For older versions, this will be a no-op
+                #if SDL_VERSION_ATLEAST(2, 0, 9)
+                SDL_JoystickRumble(joystick, 0xA000, 0xF000, 10);  // Vibrate shortly
+                #endif
             }
     
             grossTotalClicks += 1;
@@ -2238,10 +2242,12 @@ void MainWindow::handleToolSelection(int angle) {
             dialClickSound->play();
         }
 
-        SDL_GameController *controller = controllerManager->getController();
+        SDL_Joystick *joystick = controllerManager->getJoystick();
 
-        if (controller) {
-            SDL_GameControllerRumble(controller, 0xA000, 0xF000, 20);  // ✅ Vibrate controller
+        if (joystick) {
+            #if SDL_VERSION_ATLEAST(2, 0, 9)
+            SDL_JoystickRumble(joystick, 0xA000, 0xF000, 20);  // ✅ Vibrate controller
+            #endif
         }
 
         updateToolButtonStates();  // ✅ Update tool button states
@@ -2598,9 +2604,11 @@ void MainWindow::onPanScrollReleased() {
         pageInput->setValue(newPage);
         updateDialDisplay();
 
-        SDL_GameController *controller = controllerManager->getController();
-        if (controller) {
-            SDL_GameControllerRumble(controller, 0xA000, 0xF000, 25);  // Vibrate shortly
+        SDL_Joystick *joystick = controllerManager->getJoystick();
+        if (joystick) {
+            #if SDL_VERSION_ATLEAST(2, 0, 9)
+            SDL_JoystickRumble(joystick, 0xA000, 0xF000, 25);  // Vibrate shortly
+            #endif
         }
     }
 
@@ -2656,9 +2664,11 @@ void MainWindow::handlePresetSelection(int angle) {
         updateColorButtonStates();  // Update button states when preset is selected
         
         if (dialClickSound) dialClickSound->play();  // ✅ Provide feedback
-        SDL_GameController *controller = controllerManager->getController();
-            if (controller) {
-                SDL_GameControllerRumble(controller, 0xA000, 0xF000, 25);  // Vibrate shortly
+        SDL_Joystick *joystick = controllerManager->getJoystick();
+            if (joystick) {
+                #if SDL_VERSION_ATLEAST(2, 0, 9)
+                SDL_JoystickRumble(joystick, 0xA000, 0xF000, 25);  // Vibrate shortly
+                #endif
             }
     }
 }
@@ -2700,6 +2710,64 @@ QIcon MainWindow::loadThemedIcon(const QString& baseName) {
         ? QString(":/resources/icons/%1_reversed.png").arg(baseName)
         : QString(":/resources/icons/%1.png").arg(baseName);
     return QIcon(path);
+}
+
+QString MainWindow::createButtonStyle(bool darkMode) {
+    if (darkMode) {
+        // Dark mode: Keep current white highlights (good contrast)
+        return R"(
+            QPushButton {
+                background: transparent;
+                border: none;
+                padding: 6px;
+            }
+            QPushButton:hover {
+                background: rgba(255, 255, 255, 50);
+            }
+            QPushButton:pressed {
+                background: rgba(0, 0, 0, 50);
+            }
+            QPushButton[selected="true"] {
+                background: rgba(255, 255, 255, 100);
+                border: 2px solid rgba(255, 255, 255, 150);
+                padding: 4px;
+                border-radius: 4px;
+            }
+            QPushButton[selected="true"]:hover {
+                background: rgba(255, 255, 255, 120);
+            }
+            QPushButton[selected="true"]:pressed {
+                background: rgba(0, 0, 0, 50);
+            }
+        )";
+    } else {
+        // Light mode: Use darker colors for better visibility
+        return R"(
+            QPushButton {
+                background: transparent;
+                border: none;
+                padding: 6px;
+            }
+            QPushButton:hover {
+                background: rgba(0, 0, 0, 30);
+            }
+            QPushButton:pressed {
+                background: rgba(0, 0, 0, 60);
+            }
+            QPushButton[selected="true"] {
+                background: rgba(0, 0, 0, 80);
+                border: 2px solid rgba(0, 0, 0, 120);
+                padding: 4px;
+                border-radius: 4px;
+            }
+            QPushButton[selected="true"]:hover {
+                background: rgba(0, 0, 0, 100);
+            }
+            QPushButton[selected="true"]:pressed {
+                background: rgba(0, 0, 0, 140);
+            }
+        )";
+    }
 }
 
 
@@ -2799,6 +2867,7 @@ void MainWindow::updateTheme() {
     // Force icon reload for all buttons that use themed icons
     if (loadPdfButton) loadPdfButton->setIcon(loadThemedIcon("pdf"));
     if (clearPdfButton) clearPdfButton->setIcon(loadThemedIcon("pdfdelete"));
+    if (pdfTextSelectButton) pdfTextSelectButton->setIcon(loadThemedIcon("ibeam"));
     if (exportNotebookButton) exportNotebookButton->setIcon(loadThemedIcon("export"));
     if (importNotebookButton) importNotebookButton->setIcon(loadThemedIcon("import"));
     if (benchmarkButton) benchmarkButton->setIcon(loadThemedIcon("benchmark"));
@@ -2829,8 +2898,56 @@ void MainWindow::updateTheme() {
     if (markerToolButton) markerToolButton->setIcon(loadThemedIcon("marker"));
     if (eraserToolButton) eraserToolButton->setIcon(loadThemedIcon("eraser"));
     
-    // Update color buttons with new theme
+    // Update button styles with new theme
     bool darkMode = isDarkMode();
+    QString newButtonStyle = createButtonStyle(darkMode);
+    
+    // Update all buttons that use the buttonStyle
+    if (loadPdfButton) loadPdfButton->setStyleSheet(newButtonStyle);
+    if (clearPdfButton) clearPdfButton->setStyleSheet(newButtonStyle);
+    if (pdfTextSelectButton) pdfTextSelectButton->setStyleSheet(newButtonStyle);
+    if (exportNotebookButton) exportNotebookButton->setStyleSheet(newButtonStyle);
+    if (importNotebookButton) importNotebookButton->setStyleSheet(newButtonStyle);
+    if (benchmarkButton) benchmarkButton->setStyleSheet(newButtonStyle);
+    if (toggleTabBarButton) toggleTabBarButton->setStyleSheet(newButtonStyle);
+    if (selectFolderButton) selectFolderButton->setStyleSheet(newButtonStyle);
+    if (saveButton) saveButton->setStyleSheet(newButtonStyle);
+    if (saveAnnotatedButton) saveAnnotatedButton->setStyleSheet(newButtonStyle);
+    if (fullscreenButton) fullscreenButton->setStyleSheet(newButtonStyle);
+    if (redButton) redButton->setStyleSheet(newButtonStyle);
+    if (blueButton) blueButton->setStyleSheet(newButtonStyle);
+    if (yellowButton) yellowButton->setStyleSheet(newButtonStyle);
+    if (greenButton) greenButton->setStyleSheet(newButtonStyle);
+    if (blackButton) blackButton->setStyleSheet(newButtonStyle);
+    if (whiteButton) whiteButton->setStyleSheet(newButtonStyle);
+    if (thicknessButton) thicknessButton->setStyleSheet(newButtonStyle);
+    if (penToolButton) penToolButton->setStyleSheet(newButtonStyle);
+    if (markerToolButton) markerToolButton->setStyleSheet(newButtonStyle);
+    if (eraserToolButton) eraserToolButton->setStyleSheet(newButtonStyle);
+    if (backgroundButton) backgroundButton->setStyleSheet(newButtonStyle);
+    if (straightLineToggleButton) straightLineToggleButton->setStyleSheet(newButtonStyle);
+    if (ropeToolButton) ropeToolButton->setStyleSheet(newButtonStyle);
+    if (deletePageButton) deletePageButton->setStyleSheet(newButtonStyle);
+    if (zoomButton) zoomButton->setStyleSheet(newButtonStyle);
+    if (dialToggleButton) dialToggleButton->setStyleSheet(newButtonStyle);
+    if (fastForwardButton) fastForwardButton->setStyleSheet(newButtonStyle);
+    if (jumpToPageButton) jumpToPageButton->setStyleSheet(newButtonStyle);
+    if (btnPageSwitch) btnPageSwitch->setStyleSheet(newButtonStyle);
+    if (btnZoom) btnZoom->setStyleSheet(newButtonStyle);
+    if (btnThickness) btnThickness->setStyleSheet(newButtonStyle);
+    if (btnTool) btnTool->setStyleSheet(newButtonStyle);
+    if (btnPresets) btnPresets->setStyleSheet(newButtonStyle);
+    if (btnPannScroll) btnPannScroll->setStyleSheet(newButtonStyle);
+    if (addPresetButton) addPresetButton->setStyleSheet(newButtonStyle);
+    if (openControlPanelButton) openControlPanelButton->setStyleSheet(newButtonStyle);
+    if (openRecentNotebooksButton) openRecentNotebooksButton->setStyleSheet(newButtonStyle);
+    if (zoom50Button) zoom50Button->setStyleSheet(newButtonStyle);
+    if (dezoomButton) dezoomButton->setStyleSheet(newButtonStyle);
+    if (zoom200Button) zoom200Button->setStyleSheet(newButtonStyle);
+    if (prevPageButton) prevPageButton->setStyleSheet(newButtonStyle);
+    if (nextPageButton) nextPageButton->setStyleSheet(newButtonStyle);
+    
+    // Update color buttons with new theme icons
     if (redButton) {
         QString redIconPath = darkMode ? ":/resources/icons/pen_light_red.png" : ":/resources/icons/pen_dark_red.png";
         redButton->setIcon(QIcon(redIconPath));
@@ -3194,6 +3311,7 @@ QString MainWindow::migrateOldActionString(const QString &oldString) {
     if (oldString == "Set Pen Tool") return "set_pen_tool";
     if (oldString == "Set Marker Tool") return "set_marker_tool";
     if (oldString == "Set Eraser Tool") return "set_eraser_tool";
+    if (oldString == "Toggle PDF Text Selection") return "toggle_pdf_text_selection";
     return oldString; // Return as-is if not found (might already be new format)
 }
 
@@ -3269,6 +3387,9 @@ void MainWindow::handleControllerButton(const QString &buttonName) {  // This is
             break;
         case ControllerAction::SetEraserTool:
             setEraserTool();
+            break;
+        case ControllerAction::TogglePdfTextSelection:
+            pdfTextSelectButton->click();
             break;
         default:
             break;
@@ -3748,7 +3869,7 @@ void MainWindow::updateToolbarLayout() {
     int scaledWidth = width();
     
     // Dynamic threshold based on zoom button visibility
-    int threshold = areZoomButtonsVisible() ? 1362 : 1252;
+    int threshold = areZoomButtonsVisible() ? 1388 : 1278;
     
     // Debug output to understand what's happening
     // qDebug() << "Window width:" << scaledWidth << "Threshold:" << threshold << "Zoom buttons visible:" << areZoomButtonsVisible();
@@ -3787,6 +3908,7 @@ void MainWindow::createSingleRowLayout() {
     newLayout->addWidget(importNotebookButton);
     newLayout->addWidget(loadPdfButton);
     newLayout->addWidget(clearPdfButton);
+    newLayout->addWidget(pdfTextSelectButton);
     newLayout->addWidget(backgroundButton);
     newLayout->addWidget(saveButton);
     newLayout->addWidget(saveAnnotatedButton);
@@ -3874,6 +3996,7 @@ void MainWindow::createTwoRowLayout() {
     newFirstRowLayout->addWidget(importNotebookButton);
     newFirstRowLayout->addWidget(loadPdfButton);
     newFirstRowLayout->addWidget(clearPdfButton);
+    newFirstRowLayout->addWidget(pdfTextSelectButton);
     newFirstRowLayout->addWidget(backgroundButton);
     newFirstRowLayout->addWidget(saveButton);
     newFirstRowLayout->addWidget(saveAnnotatedButton);
@@ -4035,6 +4158,9 @@ void MainWindow::handleKeyboardShortcut(const QString &keySequence) {
             break;
         case ControllerAction::SetEraserTool:
             setEraserTool();
+            break;
+        case ControllerAction::TogglePdfTextSelection:
+            pdfTextSelectButton->click();
             break;
         default:
             break;
@@ -4200,4 +4326,17 @@ void MainWindow::showRopeSelectionMenu(const QPoint &position) {
     
     // Show the menu at the specified position
     contextMenu->popup(globalPos);
+}
+
+void MainWindow::updatePdfTextSelectButtonState() {
+    // Check if PDF text selection is enabled
+    bool isEnabled = currentCanvas() && currentCanvas()->isPdfTextSelectionEnabled();
+    
+    if (pdfTextSelectButton) {
+        pdfTextSelectButton->setProperty("selected", isEnabled);
+        
+        // Force style update (uses the same buttonStyle as other toggle buttons)
+        pdfTextSelectButton->style()->unpolish(pdfTextSelectButton);
+        pdfTextSelectButton->style()->polish(pdfTextSelectButton);
+    }
 }
