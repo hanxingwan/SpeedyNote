@@ -14,6 +14,7 @@
 #include <QFileDialog>
 #include <QListWidget>
 #include <QStackedWidget>
+#include <QTreeWidget>
 #include <QDial>
 #include <QSoundEffect>
 #include <QFont>
@@ -27,6 +28,13 @@
 #include <QKeyEvent>
 #include <QTabletEvent>
 #include <QMenu>
+
+// Forward declarations
+class QTreeWidgetItem;
+namespace Poppler { 
+    class Document; 
+    class OutlineItem;
+}
 
 // #include "HandwritingLineEdit.h"
 
@@ -318,6 +326,21 @@ private slots:
     void showPendingTooltip(); // Show tooltip with throttling
     
     void showRopeSelectionMenu(const QPoint &position); // Show context menu for rope tool selection
+    
+    // PDF Outline functionality
+    void toggleOutlineSidebar();     // Toggle PDF outline sidebar
+    void onOutlineItemClicked(QTreeWidgetItem *item, int column); // Handle outline item clicks
+    void loadPdfOutline();           // Load PDF outline/bookmarks
+    void addOutlineItem(const Poppler::OutlineItem& outlineItem, QTreeWidgetItem* parentItem); // Add outline item recursively
+    Poppler::Document* getPdfDocument(); // Get PDF document from current canvas
+    
+    // Bookmark sidebar functionality
+    void toggleBookmarksSidebar();   // Toggle bookmarks sidebar
+    void onBookmarkItemClicked(QTreeWidgetItem *item, int column); // Handle bookmark item clicks
+    void loadBookmarks();            // Load bookmarks from file
+    void saveBookmarks();            // Save bookmarks to file
+    void toggleCurrentPageBookmark(); // Add/remove current page from bookmarks
+    void updateBookmarkButtonState(); // Update bookmark toggle button state
 
 private:
     InkCanvas *canvas;
@@ -376,9 +399,24 @@ private:
     QScrollBar *panYSlider;
 
 
-    QListWidget *tabList;          // Sidebar for tabs
+    QListWidget *tabList;          // Horizontal tab bar
     QStackedWidget *canvasStack;   // Holds multiple InkCanvas instances
     QPushButton *addTabButton;     // Button to add tabs
+    QWidget *tabBarContainer;      // Container for horizontal tab bar
+    
+    // PDF Outline Sidebar
+    QWidget *outlineSidebar;       // Container for PDF outline
+    QTreeWidget *outlineTree;      // Tree widget for PDF bookmarks/outline
+    QPushButton *toggleOutlineButton; // Button to toggle outline sidebar
+    bool outlineSidebarVisible = false;
+    
+    // Bookmarks Sidebar
+    QWidget *bookmarksSidebar;     // Container for bookmarks
+    QTreeWidget *bookmarksTree;    // Tree widget for bookmarks
+    QPushButton *toggleBookmarksButton; // Button to toggle bookmarks sidebar
+    QPushButton *toggleBookmarkButton; // Button to add/remove current page bookmark
+    bool bookmarksSidebarVisible = false;
+    QMap<int, QString> bookmarks;  // Map of page number to bookmark title
     QPushButton *jumpToPageButton; // Button to jump to a specific page
 
     QWidget *dialContainer = nullptr;  // ✅ Floating dial container
@@ -512,6 +550,9 @@ private:
     void createSingleRowLayout();
     void createTwoRowLayout();
     
+    // Helper function for tab text eliding
+    QString elideTabText(const QString &text, int maxWidth);
+    
     // Add timer for delayed layout updates
     QTimer *layoutUpdateTimer = nullptr;
     
@@ -522,6 +563,10 @@ protected:
     void resizeEvent(QResizeEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;  // New: Handle keyboard shortcuts
     void tabletEvent(QTabletEvent *event) override; // Handle pen hover for tooltips
+    
+    // IME support for multi-language input
+    void inputMethodEvent(QInputMethodEvent *event) override;
+    QVariant inputMethodQuery(Qt::InputMethodQuery query) const override;
 };
 
 #endif // MAINWINDOW_H

@@ -29,16 +29,23 @@
 #include <QtConcurrent/QtConcurrentRun> // For concurrent saving
 #include <QFuture>
 #include <QFutureWatcher>
+#include <QInputMethod>
+#include <QInputMethodEvent>
 // #include "HandwritingLineEdit.h"
 #include "ControlPanelDialog.h"
 #include "SDLControllerManager.h"
 #include "RecentNotebooksDialog.h" // Added
+#include <poppler-qt6.h> // For PDF outline parsing
 
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false) {
 
-    setWindowTitle(tr("SpeedyNote Beta 0.5.0"));
+    setWindowTitle(tr("SpeedyNote Beta 0.5.1"));
 
+    // Enable IME support for multi-language input
+    setAttribute(Qt::WA_InputMethodEnabled, true);
+    setFocusPolicy(Qt::StrongFocus);
+    
     // Initialize DPR early
     initialDpr = getDevicePixelRatio();
 
@@ -100,6 +107,15 @@ MainWindow::MainWindow(QWidget *parent)
             toggleDial(); // This will create and show the dial
         }
     });
+    
+    // Force IME activation after a short delay to ensure proper initialization
+    QTimer::singleShot(500, this, [this]() {
+        QInputMethod *inputMethod = QGuiApplication::inputMethod();
+        if (inputMethod) {
+            inputMethod->show();
+            inputMethod->reset();
+        }
+    });
 
     // Disable tablet tracking for now to prevent crashes
     // TODO: Find a safer way to implement hover tooltips without tablet tracking
@@ -116,6 +132,13 @@ MainWindow::MainWindow(QWidget *parent)
 
 
 void MainWindow::setupUi() {
+    
+    // Ensure IME is properly enabled for the application
+    QInputMethod *inputMethod = QGuiApplication::inputMethod();
+    if (inputMethod) {
+        inputMethod->show();
+        inputMethod->reset();
+    }
     
     // Create theme-aware button style
     bool darkMode = isDarkMode();
@@ -149,6 +172,7 @@ void MainWindow::setupUi() {
         bool newMode = !currentCanvas()->isPdfTextSelectionEnabled();
         currentCanvas()->setPdfTextSelectionEnabled(newMode);
         updatePdfTextSelectButtonState();
+        updateBookmarkButtonState();
         
         // Clear any existing selection when toggling
         if (!newMode) {
@@ -195,9 +219,31 @@ void MainWindow::setupUi() {
 
     toggleTabBarButton = new QPushButton(this);
     toggleTabBarButton->setIcon(loadThemedIcon("tabs"));  // You can design separate icons for "show" and "hide"
-    toggleTabBarButton->setToolTip(tr("Show/Hide Tabs"));
+    toggleTabBarButton->setToolTip(tr("Show/Hide Tab Bar"));
     toggleTabBarButton->setFixedSize(26, 30);
     toggleTabBarButton->setStyleSheet(buttonStyle);
+    
+    // PDF Outline Toggle Button
+    toggleOutlineButton = new QPushButton(this);
+    toggleOutlineButton->setIcon(loadThemedIcon("outline"));  // Icon to be added later
+    toggleOutlineButton->setToolTip(tr("Show/Hide PDF Outline"));
+    toggleOutlineButton->setFixedSize(26, 30);
+    toggleOutlineButton->setStyleSheet(buttonStyle);
+    
+    // Bookmarks Toggle Button
+    toggleBookmarksButton = new QPushButton(this);
+    toggleBookmarksButton->setIcon(loadThemedIcon("bookmark"));  // Using bookpage icon for bookmarks
+    toggleBookmarksButton->setToolTip(tr("Show/Hide Bookmarks"));
+    toggleBookmarksButton->setFixedSize(26, 30);
+    toggleBookmarksButton->setStyleSheet(buttonStyle);
+    
+    // Add/Remove Bookmark Toggle Button
+    toggleBookmarkButton = new QPushButton(this);
+    toggleBookmarkButton->setIcon(loadThemedIcon("star"));
+    toggleBookmarkButton->setToolTip(tr("Add/Remove Bookmark"));
+    toggleBookmarkButton->setFixedSize(26, 30);
+    toggleBookmarkButton->setStyleSheet(buttonStyle);
+    toggleBookmarkButton->setProperty("selected", false); // For toggle state styling
 
     selectFolderButton = new QPushButton(this);
     selectFolderButton->setFixedSize(26, 30);
@@ -314,6 +360,12 @@ void MainWindow::setupUi() {
     customColorInput = new QLineEdit(this);
     customColorInput->setPlaceholderText("Custom HEX");
     customColorInput->setFixedSize(85, 30);
+    
+    // Enable IME support for multi-language input
+    customColorInput->setAttribute(Qt::WA_InputMethodEnabled, true);
+    customColorInput->setInputMethodHints(Qt::ImhNone); // Allow all input methods
+    customColorInput->installEventFilter(this); // Install event filter for IME handling
+    
     connect(customColorInput, &QLineEdit::returnPressed, this, &MainWindow::applyCustomColor);
 
     
@@ -563,18 +615,130 @@ void MainWindow::setupUi() {
 
 
 
-    // 🌟 Left Side: Tabs List
+    // 🌟 PDF Outline Sidebar
+    outlineSidebar = new QWidget(this);
+    outlineSidebar->setFixedWidth(250);
+    outlineSidebar->setVisible(false); // Hidden by default
+    
+    QVBoxLayout *outlineLayout = new QVBoxLayout(outlineSidebar);
+    outlineLayout->setContentsMargins(5, 5, 5, 5);
+    
+    QLabel *outlineLabel = new QLabel("PDF Outline", outlineSidebar);
+    outlineLabel->setStyleSheet("font-weight: bold; padding: 5px;");
+    outlineLayout->addWidget(outlineLabel);
+    
+    outlineTree = new QTreeWidget(outlineSidebar);
+    outlineTree->setHeaderHidden(true);
+    outlineTree->setRootIsDecorated(true);
+    outlineTree->setIndentation(15);
+    outlineLayout->addWidget(outlineTree);
+    
+    // Connect outline tree item clicks
+    connect(outlineTree, &QTreeWidget::itemClicked, this, &MainWindow::onOutlineItemClicked);
+    
+    // 🌟 Bookmarks Sidebar
+    bookmarksSidebar = new QWidget(this);
+    bookmarksSidebar->setFixedWidth(250);
+    bookmarksSidebar->setVisible(false); // Hidden by default
+    
+    QVBoxLayout *bookmarksLayout = new QVBoxLayout(bookmarksSidebar);
+    bookmarksLayout->setContentsMargins(5, 5, 5, 5);
+    
+    QLabel *bookmarksLabel = new QLabel("Bookmarks", bookmarksSidebar);
+    bookmarksLabel->setStyleSheet("font-weight: bold; padding: 5px;");
+    bookmarksLayout->addWidget(bookmarksLabel);
+    
+    bookmarksTree = new QTreeWidget(bookmarksSidebar);
+    bookmarksTree->setHeaderHidden(true);
+    bookmarksTree->setRootIsDecorated(false);
+    bookmarksTree->setIndentation(0);
+    bookmarksLayout->addWidget(bookmarksTree);
+    
+    // Connect bookmarks tree item clicks
+    connect(bookmarksTree, &QTreeWidget::itemClicked, this, &MainWindow::onBookmarkItemClicked);
+
+    // 🌟 Horizontal Tab Bar (like modern web browsers)
     tabList = new QListWidget(this);
-    tabList->setMinimumWidth(122);  // Adjust width as needed
+    tabList->setFlow(QListView::LeftToRight);  // Make it horizontal
+    tabList->setFixedHeight(32);  // Increased to accommodate scrollbar below tabs
+    tabList->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    tabList->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     tabList->setSelectionMode(QAbstractItemView::SingleSelection);
 
+    // Style the tab bar like a modern browser with transparent scrollbar
+    tabList->setStyleSheet(R"(
+        QListWidget {
+            background-color: rgba(240, 240, 240, 255);
+            border: none;
+            border-bottom: 1px solid rgba(200, 200, 200, 255);
+            outline: none;
+        }
+        QListWidget::item {
+            background-color: rgba(220, 220, 220, 255);
+            border: 1px solid rgba(180, 180, 180, 255);
+            border-bottom: none;
+            margin-right: 1px;
+            margin-top: 2px;
+            padding: 0px;
+            min-width: 80px;
+            max-width: 120px;
+        }
+        QListWidget::item:selected {
+            background-color: white;
+            border: 1px solid rgba(180, 180, 180, 255);
+            border-bottom: 1px solid white;
+            margin-top: 1px;
+        }
+        QListWidget::item:hover:!selected {
+            background-color: rgba(230, 230, 230, 255);
+        }
+        QScrollBar:horizontal {
+            background: rgba(240, 240, 240, 255);
+            height: 8px;
+            border: none;
+            margin: 0px;
+            border-top: 1px solid rgba(200, 200, 200, 255);
+        }
+        QScrollBar::handle:horizontal {
+            background: rgba(150, 150, 150, 120);
+            border-radius: 4px;
+            min-width: 20px;
+            margin: 1px;
+        }
+        QScrollBar::handle:horizontal:hover {
+            background: rgba(120, 120, 120, 200);
+        }
+        QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+            width: 0px;
+            height: 0px;
+            background: none;
+            border: none;
+        }
+        QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+            background: transparent;
+        }
+    )");
 
-    // 🌟 Add Button for New Tab
+    // 🌟 Add Button for New Tab (styled like browser + button)
     addTabButton = new QPushButton(this);
     QIcon addTab(loadThemedIcon("addtab"));  // Path to your icon in resources
     addTabButton->setIcon(addTab);
-    addTabButton->setMinimumWidth(122);
-    addTabButton->setFixedHeight(45);  // Adjust height as needed
+    addTabButton->setFixedSize(30, 30);  // Even smaller to match thinner layout
+    addTabButton->setStyleSheet(R"(
+        QPushButton {
+            background-color: rgba(220, 220, 220, 255);
+            border: 1px solid rgba(180, 180, 180, 255);
+            border-radius: 15px;
+            margin: 2px;
+        }
+        QPushButton:hover {
+            background-color: rgba(200, 200, 200, 255);
+        }
+        QPushButton:pressed {
+            background-color: rgba(180, 180, 180, 255);
+        }
+    )");
+    addTabButton->setToolTip(tr("Add New Tab"));
     connect(addTabButton, &QPushButton::clicked, this, &MainWindow::addNewTab);
 
     if (!canvasStack) {
@@ -583,34 +747,31 @@ void MainWindow::setupUi() {
 
     connect(tabList, &QListWidget::currentRowChanged, this, &MainWindow::switchTab);
 
-    sidebarContainer = new QWidget(this);  // <-- New container
-    sidebarContainer->setObjectName("sidebarContainer");
-    sidebarContainer->setContentsMargins(5, 0, 5, 5);  // <-- Remove margins
-    sidebarContainer->setMaximumWidth(140);  // <-- Set max width
-    QVBoxLayout *tabLayout = new QVBoxLayout(sidebarContainer);
-    tabLayout->setContentsMargins(0, 0, 1, 0); 
-    tabLayout->addWidget(tabList);
-    tabLayout->addWidget(addTabButton);
+    // Create horizontal tab container
+    tabBarContainer = new QWidget(this);
+    tabBarContainer->setObjectName("tabBarContainer");
+    tabBarContainer->setFixedHeight(38);  // Increased to accommodate scrollbar below tabs
+    
+    QHBoxLayout *tabBarLayout = new QHBoxLayout(tabBarContainer);
+    tabBarLayout->setContentsMargins(5, 5, 5, 5);
+    tabBarLayout->setSpacing(5);
+    tabBarLayout->addWidget(tabList, 1);  // Tab list takes most space
+    tabBarLayout->addWidget(addTabButton, 0);  // Add button stays at the end
 
     connect(toggleTabBarButton, &QPushButton::clicked, this, [=]() {
-        bool isVisible = sidebarContainer->isVisible();
-        sidebarContainer->setVisible(!isVisible);
+        bool isVisible = tabBarContainer->isVisible();
+        tabBarContainer->setVisible(!isVisible);
 
         QTimer::singleShot(0, this, [this]() {
             if (auto *canvas = currentCanvas()) {
                 canvas->setMaximumSize(canvas->getCanvasSize());
-                // canvas->adjustSize();
             }
         });
-
-        // Force layout recalc & canvas size restore
-        // Force layout recalculation
-
-    
-        // Optional: switch icon or tooltip
-        // toggleTabBarButton->setIcon(loadThemedIcon(isVisible ? "show_tabs" : "hide_tabs"));
-        // toggleTabBarButton->setToolTip(isVisible ? "Show Tabs" : "Hide Tabs");
     });
+    
+    connect(toggleOutlineButton, &QPushButton::clicked, this, &MainWindow::toggleOutlineSidebar);
+    connect(toggleBookmarksButton, &QPushButton::clicked, this, &MainWindow::toggleBookmarksSidebar);
+    connect(toggleBookmarkButton, &QPushButton::clicked, this, &MainWindow::toggleCurrentPageBookmark);
 
     
 
@@ -811,6 +972,9 @@ void MainWindow::setupUi() {
 
     QHBoxLayout *controlLayout = new QHBoxLayout;
     
+    controlLayout->addWidget(toggleOutlineButton);
+    controlLayout->addWidget(toggleBookmarksButton);
+    controlLayout->addWidget(toggleBookmarkButton);
     controlLayout->addWidget(toggleTabBarButton);
     controlLayout->addWidget(selectFolderButton);
 
@@ -913,18 +1077,28 @@ void MainWindow::setupUi() {
         updateScrollbarPositions();
     });
 
-    QHBoxLayout *content_layout = new QHBoxLayout;
-    content_layout->setContentsMargins(0, 0, 0, 0); 
-    content_layout->addWidget(sidebarContainer); 
-    content_layout->addWidget(canvasContainer, 1); // Add stretch factor to expand canvas
-
+    // Main layout: toolbar -> tab bar -> canvas (vertical stack)
     QWidget *container = new QWidget;
     container->setObjectName("container");
     QVBoxLayout *mainLayout = new QVBoxLayout(container);
     mainLayout->setContentsMargins(0, 0, 0, 0);  // ✅ Remove extra margins
-    // mainLayout->setSpacing(0); // ✅ Remove spacing between toolbar and content
-    mainLayout->addWidget(controlBar);
-    mainLayout->addLayout(content_layout);
+    mainLayout->setSpacing(0); // ✅ Remove spacing between components
+    
+    // Add components in vertical order
+    mainLayout->addWidget(controlBar);        // Toolbar at top
+    mainLayout->addWidget(tabBarContainer);   // Tab bar below toolbar
+    
+    // Content area with sidebars and canvas
+    QHBoxLayout *contentLayout = new QHBoxLayout;
+    contentLayout->setContentsMargins(0, 0, 0, 0);
+    contentLayout->setSpacing(0);
+    contentLayout->addWidget(outlineSidebar, 0); // Fixed width outline sidebar
+    contentLayout->addWidget(bookmarksSidebar, 0); // Fixed width bookmarks sidebar
+    contentLayout->addWidget(canvasContainer, 1); // Canvas takes remaining space
+    
+    QWidget *contentWidget = new QWidget;
+    contentWidget->setLayout(contentLayout);
+    mainLayout->addWidget(contentWidget, 1);
 
     setCentralWidget(container);
 
@@ -1109,6 +1283,7 @@ void MainWindow::switchPage(int pageNumber) {
         }
     }
     updateDialDisplay();
+    updateBookmarkButtonState(); // Update bookmark button state when switching pages
 }
 
 void MainWindow::switchPageWithDirection(int pageNumber, int direction) {
@@ -1147,6 +1322,7 @@ void MainWindow::switchPageWithDirection(int pageNumber, int direction) {
         }
     }
     updateDialDisplay();
+    updateBookmarkButtonState(); // Update bookmark button state when switching pages
 }
 
 void MainWindow::deleteCurrentPage() {
@@ -1236,15 +1412,11 @@ void MainWindow::updatePanRange() {
     // Get the actual widget size instead of screen size for more accurate calculation
     QSize actualViewportSize = size();
     
-    // Adjust viewport size for 2-row toolbar layout
+    // Adjust viewport size for toolbar and tab bar layout
     QSize effectiveViewportSize = actualViewportSize;
-    if (isToolbarTwoRows) {
-        // In 2-row mode, reduce effective height by toolbar height
-        effectiveViewportSize.setHeight(actualViewportSize.height() - 80); // Approximate toolbar height
-    } else {
-        // In single-row mode, reduce effective height by toolbar height
-        effectiveViewportSize.setHeight(actualViewportSize.height() - 50); // Approximate toolbar height
-    }
+    int toolbarHeight = isToolbarTwoRows ? 80 : 50; // Toolbar height
+    int tabBarHeight = (tabBarContainer && tabBarContainer->isVisible()) ? 38 : 0; // Tab bar height
+    effectiveViewportSize.setHeight(actualViewportSize.height() - toolbarHeight - tabBarHeight);
     
     // Calculate scaled canvas size using proper DPR scaling
     int scaledCanvasWidth = canvasSize.width() * zoom / 100;
@@ -1370,6 +1542,11 @@ void MainWindow::loadPdf() {
         currentCanvas()->loadPdf(filePath);
         updateTabLabel(); // ✅ Update the tab name after assigning a PDF
         updateZoom(); // ✅ Update zoom and pan range after PDF is loaded
+        
+        // Refresh PDF outline if sidebar is visible
+        if (outlineSidebarVisible) {
+            loadPdfOutline();
+        }
     }
 }
 
@@ -1430,9 +1607,15 @@ void MainWindow::switchTab(int index) {
             updateStraightLineButtonState();  // Update straight line button state when switching tabs
             updateRopeToolButtonState(); // Update rope tool button state when switching tabs
             updatePdfTextSelectButtonState(); // Update PDF text selection button state when switching tabs
+            updateBookmarkButtonState(); // Update bookmark button state when switching tabs
             updateDialButtonState();     // Update dial button state when switching tabs
             updateFastForwardButtonState(); // Update fast forward button state when switching tabs
             updateToolButtonStates();   // Update tool button states when switching tabs
+            
+            // Refresh PDF outline if sidebar is visible
+            if (outlineSidebarVisible) {
+                loadPdfOutline();
+            }
         }
     }
 }
@@ -1447,30 +1630,34 @@ void MainWindow::addNewTab() {
     QHBoxLayout *tabLayout = new QHBoxLayout(tabWidget);
     tabLayout->setContentsMargins(5, 2, 5, 2);
 
-    // ✅ Create the label (Tab Name)
+    // ✅ Create the label (Tab Name) - optimized for horizontal layout
     QLabel *tabLabel = new QLabel(QString("Tab %1").arg(newTabIndex + 1), tabWidget);    
     tabLabel->setObjectName("tabLabel"); // ✅ Name the label for easy retrieval later
-    tabLabel->setWordWrap(true); // ✅ Allow text to wrap
-    tabLabel->setFixedWidth(95); // ✅ Adjust width for better readability
-    tabLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    tabLabel->setWordWrap(false); // ✅ No wrapping for horizontal tabs
+    tabLabel->setFixedWidth(115); // ✅ Narrower width for compact layout
+    tabLabel->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
+    tabLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter); // Left-align to show filename start
+    tabLabel->setTextFormat(Qt::PlainText); // Ensure plain text for proper eliding
+    // Tab label styling will be updated by theme
 
-    // ✅ Create the close button (❌)
+    // ✅ Create the close button (❌) - styled for browser-like tabs
     QPushButton *closeButton = new QPushButton(tabWidget);
-    closeButton->setFixedSize(10, 10); // Adjust button size
+    closeButton->setFixedSize(14, 14); // Smaller to fit narrower tabs
     closeButton->setIcon(loadThemedIcon("cross")); // Set themed icon
     closeButton->setStyleSheet(R"(
         QPushButton { 
             border: none; 
             background: transparent; 
-            border-radius: 5px;
+            border-radius: 6px;
+            padding: 1px;
         }
         QPushButton:hover { 
-            background: rgba(255, 0, 0, 100); 
-            border-radius: 5px;
+            background: rgba(255, 100, 100, 150); 
+            border-radius: 6px;
         }
         QPushButton:pressed { 
-            background: rgba(255, 0, 0, 150); 
-            border-radius: 5px;
+            background: rgba(255, 50, 50, 200); 
+            border-radius: 6px;
         }
     )"); // Themed styling with hover and press effects
     
@@ -1545,13 +1732,13 @@ void MainWindow::addNewTab() {
                         QString pdfPath = in.readLine().trimmed();
                         file.close();
                         if (QFile::exists(pdfPath)) { // Check if PDF file actually exists
-                            tabNameText = QFileInfo(pdfPath).fileName();
+                            tabNameText = elideTabText(QFileInfo(pdfPath).fileName(), 90); // Elide to fit tab width
                         }
                     }
                 }
                 // Fallback to folder name if no PDF or PDF path invalid
                 if (tabNameText.isEmpty()) {
-                    tabNameText = QFileInfo(folderPath).fileName();
+                    tabNameText = elideTabText(QFileInfo(folderPath).fileName(), 90); // Elide to fit tab width
                 }
             }
             // Only update the label if a new valid name was determined.
@@ -1572,9 +1759,9 @@ void MainWindow::addNewTab() {
     tabLayout->setStretch(0, 1);
     tabLayout->setStretch(1, 0);
     
-    // ✅ Create the tab item and set widget
+    // ✅ Create the tab item and set widget (horizontal layout)
     QListWidgetItem *tabItem = new QListWidgetItem();
-    tabItem->setSizeHint(QSize(84, 45)); // ✅ Adjust height only, keep default style
+    tabItem->setSizeHint(QSize(135, 22)); // ✅ Narrower and thinner for compact layout
     tabList->addItem(tabItem);
     tabList->setItemWidget(tabItem, tabWidget);  // Attach tab layout
 
@@ -1590,6 +1777,12 @@ void MainWindow::addNewTab() {
         if (targetPage >= 0 && targetPage < 9999) {
             switchPageWithDirection(targetPage + 1, (targetPage + 1 > getCurrentPageForCanvas(currentCanvas()) + 1) ? 1 : -1);
             pageInput->setValue(targetPage + 1);
+        }
+    });
+    connect(newCanvas, &InkCanvas::pdfLoaded, this, [this]() {
+        // Refresh PDF outline if sidebar is visible
+        if (outlineSidebarVisible) {
+            loadPdfOutline();
         }
     });
     
@@ -1623,6 +1816,7 @@ void MainWindow::addNewTab() {
     updateStraightLineButtonState();  // Initialize straight line button state for the new tab
     updateRopeToolButtonState(); // Initialize rope tool button state for the new tab
     updatePdfTextSelectButtonState(); // Initialize PDF text selection button state for the new tab
+    updateBookmarkButtonState(); // Initialize bookmark button state for the new tab
     updateDialButtonState();     // Initialize dial button state for the new tab
     updateFastForwardButtonState(); // Initialize fast forward button state for the new tab
     updateToolButtonStates();   // Initialize tool button states for the new tab
@@ -1770,7 +1964,7 @@ void MainWindow::updateTabLabel() {
             // ✅ Extract just the PDF filename (not full path)
             QFileInfo pdfInfo(pdfPath);
             if (pdfInfo.exists()) {
-                tabName = pdfInfo.fileName(); // e.g., "mydocument.pdf"
+                tabName = elideTabText(pdfInfo.fileName(), 90); // e.g., "mydocument.pdf" (elided)
             }
         }
     }
@@ -1778,7 +1972,7 @@ void MainWindow::updateTabLabel() {
     // ✅ If no PDF, use the folder name
     if (tabName.isEmpty()) {
         QFileInfo folderInfo(folderPath);
-        tabName = folderInfo.fileName(); // e.g., "MyNotebook"
+        tabName = elideTabText(folderInfo.fileName(), 90); // e.g., "MyNotebook" (elided)
     }
 
     QListWidgetItem *tabItem = tabList->item(index);
@@ -1788,7 +1982,7 @@ void MainWindow::updateTabLabel() {
             QLabel *tabLabel = tabWidget->findChild<QLabel *>(); // Get the QLabel inside
             if (tabLabel) {
                 tabLabel->setText(tabName); // ✅ Update tab label
-                tabLabel->setWordWrap(true);
+                tabLabel->setWordWrap(false); // No wrapping for horizontal tabs
             }
         }
     }
@@ -2018,13 +2212,16 @@ void MainWindow::positionDialContainer() {
     // Calculate toolbar height based on current layout
     int toolbarHeight = isToolbarTwoRows ? 80 : 50; // Approximate heights
     
+    // Add tab bar height if visible
+    int tabBarHeight = (tabBarContainer && tabBarContainer->isVisible()) ? 38 : 0;
+    
     // Define margins from edges
     int rightMargin = 20;  // Distance from right edge
-    int topMargin = 20;    // Distance from top edge (below toolbar)
+    int topMargin = 20;    // Distance from top edge (below toolbar and tabs)
     
     // Calculate ideal position (top-right corner with margins)
     int idealX = windowWidth - dialWidth - rightMargin;
-    int idealY = toolbarHeight + topMargin;
+    int idealY = toolbarHeight + tabBarHeight + topMargin;
     
     // Ensure dial stays within window bounds with minimum margins
     int minMargin = 10;
@@ -2033,7 +2230,7 @@ void MainWindow::positionDialContainer() {
     
     // Clamp position to stay within bounds
     int finalX = qBound(minMargin, idealX, maxX);
-    int finalY = qBound(toolbarHeight + minMargin, idealY, maxY);
+    int finalY = qBound(toolbarHeight + tabBarHeight + minMargin, idealY, maxY);
     
     // Move the dial to the calculated position
     dialContainer->move(finalX, finalY);
@@ -2266,6 +2463,26 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
     static bool dragging = false;
     static QPoint lastMousePos;
     static QTimer *longPressTimer = nullptr;
+    
+    // Handle IME focus events for text input widgets
+    QLineEdit *lineEdit = qobject_cast<QLineEdit*>(obj);
+    if (lineEdit) {
+        if (event->type() == QEvent::FocusIn) {
+            // Ensure IME is enabled when text field gets focus
+            lineEdit->setAttribute(Qt::WA_InputMethodEnabled, true);
+            QInputMethod *inputMethod = QGuiApplication::inputMethod();
+            if (inputMethod) {
+                inputMethod->show();
+            }
+        }
+        else if (event->type() == QEvent::FocusOut) {
+            // Keep IME available but reset state
+            QInputMethod *inputMethod = QGuiApplication::inputMethod();
+            if (inputMethod) {
+                inputMethod->reset();
+            }
+        }
+    }
 
     // Handle resize events for canvas container
     QWidget *container = canvasStack ? canvasStack->parentWidget() : nullptr;
@@ -2821,45 +3038,230 @@ void MainWindow::updateTheme() {
         )").arg(accentColor.name()));
     }
     
-    // Update tab list selection color
+    // Update add tab button styling
+    if (addTabButton) {
+        bool darkMode = isDarkMode();
+        QString buttonBgColor = darkMode ? "rgba(80, 80, 80, 255)" : "rgba(220, 220, 220, 255)";
+        QString buttonHoverColor = darkMode ? "rgba(90, 90, 90, 255)" : "rgba(200, 200, 200, 255)";
+        QString buttonPressColor = darkMode ? "rgba(70, 70, 70, 255)" : "rgba(180, 180, 180, 255)";
+        QString borderColor = darkMode ? "rgba(100, 100, 100, 255)" : "rgba(180, 180, 180, 255)";
+        
+        addTabButton->setStyleSheet(QString(R"(
+            QPushButton {
+                background-color: %1;
+                border: 1px solid %2;
+                border-radius: 12px;
+                margin: 2px;
+            }
+            QPushButton:hover {
+                background-color: %3;
+            }
+            QPushButton:pressed {
+                background-color: %4;
+            }
+        )").arg(buttonBgColor).arg(borderColor).arg(buttonHoverColor).arg(buttonPressColor));
+    }
+    
+    // Update PDF outline sidebar styling
+    if (outlineSidebar && outlineTree) {
+        bool darkMode = isDarkMode();
+        QString bgColor = darkMode ? "rgba(45, 45, 45, 255)" : "rgba(250, 250, 250, 255)";
+        QString borderColor = darkMode ? "rgba(80, 80, 80, 255)" : "rgba(200, 200, 200, 255)";
+        QString textColor = darkMode ? "#E0E0E0" : "#333";
+        QString hoverColor = darkMode ? "rgba(60, 60, 60, 255)" : "rgba(240, 240, 240, 255)";
+        QString selectedColor = QString("rgba(%1, %2, %3, 100)").arg(accentColor.red()).arg(accentColor.green()).arg(accentColor.blue());
+        
+        outlineSidebar->setStyleSheet(QString(R"(
+            QWidget {
+                background-color: %1;
+                border-right: 1px solid %2;
+            }
+            QLabel {
+                color: %3;
+                background: transparent;
+            }
+        )").arg(bgColor).arg(borderColor).arg(textColor));
+        
+        outlineTree->setStyleSheet(QString(R"(
+            QTreeWidget {
+                background-color: %1;
+                border: none;
+                color: %2;
+                outline: none;
+            }
+            QTreeWidget::item {
+                padding: 4px;
+                border: none;
+            }
+            QTreeWidget::item:hover {
+                background-color: %3;
+            }
+            QTreeWidget::item:selected {
+                background-color: %4;
+                color: %2;
+            }
+            QTreeWidget::branch {
+                background: transparent;
+            }
+            QTreeWidget::branch:has-children:!has-siblings:closed,
+            QTreeWidget::branch:closed:has-children:has-siblings {
+                border-image: none;
+                image: url(:/resources/icons/down_arrow.png);
+            }
+            QTreeWidget::branch:open:has-children:!has-siblings,
+            QTreeWidget::branch:open:has-children:has-siblings {
+                border-image: none;
+                image: url(:/resources/icons/up_arrow.png);
+            }
+            QScrollBar:vertical {
+                background: rgba(200, 200, 200, 80);
+                border: none;
+                margin: 0px;
+                width: 16px !important;
+                max-width: 16px !important;
+            }
+            QScrollBar:vertical:hover {
+                background: rgba(200, 200, 200, 120);
+            }
+            QScrollBar::handle:vertical {
+                background: rgba(100, 100, 100, 150);
+                border-radius: 2px;
+                min-height: 120px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: rgba(80, 80, 80, 210);
+            }
+            QScrollBar::add-line:vertical, 
+            QScrollBar::sub-line:vertical {
+                width: 0px;
+                height: 0px;
+                background: none;
+                border: none;
+            }
+            QScrollBar::add-page:vertical, 
+            QScrollBar::sub-page:vertical {
+                background: transparent;
+            }
+        )").arg(bgColor).arg(textColor).arg(hoverColor).arg(selectedColor));
+        
+        // Apply same styling to bookmarks tree
+        bookmarksTree->setStyleSheet(QString(R"(
+            QTreeWidget {
+                background-color: %1;
+                border: none;
+                color: %2;
+                outline: none;
+            }
+            QTreeWidget::item {
+                padding: 2px;
+                border: none;
+                min-height: 26px;
+            }
+            QTreeWidget::item:hover {
+                background-color: %3;
+            }
+            QTreeWidget::item:selected {
+                background-color: %4;
+                color: %2;
+            }
+            QScrollBar:vertical {
+                background: rgba(200, 200, 200, 80);
+                border: none;
+                margin: 0px;
+                width: 16px !important;
+                max-width: 16px !important;
+            }
+            QScrollBar:vertical:hover {
+                background: rgba(200, 200, 200, 120);
+            }
+            QScrollBar::handle:vertical {
+                background: rgba(100, 100, 100, 150);
+                border-radius: 2px;
+                min-height: 120px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: rgba(80, 80, 80, 210);
+            }
+            QScrollBar::add-line:vertical, 
+            QScrollBar::sub-line:vertical {
+                width: 0px;
+                height: 0px;
+                background: none;
+                border: none;
+            }
+            QScrollBar::add-page:vertical, 
+            QScrollBar::sub-page:vertical {
+                background: transparent;
+            }
+        )").arg(bgColor).arg(textColor).arg(hoverColor).arg(selectedColor));
+    }
+    
+    // Update horizontal tab bar styling with accent color
     if (tabList) {
+        bool darkMode = isDarkMode();
+        QString bgColor = darkMode ? "rgba(60, 60, 60, 255)" : "rgba(240, 240, 240, 255)";
+        QString itemBgColor = darkMode ? "rgba(80, 80, 80, 255)" : "rgba(220, 220, 220, 255)";
+        QString selectedBgColor = darkMode ? "rgba(45, 45, 45, 255)" : "white";
+        QString borderColor = darkMode ? "rgba(100, 100, 100, 255)" : "rgba(180, 180, 180, 255)";
+        QString hoverBgColor = darkMode ? "rgba(90, 90, 90, 255)" : "rgba(230, 230, 230, 255)";
+        
         tabList->setStyleSheet(QString(R"(
         QListWidget {
-            outline: none;
+            background-color: %1;
             border: none;
+            border-bottom: 2px solid %2;
+            outline: none;
         }
         QListWidget::item {
-            outline: none;
-            border: none;
-            padding: 2px;
+            background-color: %3;
+            border: 1px solid %4;
+            border-bottom: none;
+            margin-right: 1px;
+            margin-top: 2px;
+            padding: 0px;
+            min-width: 80px;
+            max-width: 120px;
         }
         QListWidget::item:selected {
-            background-color: rgba(%1, %2, %3, 100) !important;
-            border-left: 3px solid %4 !important;
-            outline: none !important;
+            background-color: %5;
+            border: 1px solid %4;
+            border-bottom: 2px solid %2;
+            margin-top: 1px;
         }
-        QListWidget::item:selected:active {
-            background-color: rgba(%1, %2, %3, 100) !important;
-            border-left: 3px solid %4 !important;
-            outline: none !important;
+        QListWidget::item:hover:!selected {
+            background-color: %6;
         }
-        QListWidget::item:selected:!active {
-            background-color: rgba(%1, %2, %3, 100) !important;
-            border-left: 3px solid %4 !important;
-            outline: none !important;
+        QScrollBar:horizontal {
+            background: %1;
+            height: 8px;
+            border: none;
+            margin: 0px;
+            border-top: 1px solid %4;
         }
-        QListWidget::item:hover {
-            background-color: rgba(%1, %2, %3, 50);
-            outline: none;
+        QScrollBar::handle:horizontal {
+            background: rgba(150, 150, 150, 120);
+            border-radius: 4px;
+            min-width: 20px;
+            margin: 1px;
         }
-        QListWidget::item:focus {
-            outline: none !important;
+        QScrollBar::handle:horizontal:hover {
+            background: rgba(120, 120, 120, 200);
+        }
+        QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+            width: 0px;
+            height: 0px;
+            background: none;
             border: none;
         }
-        )").arg(accentColor.red())
-           .arg(accentColor.green())
-           .arg(accentColor.blue())
-           .arg(accentColor.name()));
+        QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+            background: transparent;
+        }
+        )").arg(bgColor)
+           .arg(accentColor.name())
+           .arg(itemBgColor)
+           .arg(borderColor)
+           .arg(selectedBgColor)
+           .arg(hoverBgColor));
     }
     
 
@@ -2872,6 +3274,9 @@ void MainWindow::updateTheme() {
     if (importNotebookButton) importNotebookButton->setIcon(loadThemedIcon("import"));
     if (benchmarkButton) benchmarkButton->setIcon(loadThemedIcon("benchmark"));
     if (toggleTabBarButton) toggleTabBarButton->setIcon(loadThemedIcon("tabs"));
+    if (toggleOutlineButton) toggleOutlineButton->setIcon(loadThemedIcon("outline"));
+    if (toggleBookmarksButton) toggleBookmarksButton->setIcon(loadThemedIcon("bookmark"));
+    if (toggleBookmarkButton) toggleBookmarkButton->setIcon(loadThemedIcon("star"));
     if (selectFolderButton) selectFolderButton->setIcon(loadThemedIcon("folder"));
     if (saveButton) saveButton->setIcon(loadThemedIcon("save"));
     if (saveAnnotatedButton) saveAnnotatedButton->setIcon(loadThemedIcon("saveannotated"));
@@ -2910,6 +3315,9 @@ void MainWindow::updateTheme() {
     if (importNotebookButton) importNotebookButton->setStyleSheet(newButtonStyle);
     if (benchmarkButton) benchmarkButton->setStyleSheet(newButtonStyle);
     if (toggleTabBarButton) toggleTabBarButton->setStyleSheet(newButtonStyle);
+    if (toggleOutlineButton) toggleOutlineButton->setStyleSheet(newButtonStyle);
+    if (toggleBookmarksButton) toggleBookmarksButton->setStyleSheet(newButtonStyle);
+    if (toggleBookmarkButton) toggleBookmarkButton->setStyleSheet(newButtonStyle);
     if (selectFolderButton) selectFolderButton->setStyleSheet(newButtonStyle);
     if (saveButton) saveButton->setStyleSheet(newButtonStyle);
     if (saveAnnotatedButton) saveAnnotatedButton->setStyleSheet(newButtonStyle);
@@ -2973,8 +3381,11 @@ void MainWindow::updateTheme() {
         whiteButton->setIcon(QIcon(whiteIconPath));
     }
     
-    // Update tab close button icons
+    // Update tab close button icons and label styling
     if (tabList) {
+        bool darkMode = isDarkMode();
+        QString labelColor = darkMode ? "#E0E0E0" : "#333";
+        
         for (int i = 0; i < tabList->count(); ++i) {
             QListWidgetItem *item = tabList->item(i);
             if (item) {
@@ -2983,6 +3394,11 @@ void MainWindow::updateTheme() {
                     QPushButton *closeButton = tabWidget->findChild<QPushButton*>();
                     if (closeButton) {
                         closeButton->setIcon(loadThemedIcon("cross"));
+                    }
+                    
+                    QLabel *tabLabel = tabWidget->findChild<QLabel*>("tabLabel");
+                    if (tabLabel) {
+                        tabLabel->setStyleSheet(QString("color: %1; font-weight: 500; padding: 2px; text-align: left;").arg(labelColor));
                     }
                 }
             }
@@ -3473,12 +3889,12 @@ void MainWindow::toggleControlBar() {
     if (controlBarVisible) {
         // Going into fullscreen mode
         
-        // First, remember current sidebar state
-        sidebarWasVisibleBeforeFullscreen = sidebarContainer->isVisible();
+        // First, remember current tab bar state
+        sidebarWasVisibleBeforeFullscreen = tabBarContainer->isVisible();
         
-        // Hide sidebar if it's visible
-        if (sidebarContainer->isVisible()) {
-            sidebarContainer->setVisible(false);
+        // Hide tab bar if it's visible
+        if (tabBarContainer->isVisible()) {
+            tabBarContainer->setVisible(false);
         }
         
         // Hide control bar
@@ -3515,8 +3931,8 @@ void MainWindow::toggleControlBar() {
         controlBarVisible = true;
         controlBar->setVisible(true);
         
-        // Restore sidebar to its previous state
-        sidebarContainer->setVisible(sidebarWasVisibleBeforeFullscreen);
+        // Restore tab bar to its previous state
+        tabBarContainer->setVisible(sidebarWasVisibleBeforeFullscreen);
         
         // Show orphaned widgets when control bar is visible
         // Note: These are kept hidden normally since they're not in the layout
@@ -3869,7 +4285,7 @@ void MainWindow::updateToolbarLayout() {
     int scaledWidth = width();
     
     // Dynamic threshold based on zoom button visibility
-    int threshold = areZoomButtonsVisible() ? 1388 : 1278;
+    int threshold = areZoomButtonsVisible() ? 1484 : 1374;
     
     // Debug output to understand what's happening
     // qDebug() << "Window width:" << scaledWidth << "Threshold:" << threshold << "Zoom buttons visible:" << areZoomButtonsVisible();
@@ -3903,6 +4319,9 @@ void MainWindow::createSingleRowLayout() {
     
     // Add all widgets to single row (same order as before)
     newLayout->addWidget(toggleTabBarButton);
+    newLayout->addWidget(toggleOutlineButton);
+    newLayout->addWidget(toggleBookmarksButton);
+    newLayout->addWidget(toggleBookmarkButton);
     newLayout->addWidget(selectFolderButton);
     newLayout->addWidget(exportNotebookButton);
     newLayout->addWidget(importNotebookButton);
@@ -3991,6 +4410,9 @@ void MainWindow::createTwoRowLayout() {
     
     // First row: up to customColorButton
     newFirstRowLayout->addWidget(toggleTabBarButton);
+    newFirstRowLayout->addWidget(toggleOutlineButton);
+    newFirstRowLayout->addWidget(toggleBookmarksButton);
+    newFirstRowLayout->addWidget(toggleBookmarkButton);
     newFirstRowLayout->addWidget(selectFolderButton);
     newFirstRowLayout->addWidget(exportNotebookButton);
     newFirstRowLayout->addWidget(importNotebookButton);
@@ -4168,6 +4590,21 @@ void MainWindow::handleKeyboardShortcut(const QString &keySequence) {
 }
 
 void MainWindow::addKeyboardMapping(const QString &keySequence, const QString &action) {
+    // List of IME-related shortcuts that should not be intercepted
+    QStringList imeShortcuts = {
+        "Ctrl+Space",      // Primary IME toggle
+        "Ctrl+Shift",      // Language switching
+        "Ctrl+Alt",        // IME functions
+        "Shift+Alt",       // Alternative language switching
+        "Alt+Shift"        // Alternative language switching (reversed)
+    };
+    
+    // Don't allow mapping of IME-related shortcuts
+    if (imeShortcuts.contains(keySequence)) {
+        qWarning() << "Cannot map IME-related shortcut:" << keySequence;
+        return;
+    }
+    
     keyboardMappings[keySequence] = action;
     keyboardActionMapping[keySequence] = stringToAction(action);
     saveKeyboardMappings();
@@ -4192,12 +4629,32 @@ void MainWindow::loadKeyboardMappings() {
     QSettings settings("SpeedyNote", "App");
     settings.beginGroup("KeyboardMappings");
     QStringList keys = settings.allKeys();
+    
+    // List of IME-related shortcuts that should not be intercepted
+    QStringList imeShortcuts = {
+        "Ctrl+Space",      // Primary IME toggle
+        "Ctrl+Shift",      // Language switching
+        "Ctrl+Alt",        // IME functions
+        "Shift+Alt",       // Alternative language switching
+        "Alt+Shift"        // Alternative language switching (reversed)
+    };
+    
     for (const QString &key : keys) {
+        // Skip IME-related shortcuts
+        if (imeShortcuts.contains(key)) {
+            // Remove from settings if it exists
+            settings.remove(key);
+            continue;
+        }
+        
         QString value = settings.value(key).toString();
         keyboardMappings[key] = value;
         keyboardActionMapping[key] = stringToAction(value);
     }
     settings.endGroup();
+    
+    // Save settings to persist the removal of IME shortcuts
+    settings.sync();
 }
 
 QMap<QString, QString> MainWindow::getKeyboardMappings() const {
@@ -4220,6 +4677,24 @@ void MainWindow::keyPressEvent(QKeyEvent *event) {
             QMainWindow::keyPressEvent(event);
             return;
         }
+    }
+    
+    // Don't intercept IME-related keyboard shortcuts
+    // These are reserved for Windows Input Method Editor
+    if (event->modifiers() & Qt::ControlModifier) {
+        if (event->key() == Qt::Key_Space ||           // Ctrl+Space (IME toggle)
+            event->key() == Qt::Key_Shift ||           // Ctrl+Shift (language switch)
+            event->key() == Qt::Key_Alt) {             // Ctrl+Alt (IME functions)
+            // Let Windows handle IME shortcuts
+            QMainWindow::keyPressEvent(event);
+            return;
+        }
+    }
+    
+    // Don't intercept Shift+Alt (another common IME shortcut)
+    if ((event->modifiers() & Qt::ShiftModifier) && (event->modifiers() & Qt::AltModifier)) {
+        QMainWindow::keyPressEvent(event);
+        return;
     }
     
     // Build key sequence string
@@ -4286,6 +4761,114 @@ void MainWindow::saveDefaultBackgroundSettings(BackgroundStyle style, QColor col
     settings.setValue("defaultBackgroundDensity", density);
 }
 
+// PDF Outline functionality
+void MainWindow::toggleOutlineSidebar() {
+    outlineSidebarVisible = !outlineSidebarVisible;
+    
+    // Hide bookmarks sidebar if it's visible when opening outline
+    if (outlineSidebarVisible && bookmarksSidebar && bookmarksSidebar->isVisible()) {
+        bookmarksSidebar->setVisible(false);
+        bookmarksSidebarVisible = false;
+    }
+    
+    outlineSidebar->setVisible(outlineSidebarVisible);
+    
+    // Load PDF outline when showing sidebar for the first time
+    if (outlineSidebarVisible) {
+        loadPdfOutline();
+    }
+}
+
+void MainWindow::onOutlineItemClicked(QTreeWidgetItem *item, int column) {
+    Q_UNUSED(column);
+    
+    if (!item) return;
+    
+    // Get the page number stored in the item data
+    QVariant pageData = item->data(0, Qt::UserRole);
+    if (pageData.isValid()) {
+        int pageNumber = pageData.toInt();
+        if (pageNumber > 0) {
+            // Switch to the selected page (convert from 0-based to 1-based)
+            switchPage(pageNumber + 1);
+            pageInput->setValue(pageNumber + 1);
+        }
+    }
+}
+
+void MainWindow::loadPdfOutline() {
+    if (!outlineTree) return;
+    
+    outlineTree->clear();
+    
+    // Get current PDF document
+    Poppler::Document* pdfDoc = getPdfDocument();
+    if (!pdfDoc) return;
+    
+    // Get the outline from the PDF document
+    QVector<Poppler::OutlineItem> outlineItems = pdfDoc->outline();
+    
+    if (outlineItems.isEmpty()) {
+        // If no outline exists, show page numbers as fallback
+        int pageCount = pdfDoc->numPages();
+        for (int i = 0; i < pageCount; ++i) {
+            QTreeWidgetItem* item = new QTreeWidgetItem(outlineTree);
+            item->setText(0, QString("Page %1").arg(i + 1));
+            item->setData(0, Qt::UserRole, i + 1); // Store 1-based page number
+        }
+    } else {
+        // Process the actual PDF outline
+        for (const Poppler::OutlineItem& outlineItem : outlineItems) {
+            addOutlineItem(outlineItem, nullptr);
+        }
+    }
+    
+    // Expand the first level by default
+    outlineTree->expandToDepth(0);
+}
+
+void MainWindow::addOutlineItem(const Poppler::OutlineItem& outlineItem, QTreeWidgetItem* parentItem) {
+    if (outlineItem.isNull()) return;
+    
+    QTreeWidgetItem* item;
+    if (parentItem) {
+        item = new QTreeWidgetItem(parentItem);
+    } else {
+        item = new QTreeWidgetItem(outlineTree);
+    }
+    
+    // Set the title
+    item->setText(0, outlineItem.name());
+    
+    // Try to get the page number from the destination
+    int pageNumber = -1;
+    auto destination = outlineItem.destination();
+    if (destination) {
+        pageNumber = destination->pageNumber();
+    }
+    
+    // Store the page number (1-based) in the item data
+    if (pageNumber >= 0) {
+        item->setData(0, Qt::UserRole, pageNumber + 1); // Convert to 1-based
+    }
+    
+    // Add child items recursively
+    if (outlineItem.hasChildren()) {
+        QVector<Poppler::OutlineItem> children = outlineItem.children();
+        for (const Poppler::OutlineItem& child : children) {
+            addOutlineItem(child, item);
+        }
+    }
+}
+
+Poppler::Document* MainWindow::getPdfDocument() {
+    InkCanvas* canvas = currentCanvas();
+    if (!canvas || !canvas->isPdfLoadedFunc()) {
+        return nullptr;
+    }
+    return canvas->getPdfDocument();
+}
+
 void MainWindow::loadDefaultBackgroundSettings(BackgroundStyle &style, QColor &color, int &density) {
     QSettings settings("SpeedyNote", "App");
     style = static_cast<BackgroundStyle>(settings.value("defaultBackgroundStyle", static_cast<int>(BackgroundStyle::Grid)).toInt());
@@ -4339,4 +4922,228 @@ void MainWindow::updatePdfTextSelectButtonState() {
         pdfTextSelectButton->style()->unpolish(pdfTextSelectButton);
         pdfTextSelectButton->style()->polish(pdfTextSelectButton);
     }
+}
+
+QString MainWindow::elideTabText(const QString &text, int maxWidth) {
+    // Create a font metrics object using the default font
+    QFontMetrics fontMetrics(QApplication::font());
+    
+    // Elide the text from the right (showing the beginning)
+    return fontMetrics.elidedText(text, Qt::ElideRight, maxWidth);
+}
+
+// Bookmark functionality implementation
+void MainWindow::toggleBookmarksSidebar() {
+    if (!bookmarksSidebar) return;
+    
+    bool isVisible = bookmarksSidebar->isVisible();
+    
+    // Hide outline sidebar if it's visible
+    if (!isVisible && outlineSidebar && outlineSidebar->isVisible()) {
+        outlineSidebar->setVisible(false);
+        outlineSidebarVisible = false;
+    }
+    
+    bookmarksSidebar->setVisible(!isVisible);
+    bookmarksSidebarVisible = !isVisible;
+    
+    if (bookmarksSidebarVisible) {
+        loadBookmarks(); // Refresh bookmarks when opening
+    }
+}
+
+void MainWindow::onBookmarkItemClicked(QTreeWidgetItem *item, int column) {
+    Q_UNUSED(column);
+    if (!item) return;
+    
+    // Get the page number from the item data
+    bool ok;
+    int pageNumber = item->data(0, Qt::UserRole).toInt(&ok);
+    if (ok && pageNumber > 0) {
+        // Navigate to the bookmarked page
+        switchPageWithDirection(pageNumber, (pageNumber > getCurrentPageForCanvas(currentCanvas()) + 1) ? 1 : -1);
+        pageInput->setValue(pageNumber);
+    }
+}
+
+void MainWindow::loadBookmarks() {
+    if (!bookmarksTree || !currentCanvas()) return;
+    
+    bookmarksTree->clear();
+    
+    // Get the current notebook's save folder
+    QString saveFolder = currentCanvas()->getSaveFolder();
+    if (saveFolder.isEmpty()) return;
+    
+    QString bookmarksFile = saveFolder + "/.bookmarks.txt";
+    QFile file(bookmarksFile);
+    
+    bookmarks.clear();
+    
+    if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QTextStream in(&file);
+        while (!in.atEnd()) {
+            QString line = in.readLine().trimmed();
+            if (line.isEmpty()) continue;
+            
+            QStringList parts = line.split('\t', Qt::KeepEmptyParts);
+            if (parts.size() >= 2) {
+                bool ok;
+                int pageNum = parts[0].toInt(&ok);
+                if (ok) {
+                    QString title = parts[1];
+                    bookmarks[pageNum] = title;
+                }
+            }
+        }
+        file.close();
+    }
+    
+    // Populate the tree widget
+    for (auto it = bookmarks.begin(); it != bookmarks.end(); ++it) {
+        QTreeWidgetItem *item = new QTreeWidgetItem(bookmarksTree);
+        
+        // Create a custom widget for each bookmark item
+        QWidget *itemWidget = new QWidget();
+        QHBoxLayout *itemLayout = new QHBoxLayout(itemWidget);
+        itemLayout->setContentsMargins(5, 2, 5, 2);
+        itemLayout->setSpacing(5);
+        
+        // Page number label (fixed width)
+        QLabel *pageLabel = new QLabel(QString("Page %1").arg(it.key()));
+        pageLabel->setFixedWidth(60);
+        pageLabel->setStyleSheet("font-weight: bold; color: #666;");
+        itemLayout->addWidget(pageLabel);
+        
+        // Editable title (supports Windows handwriting if available)
+        QLineEdit *titleEdit = new QLineEdit(it.value());
+        titleEdit->setPlaceholderText("Enter bookmark title...");
+        titleEdit->setProperty("pageNumber", it.key()); // Store page number for saving
+        
+        // Enable IME support for multi-language input
+        titleEdit->setAttribute(Qt::WA_InputMethodEnabled, true);
+        titleEdit->setInputMethodHints(Qt::ImhNone); // Allow all input methods
+        titleEdit->installEventFilter(this); // Install event filter for IME handling
+        
+        // Connect to save when editing is finished
+        connect(titleEdit, &QLineEdit::editingFinished, this, [this, titleEdit]() {
+            int pageNum = titleEdit->property("pageNumber").toInt();
+            QString newTitle = titleEdit->text().trimmed();
+            
+            if (newTitle.isEmpty()) {
+                // Remove bookmark if title is empty
+                bookmarks.remove(pageNum);
+            } else {
+                // Update bookmark title
+                bookmarks[pageNum] = newTitle;
+            }
+            saveBookmarks();
+            updateBookmarkButtonState(); // Update button state
+        });
+        
+        itemLayout->addWidget(titleEdit, 1);
+        
+        // Store page number in item data for navigation
+        item->setData(0, Qt::UserRole, it.key());
+        
+        // Set the custom widget
+        bookmarksTree->setItemWidget(item, 0, itemWidget);
+        
+        // Set item height
+        item->setSizeHint(0, QSize(0, 30));
+    }
+    
+    updateBookmarkButtonState(); // Update button state after loading
+}
+
+void MainWindow::saveBookmarks() {
+    if (!currentCanvas()) return;
+    
+    QString saveFolder = currentCanvas()->getSaveFolder();
+    if (saveFolder.isEmpty()) return;
+    
+    QString bookmarksFile = saveFolder + "/.bookmarks.txt";
+    QFile file(bookmarksFile);
+    
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QTextStream out(&file);
+        
+        // Sort bookmarks by page number
+        QList<int> sortedPages = bookmarks.keys();
+        std::sort(sortedPages.begin(), sortedPages.end());
+        
+        for (int pageNum : sortedPages) {
+            out << pageNum << '\t' << bookmarks[pageNum] << '\n';
+        }
+        
+        file.close();
+    }
+}
+
+void MainWindow::toggleCurrentPageBookmark() {
+    if (!currentCanvas()) return;
+    
+    int currentPage = getCurrentPageForCanvas(currentCanvas()) + 1; // Convert to 1-based
+    
+    if (bookmarks.contains(currentPage)) {
+        // Remove bookmark
+        bookmarks.remove(currentPage);
+    } else {
+        // Add bookmark with default title
+        QString defaultTitle = QString("Bookmark %1").arg(currentPage);
+        bookmarks[currentPage] = defaultTitle;
+    }
+    
+    saveBookmarks();
+    updateBookmarkButtonState();
+    
+    // Refresh bookmarks view if visible
+    if (bookmarksSidebarVisible) {
+        loadBookmarks();
+    }
+}
+
+void MainWindow::updateBookmarkButtonState() {
+    if (!toggleBookmarkButton || !currentCanvas()) return;
+    
+    int currentPage = getCurrentPageForCanvas(currentCanvas()) + 1; // Convert to 1-based
+    bool isBookmarked = bookmarks.contains(currentPage);
+    
+    toggleBookmarkButton->setProperty("selected", isBookmarked);
+    
+    // Update tooltip
+    if (isBookmarked) {
+        toggleBookmarkButton->setToolTip(tr("Remove Bookmark"));
+    } else {
+        toggleBookmarkButton->setToolTip(tr("Add Bookmark"));
+    }
+    
+    // Force style update
+    toggleBookmarkButton->style()->unpolish(toggleBookmarkButton);
+    toggleBookmarkButton->style()->polish(toggleBookmarkButton);
+}
+
+// IME support for multi-language input
+void MainWindow::inputMethodEvent(QInputMethodEvent *event) {
+    // Forward IME events to the focused widget
+    QWidget *focusWidget = QApplication::focusWidget();
+    if (focusWidget && focusWidget != this) {
+        QApplication::sendEvent(focusWidget, event);
+        event->accept();
+        return;
+    }
+    
+    // Default handling
+    QMainWindow::inputMethodEvent(event);
+}
+
+QVariant MainWindow::inputMethodQuery(Qt::InputMethodQuery query) const {
+    // Forward IME queries to the focused widget
+    QWidget *focusWidget = QApplication::focusWidget();
+    if (focusWidget && focusWidget != this) {
+        return focusWidget->inputMethodQuery(query);
+    }
+    
+    // Default handling
+    return QMainWindow::inputMethodQuery(query);
 }

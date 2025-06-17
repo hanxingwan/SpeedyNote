@@ -32,6 +32,7 @@ signals:
     void ropeSelectionCompleted(const QPoint &position); // Signal emitted when rope tool selection is completed
     void pdfLinkClicked(int targetPage); // Signal emitted when a PDF link is clicked
     void pdfTextSelected(const QString &text); // Signal emitted when PDF text is selected
+    void pdfLoaded(); // Signal emitted when a PDF is loaded
 
 public:
     explicit InkCanvas(QWidget *parent = nullptr);
@@ -67,6 +68,7 @@ public:
 
     bool isPdfLoadedFunc() const;
     int getTotalPdfPages() const;
+    Poppler::Document* getPdfDocument() const;
     
     void clearPdf();
     void clearPdfNoDelete();

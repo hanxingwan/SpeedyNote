@@ -22,7 +22,7 @@ set(TS_FILES
 add_compile_definitions(SDL_MAIN_HANDLED)
 
 # ✅ Find all dependencies
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets VirtualKeyboard Multimedia Concurrent)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Multimedia Concurrent Xml)
 find_package(Poppler REQUIRED)
 find_package(SDL2 REQUIRED CONFIG)
 unset(SDL2main CACHE)  # Ensure SDL2main isn't picked up
@@ -85,7 +85,7 @@ add_compile_definitions(QT_NO_DEPRECATED_WARNINGS)
 
 # ✅ Link libraries
 target_link_libraries(NoteApp 
-    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::VirtualKeyboard Qt6::Multimedia Qt6::Concurrent
+    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Multimedia Qt6::Concurrent Qt6::Xml
     SDL2::SDL2
     ${POPPLER_LIBRARIES}
 )

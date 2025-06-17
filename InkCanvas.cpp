@@ -114,6 +114,8 @@ void InkCanvas::loadPdf(const QString &pdfPath) {
                 file.close();
             }
         }
+        // Emit signal that PDF was loaded
+        emit pdfLoaded();
     }
 }
 
@@ -1405,6 +1407,10 @@ bool InkCanvas::isPdfLoadedFunc() const {
 
 int InkCanvas::getTotalPdfPages() const {
     return totalPdfPages;
+}
+
+Poppler::Document* InkCanvas::getPdfDocument() const {
+    return pdfDocument.get();
 }
 
 QString InkCanvas::getSaveFolder() const {

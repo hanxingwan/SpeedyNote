@@ -3,12 +3,8 @@
 #endif
 
 #include <QApplication>
-#include <QGuiApplication>
-#include <QQmlApplicationEngine>
-#include <QLoggingCategory>
-#include <QInputMethod>
 #include <QTranslator>
-#include <QLibraryInfo>
+#include <QLocale>
 #include "MainWindow.h"
 
 int main(int argc, char *argv[]) {
@@ -45,8 +41,14 @@ int main(int argc, char *argv[]) {
     
 
 
-    qputenv("QT_IM_MODULE", QByteArray("qtvirtualkeyboard"));  // ✅ Enable Virtual Keyboard
+    // Enable Windows IME support for multi-language input
     QApplication app(argc, argv);
+    
+    // Ensure IME is properly enabled for Windows
+    #ifdef _WIN32
+    app.setAttribute(Qt::AA_EnableHighDpiScaling, true);
+    app.setAttribute(Qt::AA_UseHighDpiPixmaps, true);
+    #endif
 
     
     QTranslator translator;
