@@ -42,7 +42,11 @@ enum class InternalControllerAction {
     SetPenTool,          // New: Set tool to pen
     SetMarkerTool,       // New: Set tool to marker
     SetEraserTool,       // New: Set tool to eraser
-    TogglePdfTextSelection // New: Toggle PDF text selection mode
+    TogglePdfTextSelection, // New: Toggle PDF text selection mode
+    ToggleOutline,       // New: Toggle PDF outline sidebar
+    ToggleBookmarks,     // New: Toggle bookmarks sidebar
+    AddBookmark,         // New: Add/remove current page bookmark
+    ToggleTouchGestures  // New: Toggle touch gestures
 };
 
 class ButtonMappingHelper {

@@ -41,6 +41,10 @@ QString ButtonMappingHelper::actionToInternalKey(InternalControllerAction action
         case InternalControllerAction::SetMarkerTool: return "set_marker_tool";
         case InternalControllerAction::SetEraserTool: return "set_eraser_tool";
         case InternalControllerAction::TogglePdfTextSelection: return "toggle_pdf_text_selection";
+        case InternalControllerAction::ToggleOutline: return "toggle_outline";
+        case InternalControllerAction::ToggleBookmarks: return "toggle_bookmarks";
+        case InternalControllerAction::AddBookmark: return "add_bookmark";
+        case InternalControllerAction::ToggleTouchGestures: return "toggle_touch_gestures";
     }
     return "none";
 }
@@ -83,6 +87,10 @@ InternalControllerAction ButtonMappingHelper::internalKeyToAction(const QString 
     if (key == "set_marker_tool") return InternalControllerAction::SetMarkerTool;
     if (key == "set_eraser_tool") return InternalControllerAction::SetEraserTool;
     if (key == "toggle_pdf_text_selection") return InternalControllerAction::TogglePdfTextSelection;
+    if (key == "toggle_outline") return InternalControllerAction::ToggleOutline;
+    if (key == "toggle_bookmarks") return InternalControllerAction::ToggleBookmarks;
+    if (key == "add_bookmark") return InternalControllerAction::AddBookmark;
+    if (key == "toggle_touch_gestures") return InternalControllerAction::ToggleTouchGestures;
     return InternalControllerAction::None;
 }
 
@@ -125,7 +133,11 @@ QStringList ButtonMappingHelper::getTranslatedActions() {
         tr("Set Pen Tool"),
         tr("Set Marker Tool"),
         tr("Set Eraser Tool"),
-        tr("Toggle PDF Text Selection")
+        tr("Toggle PDF Text Selection"),
+        tr("Toggle PDF Outline"),
+        tr("Toggle Bookmarks"),
+        tr("Add/Remove Bookmark"),
+        tr("Toggle Touch Gestures")
     };
 }
 
@@ -184,7 +196,11 @@ QStringList ButtonMappingHelper::getInternalActionKeys() {
         "set_pen_tool",
         "set_marker_tool",
         "set_eraser_tool",
-        "toggle_pdf_text_selection"
+        "toggle_pdf_text_selection",
+        "toggle_outline",
+        "toggle_bookmarks",
+        "add_bookmark",
+        "toggle_touch_gestures"
     };
 }
 

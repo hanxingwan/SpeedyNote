@@ -40,7 +40,7 @@
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false) {
 
-    setWindowTitle(tr("SpeedyNote Beta 0.5.1"));
+    setWindowTitle(tr("SpeedyNote Beta 0.5.2"));
 
     // Enable IME support for multi-language input
     setAttribute(Qt::WA_InputMethodEnabled, true);
@@ -244,6 +244,14 @@ void MainWindow::setupUi() {
     toggleBookmarkButton->setFixedSize(26, 30);
     toggleBookmarkButton->setStyleSheet(buttonStyle);
     toggleBookmarkButton->setProperty("selected", false); // For toggle state styling
+
+    // Touch Gestures Toggle Button
+    touchGesturesButton = new QPushButton(this);
+    touchGesturesButton->setIcon(loadThemedIcon("hand"));  // Using hand icon for touch/gesture
+    touchGesturesButton->setToolTip(tr("Toggle Touch Gestures"));
+    touchGesturesButton->setFixedSize(26, 30);
+    touchGesturesButton->setStyleSheet(buttonStyle);
+    touchGesturesButton->setProperty("selected", touchGesturesEnabled); // For toggle state styling
 
     selectFolderButton = new QPushButton(this);
     selectFolderButton->setFixedSize(26, 30);
@@ -772,6 +780,12 @@ void MainWindow::setupUi() {
     connect(toggleOutlineButton, &QPushButton::clicked, this, &MainWindow::toggleOutlineSidebar);
     connect(toggleBookmarksButton, &QPushButton::clicked, this, &MainWindow::toggleBookmarksSidebar);
     connect(toggleBookmarkButton, &QPushButton::clicked, this, &MainWindow::toggleCurrentPageBookmark);
+    connect(touchGesturesButton, &QPushButton::clicked, this, [this]() {
+        setTouchGesturesEnabled(!touchGesturesEnabled);
+        touchGesturesButton->setProperty("selected", touchGesturesEnabled);
+        touchGesturesButton->style()->unpolish(touchGesturesButton);
+        touchGesturesButton->style()->polish(touchGesturesButton);
+    });
 
     
 
@@ -975,6 +989,7 @@ void MainWindow::setupUi() {
     controlLayout->addWidget(toggleOutlineButton);
     controlLayout->addWidget(toggleBookmarksButton);
     controlLayout->addWidget(toggleBookmarkButton);
+    controlLayout->addWidget(touchGesturesButton);
     controlLayout->addWidget(toggleTabBarButton);
     controlLayout->addWidget(selectFolderButton);
 
@@ -1155,8 +1170,25 @@ void MainWindow::applyCustomColor() {
 }
 
 void MainWindow::updateThickness(int value) {
-    qreal thickness = 90.0 * value / currentCanvas()->getZoom(); 
-    currentCanvas()->setPenThickness(thickness);
+    // Calculate thickness based on the slider value at 100% zoom
+    // The slider value represents the desired visual thickness
+    qreal visualThickness = value * 0.5; // Scale slider value to reasonable thickness
+    
+    // Apply zoom scaling to maintain visual consistency
+    qreal actualThickness = visualThickness * (100.0 / currentCanvas()->getZoom()); 
+    
+    currentCanvas()->setPenThickness(actualThickness);
+}
+
+void MainWindow::adjustThicknessForZoom(int oldZoom, int newZoom) {
+    // Adjust the current thickness to maintain visual consistency when zoom changes
+    // This preserves the current visual thickness instead of recalculating from slider
+    if (oldZoom == newZoom || oldZoom <= 0 || newZoom <= 0) return;
+    
+    qreal currentThickness = currentCanvas()->getPenThickness();
+    qreal adjustedThickness = currentThickness * (qreal(oldZoom) / qreal(newZoom));
+    
+    currentCanvas()->setPenThickness(adjustedThickness);
 }
 
 
@@ -2736,10 +2768,11 @@ void MainWindow::handleDialZoom(int angle) {
     }
 
     // ✅ Apply zoom dynamically (instead of waiting for release)
-    int newZoom = qBound(10, zoomSlider->value() + (delta / 4), 400);  
+    int oldZoom = zoomSlider->value();
+    int newZoom = qBound(10, oldZoom + (delta / 4), 400);  
     zoomSlider->setValue(newZoom);
     updateZoom();  // ✅ Ensure zoom updates immediately
-    updateThickness(thicknessSlider->value()); // ✅ Update thickness for manual zoom changes
+    adjustThicknessForZoom(oldZoom, newZoom); // ✅ Adjust thickness to maintain visual consistency
     updateDialDisplay(); 
 
     lastAngle = angle;
@@ -3807,6 +3840,18 @@ void MainWindow::handleControllerButton(const QString &buttonName) {  // This is
         case ControllerAction::TogglePdfTextSelection:
             pdfTextSelectButton->click();
             break;
+        case ControllerAction::ToggleOutline:
+            toggleOutlineButton->click();
+            break;
+        case ControllerAction::ToggleBookmarks:
+            toggleBookmarksButton->click();
+            break;
+        case ControllerAction::AddBookmark:
+            toggleBookmarkButton->click();
+            break;
+        case ControllerAction::ToggleTouchGestures:
+            touchGesturesButton->click();
+            break;
         default:
             break;
     }
@@ -4285,7 +4330,7 @@ void MainWindow::updateToolbarLayout() {
     int scaledWidth = width();
     
     // Dynamic threshold based on zoom button visibility
-    int threshold = areZoomButtonsVisible() ? 1484 : 1374;
+    int threshold = areZoomButtonsVisible() ? 1520 : 1412;
     
     // Debug output to understand what's happening
     // qDebug() << "Window width:" << scaledWidth << "Threshold:" << threshold << "Zoom buttons visible:" << areZoomButtonsVisible();
@@ -4319,10 +4364,11 @@ void MainWindow::createSingleRowLayout() {
     
     // Add all widgets to single row (same order as before)
     newLayout->addWidget(toggleTabBarButton);
-    newLayout->addWidget(toggleOutlineButton);
-    newLayout->addWidget(toggleBookmarksButton);
-    newLayout->addWidget(toggleBookmarkButton);
-    newLayout->addWidget(selectFolderButton);
+            newLayout->addWidget(toggleOutlineButton);
+        newLayout->addWidget(toggleBookmarksButton);
+        newLayout->addWidget(toggleBookmarkButton);
+        newLayout->addWidget(touchGesturesButton);
+        newLayout->addWidget(selectFolderButton);
     newLayout->addWidget(exportNotebookButton);
     newLayout->addWidget(importNotebookButton);
     newLayout->addWidget(loadPdfButton);
@@ -4410,10 +4456,11 @@ void MainWindow::createTwoRowLayout() {
     
     // First row: up to customColorButton
     newFirstRowLayout->addWidget(toggleTabBarButton);
-    newFirstRowLayout->addWidget(toggleOutlineButton);
-    newFirstRowLayout->addWidget(toggleBookmarksButton);
-    newFirstRowLayout->addWidget(toggleBookmarkButton);
-    newFirstRowLayout->addWidget(selectFolderButton);
+            newFirstRowLayout->addWidget(toggleOutlineButton);
+        newFirstRowLayout->addWidget(toggleBookmarksButton);
+        newFirstRowLayout->addWidget(toggleBookmarkButton);
+        newFirstRowLayout->addWidget(touchGesturesButton);
+        newFirstRowLayout->addWidget(selectFolderButton);
     newFirstRowLayout->addWidget(exportNotebookButton);
     newFirstRowLayout->addWidget(importNotebookButton);
     newFirstRowLayout->addWidget(loadPdfButton);
@@ -4584,6 +4631,18 @@ void MainWindow::handleKeyboardShortcut(const QString &keySequence) {
         case ControllerAction::TogglePdfTextSelection:
             pdfTextSelectButton->click();
             break;
+        case ControllerAction::ToggleOutline:
+            toggleOutlineButton->click();
+            break;
+        case ControllerAction::ToggleBookmarks:
+            toggleBookmarksButton->click();
+            break;
+        case ControllerAction::AddBookmark:
+            toggleBookmarkButton->click();
+            break;
+        case ControllerAction::ToggleTouchGestures:
+            touchGesturesButton->click();
+            break;
         default:
             break;
     }
@@ -4750,8 +4809,11 @@ void MainWindow::showPendingTooltip() {
 
 void MainWindow::onZoomSliderChanged(int value) {
     // This handles manual zoom slider changes and preserves thickness
+    int oldZoom = currentCanvas() ? currentCanvas()->getZoom() : 100;
+    int newZoom = value;
+    
     updateZoom();
-    updateThickness(thicknessSlider->value());
+    adjustThicknessForZoom(oldZoom, newZoom); // Maintain visual thickness consistency
 }
 
 void MainWindow::saveDefaultBackgroundSettings(BackgroundStyle style, QColor color, int density) {

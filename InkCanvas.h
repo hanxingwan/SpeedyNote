@@ -124,6 +124,13 @@ public:
     void setPDFRenderDPI(int dpi) { pdfRenderDPI = dpi; }  // ✅ Set PDF render DPI
 
     void clearPdfCache() { pdfCache.clear(); }
+    void clearNoteCache() { 
+        noteCache.clear(); 
+        currentCachedNotePage = -1;
+        if (noteCacheTimer && noteCacheTimer->isActive()) {
+            noteCacheTimer->stop();
+        }
+    }
 
     // Touch gesture support
     void setTouchGesturesEnabled(bool enabled) { touchGesturesEnabled = enabled; }
@@ -261,6 +268,15 @@ private:
     QPointF pendingSelectionEnd; // Pending selection end point
     bool hasPendingSelection = false; // True if there's a pending selection update
     
+    // Intelligent PDF cache system
+    QTimer* pdfCacheTimer = nullptr; // Timer for delayed adjacent page caching
+    int currentCachedPage = -1; // Currently displayed page for cache management
+    
+    // Intelligent note page cache system
+    QCache<int, QPixmap> noteCache; // Cache for note pages (PNG files)
+    QTimer* noteCacheTimer = nullptr; // Timer for delayed adjacent note page caching
+    int currentCachedNotePage = -1; // Currently displayed note page for cache management
+    
     // Helper methods for PDF text selection
     void loadPdfTextBoxes(int pageNumber); // Load text boxes for a page
     QPointF mapWidgetToPdfCoordinates(const QPointF &widgetPoint); // Map widget coordinates to PDF coordinates
@@ -270,8 +286,21 @@ private:
     void showPdfTextSelectionMenu(const QPoint &position); // Show context menu for PDF text selection
     QList<Poppler::TextBox*> getTextBoxesInSelection(const QPointF &start, const QPointF &end); // Get text boxes in selection area
     
+    // Intelligent PDF cache helper methods
+    void renderPdfPageToCache(int pageNumber); // Render a single page and add to cache
+    void checkAndCacheAdjacentPages(int targetPage); // Check and cache adjacent pages if needed
+    bool isValidPageNumber(int pageNumber) const; // Check if page number is valid
+    
+    // Intelligent note cache helper methods
+    void loadNotePageToCache(int pageNumber); // Load a single note page and add to cache
+    void checkAndCacheAdjacentNotePages(int targetPage); // Check and cache adjacent note pages if needed
+    QString getNotePageFilePath(int pageNumber) const; // Get file path for note page
+    void invalidateCurrentPageCache(); // Invalidate cache for current page when modified
+    
 private slots:
     void processPendingTextSelection(); // Process pending text selection updates (throttled to 60 FPS)
+    void cacheAdjacentPages(); // Cache adjacent pages after delay
+    void cacheAdjacentNotePages(); // Cache adjacent note pages after delay
 };
 
 #endif // INKCANVAS_H

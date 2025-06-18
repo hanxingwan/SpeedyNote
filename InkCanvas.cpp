@@ -75,6 +75,15 @@ InkCanvas::InkCanvas(QWidget *parent)
     pdfTextSelectionTimer->setSingleShot(true);
     pdfTextSelectionTimer->setInterval(16); // ~60 FPS
     connect(pdfTextSelectionTimer, &QTimer::timeout, this, &InkCanvas::processPendingTextSelection);
+    
+    // Initialize PDF cache timer (will be created on-demand)
+    pdfCacheTimer = nullptr;
+    currentCachedPage = -1;
+    
+    // Initialize note page cache system
+    noteCache.setMaxCost(15); // Cache up to 15 note pages (more than PDF since they're smaller)
+    noteCacheTimer = nullptr;
+    currentCachedNotePage = -1;
 }
 
 InkCanvas::~InkCanvas() {
@@ -100,6 +109,12 @@ void InkCanvas::initializeBuffer() {
 void InkCanvas::loadPdf(const QString &pdfPath) {
     pdfDocument = Poppler::Document::load(pdfPath);
     if (pdfDocument && !pdfDocument->isLocked()) {
+        // Enable anti-aliasing rendering hints for better text quality
+        pdfDocument->setRenderHint(Poppler::Document::Antialiasing, true);
+        pdfDocument->setRenderHint(Poppler::Document::TextAntialiasing, true);
+        pdfDocument->setRenderHint(Poppler::Document::TextHinting, true);
+        pdfDocument->setRenderHint(Poppler::Document::TextSlightHinting, true);
+        
         totalPdfPages = pdfDocument->numPages();
         isPdfLoaded = true;
         totalPdfPages = pdfDocument->numPages();
@@ -125,6 +140,12 @@ void InkCanvas::clearPdf() {
     isPdfLoaded = false;
     totalPdfPages = 0;
     pdfCache.clear();
+    
+    // Reset cache system state
+    currentCachedPage = -1;
+    if (pdfCacheTimer && pdfCacheTimer->isActive()) {
+        pdfCacheTimer->stop();
+    }
 
     // ✅ Remove the PDF path file when clearing the PDF
     if (!saveFolder.isEmpty()) {
@@ -139,50 +160,49 @@ void InkCanvas::clearPdfNoDelete() {
     isPdfLoaded = false;
     totalPdfPages = 0;
     pdfCache.clear();
+    
+    // Reset cache system state
+    currentCachedPage = -1;
+    if (pdfCacheTimer && pdfCacheTimer->isActive()) {
+        pdfCacheTimer->stop();
+    }
 }
 
 void InkCanvas::loadPdfPage(int pageNumber) {
     if (!pdfDocument) return;
 
+    // Update current page tracker
+    currentCachedPage = pageNumber;
+
+    // Check if target page is already cached
     if (pdfCache.contains(pageNumber)) {
+        // Display the cached page immediately
         backgroundImage = *pdfCache.object(pageNumber);
         loadPage(pageNumber);  // Load annotations
-        
-        // Load text boxes for PDF text selection
-        loadPdfTextBoxes(pageNumber);
-        
+        loadPdfTextBoxes(pageNumber); // Load text boxes for PDF text selection
         update();
+        
+        // Check and cache adjacent pages after delay
+        checkAndCacheAdjacentPages(pageNumber);
         return;
     }
 
-    // ✅ Ensure the cache holds only 10 pages max
-    if (pdfCache.count() >= 10) {
-        auto oldestKey = pdfCache.keys().first();
-        pdfCache.remove(oldestKey);
-    }
-
-    // ✅ Render the page and store it in the cache
-    if (pageNumber >= 0 && pageNumber < pdfDocument->numPages()) {
-        std::unique_ptr<Poppler::Page> page(pdfDocument->page(pageNumber));
-        if (page) {
-            QImage pdfImage = page->renderToImage(pdfRenderDPI, pdfRenderDPI);
-            if (!pdfImage.isNull()) {
-                QPixmap cachedPixmap = QPixmap::fromImage(pdfImage);
-                pdfCache.insert(pageNumber, new QPixmap(cachedPixmap));
-
-                backgroundImage = cachedPixmap;
-            }
-        }
+    // Target page not in cache - render it immediately
+    renderPdfPageToCache(pageNumber);
+    
+    // Display the newly rendered page
+    if (pdfCache.contains(pageNumber)) {
+        backgroundImage = *pdfCache.object(pageNumber);
     } else {
-        backgroundImage = QPixmap();  // Clear background when out of range
+        backgroundImage = QPixmap();  // Clear background if rendering failed
     }
     
     loadPage(pageNumber);  // Load existing canvas annotations
-    
-    // Load text boxes for PDF text selection
-    loadPdfTextBoxes(pageNumber);
-    
+    loadPdfTextBoxes(pageNumber); // Load text boxes for PDF text selection
     update();
+    
+    // Cache adjacent pages after delay
+    checkAndCacheAdjacentPages(pageNumber);
 }
 
 
@@ -204,6 +224,7 @@ void InkCanvas::loadPdfPreviewAsync(int pageNumber) {
         std::unique_ptr<Poppler::Page> page(pdfDocument->page(pageNumber));
         if (!page) return QPixmap();
 
+        // Render with document-level anti-aliasing settings
         QImage pdfImage = page->renderToImage(96, 96);
         if (pdfImage.isNull()) return QPixmap();
 
@@ -656,6 +677,8 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
                 lastMovePoint = event->posF();
                 if (!edited){
                     edited = true;
+                    // Invalidate cache for current page since it's been modified
+                    invalidateCurrentPageCache();
                 }
             }
         } else if (straightLineMode && !isErasing) {
@@ -745,6 +768,8 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
             update();
             if (!edited){
                 edited = true;
+                // Invalidate cache for current page since it's been modified
+                invalidateCurrentPageCache();
             }
         } else if (straightLineMode && isErasing) {
             // For erasing in straight line mode, most of the work is done during movement
@@ -758,6 +783,8 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
             update();
             if (!edited){
                 edited = true;
+                // Invalidate cache for current page since it's been modified
+                invalidateCurrentPageCache();
             }
         }
         
@@ -1000,6 +1027,8 @@ void InkCanvas::drawStroke(const QPointF &start, const QPointF &end, qreal press
 
     if (!edited){
         edited = true;
+        // Invalidate cache for current page since it's been modified
+        invalidateCurrentPageCache();
     }
 
     QPainter painter(&buffer);
@@ -1061,6 +1090,8 @@ void InkCanvas::eraseStroke(const QPointF &start, const QPointF &end, qreal pres
 
     if (!edited){
         edited = true;
+        // Invalidate cache for current page since it's been modified
+        invalidateCurrentPageCache();
     }
 
     QPainter painter(&buffer);
@@ -1179,13 +1210,15 @@ void InkCanvas::saveToFile(int pageNumber) {
         return;
     }
 
-
     QImage image(buffer.size(), QImage::Format_ARGB32);
     image.fill(Qt::transparent);
     QPainter painter(&image);
     painter.drawPixmap(0, 0, buffer);
     image.save(filePath, "PNG");
     edited = false;
+    
+    // Update note cache with the saved buffer
+    noteCache.insert(pageNumber, new QPixmap(buffer));
 }
 
 void InkCanvas::saveAnnotated(int pageNumber) {
@@ -1210,33 +1243,52 @@ void InkCanvas::saveAnnotated(int pageNumber) {
 void InkCanvas::loadPage(int pageNumber) {
     if (saveFolder.isEmpty()) return;
 
-    QString fileName = saveFolder + QString("/%1_%2.png").arg(notebookId).arg(pageNumber, 5, 10, QChar('0'));
+    // Update current note page tracker
+    currentCachedNotePage = pageNumber;
 
-
-    if (QFile::exists(fileName)) {
-        buffer.load(fileName);
+    // Check if note page is already cached
+    if (noteCache.contains(pageNumber)) {
+        // Use cached note page immediately
+        buffer = *noteCache.object(pageNumber);
     } else {
-        initializeBuffer(); // Clear the canvas if no file exists
-    }
-    // Load PDF page as a background if applicable
-    if (isPdfLoaded && pdfDocument && pageNumber >= 0 && pageNumber < pdfDocument->numPages()) {
-        // std::unique_ptr<Poppler::Page> pdfPage(pdfDocument->page(pageNumber));
-
-        backgroundImage = *pdfCache.object(pageNumber);
-        // Resize canvas to match PDF page size
-        if (backgroundImage.size() != buffer.size()) {
-            QPixmap newBuffer(backgroundImage.size());
-            newBuffer.fill(Qt::transparent);
-
-            // Copy existing drawings
-            QPainter painter(&newBuffer);
-            painter.drawPixmap(0, 0, buffer);
-
-            buffer = newBuffer;
-            setMaximumSize(backgroundImage.width(), backgroundImage.height());
-        } 
+        // Load note page from disk and cache it
+        loadNotePageToCache(pageNumber);
         
+        // Use the newly cached page or initialize buffer if loading failed
+        if (noteCache.contains(pageNumber)) {
+            buffer = *noteCache.object(pageNumber);
+        } else {
+            initializeBuffer(); // Clear the canvas if no file exists
+        }
+    }
+    
+    // Reset edited state when loading a new page
+    edited = false;
+    
+    // Handle background image loading (PDF or custom background)
+    if (isPdfLoaded && pdfDocument && pageNumber >= 0 && pageNumber < pdfDocument->numPages()) {
+        // Use PDF as background (should already be cached by loadPdfPage)
+        if (pdfCache.contains(pageNumber)) {
+            backgroundImage = *pdfCache.object(pageNumber);
+            
+            // Resize canvas to match PDF page size if needed
+            if (backgroundImage.size() != buffer.size()) {
+                QPixmap newBuffer(backgroundImage.size());
+                newBuffer.fill(Qt::transparent);
+
+                // Copy existing drawings
+                QPainter painter(&newBuffer);
+                painter.drawPixmap(0, 0, buffer);
+
+                buffer = newBuffer;
+                setMaximumSize(backgroundImage.width(), backgroundImage.height());
+                
+                // Update cache with resized buffer
+                noteCache.insert(pageNumber, new QPixmap(buffer));
+            }
+        }
     } else {
+        // Handle custom background images
         QString bgFileName = saveFolder + QString("/bg_%1_%2.png").arg(notebookId).arg(pageNumber, 5, 10, QChar('0'));
         QString metadataFile = saveFolder + QString("/.%1_bgsize_%2.txt").arg(notebookId).arg(pageNumber, 5, 10, QChar('0'));
 
@@ -1267,14 +1319,17 @@ void InkCanvas::loadPage(int pageNumber) {
                 // Assign the new buffer
                 buffer = newBuffer;
                 setMaximumSize(bgWidth, bgHeight);
+                
+                // Update cache with resized buffer
+                noteCache.insert(pageNumber, new QPixmap(buffer));
             }
         } else {
             backgroundImage = QPixmap(); // No background for this page
         }
     }
 
-    // Check if a background exists for this page
-    
+    // Cache adjacent note pages after delay for faster navigation
+    checkAndCacheAdjacentNotePages(pageNumber);
 
     update();
     adjustSize();            // Force the widget to update its size
@@ -1297,6 +1352,9 @@ void InkCanvas::deletePage(int pageNumber) {
     QFile::remove(fileName);
     QFile::remove(bgFileName);
     QFile::remove(metadataFileName);
+
+    // Remove deleted page from note cache
+    noteCache.remove(pageNumber);
 
     if (pdfDocument){
         loadPdfPage(pageNumber);
@@ -1829,6 +1887,8 @@ void InkCanvas::deleteRopeSelection() {
         // Mark as edited since we deleted content
         if (!edited) {
             edited = true;
+            // Invalidate cache for current page since it's been modified
+            invalidateCurrentPageCache();
         }
         
         // Update the entire canvas to remove selection visuals
@@ -2184,6 +2244,232 @@ void InkCanvas::processPendingTextSelection() {
     // Process the pending selection update
     updatePdfTextSelection(pendingSelectionStart, pendingSelectionEnd);
     hasPendingSelection = false;
+}
+
+// Intelligent PDF Cache System Implementation
+
+bool InkCanvas::isValidPageNumber(int pageNumber) const {
+    return (pageNumber >= 0 && pageNumber < totalPdfPages);
+}
+
+void InkCanvas::renderPdfPageToCache(int pageNumber) {
+    if (!pdfDocument || !isValidPageNumber(pageNumber)) {
+        return;
+    }
+    
+    // Check if already cached
+    if (pdfCache.contains(pageNumber)) {
+        return;
+    }
+    
+    // Ensure the cache holds only 10 pages max
+    if (pdfCache.count() >= 10) {
+        auto oldestKey = pdfCache.keys().first();
+        pdfCache.remove(oldestKey);
+    }
+    
+    // Render the page and store it in the cache
+    std::unique_ptr<Poppler::Page> page(pdfDocument->page(pageNumber));
+    if (page) {
+        // Render with document-level anti-aliasing settings
+        QImage pdfImage = page->renderToImage(pdfRenderDPI, pdfRenderDPI);
+        if (!pdfImage.isNull()) {
+            QPixmap cachedPixmap = QPixmap::fromImage(pdfImage);
+            pdfCache.insert(pageNumber, new QPixmap(cachedPixmap));
+        }
+    }
+}
+
+void InkCanvas::checkAndCacheAdjacentPages(int targetPage) {
+    if (!pdfDocument || !isValidPageNumber(targetPage)) {
+        return;
+    }
+    
+    // Calculate adjacent pages
+    int prevPage = targetPage - 1;
+    int nextPage = targetPage + 1;
+    
+    // Check what needs to be cached
+    bool needPrevPage = isValidPageNumber(prevPage) && !pdfCache.contains(prevPage);
+    bool needCurrentPage = !pdfCache.contains(targetPage);
+    bool needNextPage = isValidPageNumber(nextPage) && !pdfCache.contains(nextPage);
+    
+    // If all pages are cached, nothing to do
+    if (!needPrevPage && !needCurrentPage && !needNextPage) {
+        return;
+    }
+    
+    // Stop any existing timer
+    if (pdfCacheTimer && pdfCacheTimer->isActive()) {
+        pdfCacheTimer->stop();
+    }
+    
+    // Create timer if it doesn't exist
+    if (!pdfCacheTimer) {
+        pdfCacheTimer = new QTimer(this);
+        pdfCacheTimer->setSingleShot(true);
+        connect(pdfCacheTimer, &QTimer::timeout, this, &InkCanvas::cacheAdjacentPages);
+    }
+    
+    // Start 1-second delay timer
+    pdfCacheTimer->start(1000);
+}
+
+void InkCanvas::cacheAdjacentPages() {
+    if (!pdfDocument || currentCachedPage < 0) {
+        return;
+    }
+    
+    int targetPage = currentCachedPage;
+    int prevPage = targetPage - 1;
+    int nextPage = targetPage + 1;
+    
+    // Create list of pages to cache asynchronously
+    QList<int> pagesToCache;
+    
+    // Add previous page if needed
+    if (isValidPageNumber(prevPage) && !pdfCache.contains(prevPage)) {
+        pagesToCache.append(prevPage);
+    }
+    
+    // Add next page if needed
+    if (isValidPageNumber(nextPage) && !pdfCache.contains(nextPage)) {
+        pagesToCache.append(nextPage);
+    }
+    
+    // Cache pages asynchronously
+    for (int pageNum : pagesToCache) {
+        QFutureWatcher<void> *watcher = new QFutureWatcher<void>(this);
+        
+        connect(watcher, &QFutureWatcher<void>::finished, this, [watcher]() {
+            watcher->deleteLater();
+        });
+        
+        QFuture<void> future = QtConcurrent::run([this, pageNum]() {
+            renderPdfPageToCache(pageNum);
+        });
+        
+        watcher->setFuture(future);
+    }
+}
+
+// Intelligent Note Cache System Implementation
+
+QString InkCanvas::getNotePageFilePath(int pageNumber) const {
+    if (saveFolder.isEmpty() || notebookId.isEmpty()) {
+        return QString();
+    }
+    return saveFolder + QString("/%1_%2.png").arg(notebookId).arg(pageNumber, 5, 10, QChar('0'));
+}
+
+void InkCanvas::loadNotePageToCache(int pageNumber) {
+    // Check if already cached
+    if (noteCache.contains(pageNumber)) {
+        return;
+    }
+    
+    QString filePath = getNotePageFilePath(pageNumber);
+    if (filePath.isEmpty()) {
+        return;
+    }
+    
+    // Ensure the cache doesn't exceed its limit
+    if (noteCache.count() >= 15) {
+        // QCache will automatically remove least recently used items
+        // but we can be explicit about it
+        auto keys = noteCache.keys();
+        if (!keys.isEmpty()) {
+            noteCache.remove(keys.first());
+        }
+    }
+    
+    // Load note page from disk if it exists
+    if (QFile::exists(filePath)) {
+        QPixmap notePixmap;
+        if (notePixmap.load(filePath)) {
+            noteCache.insert(pageNumber, new QPixmap(notePixmap));
+        }
+    }
+    // If file doesn't exist, we don't cache anything - loadPage will handle initialization
+}
+
+void InkCanvas::checkAndCacheAdjacentNotePages(int targetPage) {
+    if (saveFolder.isEmpty()) {
+        return;
+    }
+    
+    // Calculate adjacent pages
+    int prevPage = targetPage - 1;
+    int nextPage = targetPage + 1;
+    
+    // Check what needs to be cached (we don't have a max page limit for notes)
+    bool needPrevPage = (prevPage >= 0) && !noteCache.contains(prevPage);
+    bool needCurrentPage = !noteCache.contains(targetPage);
+    bool needNextPage = !noteCache.contains(nextPage); // No upper limit check for notes
+    
+    // If all nearby pages are cached, nothing to do
+    if (!needPrevPage && !needCurrentPage && !needNextPage) {
+        return;
+    }
+    
+    // Stop any existing timer
+    if (noteCacheTimer && noteCacheTimer->isActive()) {
+        noteCacheTimer->stop();
+    }
+    
+    // Create timer if it doesn't exist
+    if (!noteCacheTimer) {
+        noteCacheTimer = new QTimer(this);
+        noteCacheTimer->setSingleShot(true);
+        connect(noteCacheTimer, &QTimer::timeout, this, &InkCanvas::cacheAdjacentNotePages);
+    }
+    
+    // Start 1-second delay timer
+    noteCacheTimer->start(1000);
+}
+
+void InkCanvas::cacheAdjacentNotePages() {
+    if (saveFolder.isEmpty() || currentCachedNotePage < 0) {
+        return;
+    }
+    
+    int targetPage = currentCachedNotePage;
+    int prevPage = targetPage - 1;
+    int nextPage = targetPage + 1;
+    
+    // Create list of note pages to cache asynchronously
+    QList<int> notePagesToCache;
+    
+    // Add previous page if needed (check for >= 0 since notes can start from page 0)
+    if (prevPage >= 0 && !noteCache.contains(prevPage)) {
+        notePagesToCache.append(prevPage);
+    }
+    
+    // Add next page if needed (no upper limit check for notes)
+    if (!noteCache.contains(nextPage)) {
+        notePagesToCache.append(nextPage);
+    }
+    
+    // Cache note pages asynchronously
+    for (int pageNum : notePagesToCache) {
+        QFutureWatcher<void> *watcher = new QFutureWatcher<void>(this);
+        
+        connect(watcher, &QFutureWatcher<void>::finished, this, [watcher]() {
+            watcher->deleteLater();
+        });
+        
+        QFuture<void> future = QtConcurrent::run([this, pageNum]() {
+            loadNotePageToCache(pageNum);
+        });
+        
+        watcher->setFuture(future);
+    }
+}
+
+void InkCanvas::invalidateCurrentPageCache() {
+    if (currentCachedNotePage >= 0) {
+        noteCache.remove(currentCachedNotePage);
+    }
 }
 
 

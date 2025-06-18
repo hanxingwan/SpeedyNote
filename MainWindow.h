@@ -73,7 +73,11 @@ enum class ControllerAction {
     SetPenTool,
     SetMarkerTool,
     SetEraserTool,
-    TogglePdfTextSelection
+    TogglePdfTextSelection,
+    ToggleOutline,
+    ToggleBookmarks,
+    AddBookmark,
+    ToggleTouchGestures
 };
 
 static QString actionToString(ControllerAction action) {
@@ -102,6 +106,10 @@ static QString actionToString(ControllerAction action) {
         case ControllerAction::SetMarkerTool: return "Set Marker Tool";
         case ControllerAction::SetEraserTool: return "Set Eraser Tool";
         case ControllerAction::TogglePdfTextSelection: return "Toggle PDF Text Selection";
+        case ControllerAction::ToggleOutline: return "Toggle PDF Outline";
+        case ControllerAction::ToggleBookmarks: return "Toggle Bookmarks";
+        case ControllerAction::AddBookmark: return "Add/Remove Bookmark";
+        case ControllerAction::ToggleTouchGestures: return "Toggle Touch Gestures";
         default: return "None";
     }
 }
@@ -136,6 +144,10 @@ static ControllerAction stringToAction(const QString &str) {
         case InternalControllerAction::SetMarkerTool: return ControllerAction::SetMarkerTool;
         case InternalControllerAction::SetEraserTool: return ControllerAction::SetEraserTool;
         case InternalControllerAction::TogglePdfTextSelection: return ControllerAction::TogglePdfTextSelection;
+        case InternalControllerAction::ToggleOutline: return ControllerAction::ToggleOutline;
+        case InternalControllerAction::ToggleBookmarks: return ControllerAction::ToggleBookmarks;
+        case InternalControllerAction::AddBookmark: return ControllerAction::AddBookmark;
+        case InternalControllerAction::ToggleTouchGestures: return ControllerAction::ToggleTouchGestures;
     }
     return ControllerAction::None;
 }
@@ -240,6 +252,7 @@ private slots:
     void updateBenchmarkDisplay();
     void applyCustomColor(); // Added function for custom color input
     void updateThickness(int value); // New function for thickness control
+    void adjustThicknessForZoom(int oldZoom, int newZoom); // Adjust thickness when zoom changes
     void changeTool(int index);
     void selectFolder(); // Select save folder
     void saveCanvas(); // Save canvas to file
@@ -415,6 +428,7 @@ private:
     QTreeWidget *bookmarksTree;    // Tree widget for bookmarks
     QPushButton *toggleBookmarksButton; // Button to toggle bookmarks sidebar
     QPushButton *toggleBookmarkButton; // Button to add/remove current page bookmark
+    QPushButton *touchGesturesButton; // Touch gestures toggle button
     bool bookmarksSidebarVisible = false;
     QMap<int, QString> bookmarks;  // Map of page number to bookmark title
     QPushButton *jumpToPageButton; // Button to jump to a specific page
