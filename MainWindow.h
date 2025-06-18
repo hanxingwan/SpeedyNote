@@ -189,6 +189,11 @@ public:
     void setCustomAccentColor(const QColor &color);
     bool isUsingCustomAccentColor() const { return useCustomAccentColor; }
     void setUseCustomAccentColor(bool use);
+    
+    // Color palette settings for control panel
+    bool isUsingBrighterPalette() const { return useBrighterPalette; }
+    void setUseBrighterPalette(bool use);
+    
     QColor getDefaultPenColor();
 
     SDLControllerManager *controllerManager = nullptr;
@@ -307,6 +312,8 @@ private slots:
     void handlePresetSelection(int angle);
     void onPresetReleased();
     void addColorPreset();
+    void updateColorPalette(); // Update colors based on current palette mode
+    QColor getPaletteColor(const QString &colorName); // Get color based on current palette
     qreal getDevicePixelRatio(); 
 
     bool isDarkMode();
@@ -490,6 +497,9 @@ private:
     QQueue<QColor> colorPresets; // ✅ FIFO queue for color presets
     QPushButton *addPresetButton; // ✅ Button to add current color to queue
     int currentPresetIndex = 0; // ✅ Track selected preset
+    
+    // Color palette mode (independent of UI theme)
+    bool useBrighterPalette = false; // false = darker colors, true = brighter colors
 
     qreal initialDpr = 1.0; // Will be set in constructor
 
@@ -536,7 +546,7 @@ private:
 
     RecentNotebooksManager *recentNotebooksManager; // Added manager instance
 
-    int pdfRenderDPI = 288;  // Default to 288 DPI
+    int pdfRenderDPI = 192;  // Default to 288 DPI
 
     void setupUi();
 

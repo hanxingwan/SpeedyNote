@@ -15,6 +15,7 @@
 #include <QTimer>
 #include <QMenu>
 #include <QClipboard>
+#include <QFutureWatcher>
 
 enum class BackgroundStyle {
     None,
@@ -130,6 +131,15 @@ public:
         if (noteCacheTimer && noteCacheTimer->isActive()) {
             noteCacheTimer->stop();
         }
+        
+        // Cancel and clean up any active note watchers
+        for (QFutureWatcher<void>* watcher : activeNoteWatchers) {
+            if (watcher && !watcher->isFinished()) {
+                watcher->cancel();
+            }
+            watcher->deleteLater();
+        }
+        activeNoteWatchers.clear();
     }
 
     // Touch gesture support
@@ -238,7 +248,7 @@ private:
     void loadNotebookId();
     void saveNotebookId();
 
-    int pdfRenderDPI = 288;  // Default to 288 DPI
+    int pdfRenderDPI = 192;  // Default to 288 DPI
 
     // Touch gesture support
     bool touchGesturesEnabled = false;
@@ -271,11 +281,15 @@ private:
     // Intelligent PDF cache system
     QTimer* pdfCacheTimer = nullptr; // Timer for delayed adjacent page caching
     int currentCachedPage = -1; // Currently displayed page for cache management
+    int pendingCacheTargetPage = -1; // Target page for pending cache operation (to validate timer relevance)
+    QList<QFutureWatcher<void>*> activePdfWatchers; // Track active PDF cache watchers for cleanup
     
     // Intelligent note page cache system
     QCache<int, QPixmap> noteCache; // Cache for note pages (PNG files)
     QTimer* noteCacheTimer = nullptr; // Timer for delayed adjacent note page caching
     int currentCachedNotePage = -1; // Currently displayed note page for cache management
+    int pendingNoteCacheTargetPage = -1; // Target page for pending note cache operation (to validate timer relevance)
+    QList<QFutureWatcher<void>*> activeNoteWatchers; // Track active note cache watchers for cleanup
     
     // Helper methods for PDF text selection
     void loadPdfTextBoxes(int pageNumber); // Load text boxes for a page

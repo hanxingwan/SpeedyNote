@@ -73,8 +73,9 @@ MainWindow::MainWindow(QWidget *parent)
     // ✅ Create the first tab (default canvas)
     // addNewTab();
     QSettings settings("SpeedyNote", "App");
-    pdfRenderDPI = settings.value("pdfRenderDPI", 288).toInt();
+    pdfRenderDPI = settings.value("pdfRenderDPI", 192).toInt();
     setPdfDPI(pdfRenderDPI);
+    
     setupUi();    // ✅ Move all UI setup here
 
     controllerManager = new SDLControllerManager();
@@ -222,6 +223,7 @@ void MainWindow::setupUi() {
     toggleTabBarButton->setToolTip(tr("Show/Hide Tab Bar"));
     toggleTabBarButton->setFixedSize(26, 30);
     toggleTabBarButton->setStyleSheet(buttonStyle);
+    toggleTabBarButton->setProperty("selected", true); // Initially visible
     
     // PDF Outline Toggle Button
     toggleOutlineButton = new QPushButton(this);
@@ -229,6 +231,7 @@ void MainWindow::setupUi() {
     toggleOutlineButton->setToolTip(tr("Show/Hide PDF Outline"));
     toggleOutlineButton->setFixedSize(26, 30);
     toggleOutlineButton->setStyleSheet(buttonStyle);
+    toggleOutlineButton->setProperty("selected", false); // Initially hidden
     
     // Bookmarks Toggle Button
     toggleBookmarksButton = new QPushButton(this);
@@ -236,6 +239,7 @@ void MainWindow::setupUi() {
     toggleBookmarksButton->setToolTip(tr("Show/Hide Bookmarks"));
     toggleBookmarksButton->setFixedSize(26, 30);
     toggleBookmarksButton->setStyleSheet(buttonStyle);
+    toggleBookmarksButton->setProperty("selected", false); // Initially hidden
     
     // Add/Remove Bookmark Toggle Button
     toggleBookmarkButton = new QPushButton(this);
@@ -295,9 +299,8 @@ void MainWindow::setupUi() {
     QIcon redIcon(redIconPath);
     redButton->setIcon(redIcon);
     redButton->setStyleSheet(buttonStyle);
-    connect(redButton, &QPushButton::clicked, [this, darkMode]() { 
-        QColor redColor = darkMode ? QColor("#FF7755") : QColor("#AA0000");
-        currentCanvas()->setPenColor(redColor); 
+    connect(redButton, &QPushButton::clicked, [this]() { 
+        currentCanvas()->setPenColor(getPaletteColor("red")); 
         updateDialDisplay(); 
         updateColorButtonStates();
     });
@@ -308,9 +311,8 @@ void MainWindow::setupUi() {
     QIcon blueIcon(blueIconPath);
     blueButton->setIcon(blueIcon);
     blueButton->setStyleSheet(buttonStyle);
-    connect(blueButton, &QPushButton::clicked, [this, darkMode]() { 
-        QColor blueColor = darkMode ? QColor("#66CCFF") : QColor("#0000AA");
-        currentCanvas()->setPenColor(blueColor); 
+    connect(blueButton, &QPushButton::clicked, [this]() { 
+        currentCanvas()->setPenColor(getPaletteColor("blue")); 
         updateDialDisplay(); 
         updateColorButtonStates();
     });
@@ -321,9 +323,8 @@ void MainWindow::setupUi() {
     QIcon yellowIcon(yellowIconPath);
     yellowButton->setIcon(yellowIcon);
     yellowButton->setStyleSheet(buttonStyle);
-    connect(yellowButton, &QPushButton::clicked, [this, darkMode]() { 
-        QColor yellowColor = darkMode ? QColor("#EECC00") : QColor("#997700");
-        currentCanvas()->setPenColor(yellowColor); 
+    connect(yellowButton, &QPushButton::clicked, [this]() { 
+        currentCanvas()->setPenColor(getPaletteColor("yellow")); 
         updateDialDisplay(); 
         updateColorButtonStates();
     });
@@ -334,9 +335,8 @@ void MainWindow::setupUi() {
     QIcon greenIcon(greenIconPath);
     greenButton->setIcon(greenIcon);
     greenButton->setStyleSheet(buttonStyle);
-    connect(greenButton, &QPushButton::clicked, [this, darkMode]() { 
-        QColor greenColor = darkMode ? QColor("#55FF77") : QColor("#007700");
-        currentCanvas()->setPenColor(greenColor); 
+    connect(greenButton, &QPushButton::clicked, [this]() { 
+        currentCanvas()->setPenColor(getPaletteColor("green")); 
         updateDialDisplay(); 
         updateColorButtonStates();
     });
@@ -631,7 +631,7 @@ void MainWindow::setupUi() {
     QVBoxLayout *outlineLayout = new QVBoxLayout(outlineSidebar);
     outlineLayout->setContentsMargins(5, 5, 5, 5);
     
-    QLabel *outlineLabel = new QLabel("PDF Outline", outlineSidebar);
+    QLabel *outlineLabel = new QLabel(tr("PDF Outline"), outlineSidebar);
     outlineLabel->setStyleSheet("font-weight: bold; padding: 5px;");
     outlineLayout->addWidget(outlineLabel);
     
@@ -652,7 +652,7 @@ void MainWindow::setupUi() {
     QVBoxLayout *bookmarksLayout = new QVBoxLayout(bookmarksSidebar);
     bookmarksLayout->setContentsMargins(5, 5, 5, 5);
     
-    QLabel *bookmarksLabel = new QLabel("Bookmarks", bookmarksSidebar);
+    QLabel *bookmarksLabel = new QLabel(tr("Bookmarks"), bookmarksSidebar);
     bookmarksLabel->setStyleSheet("font-weight: bold; padding: 5px;");
     bookmarksLayout->addWidget(bookmarksLabel);
     
@@ -769,6 +769,11 @@ void MainWindow::setupUi() {
     connect(toggleTabBarButton, &QPushButton::clicked, this, [=]() {
         bool isVisible = tabBarContainer->isVisible();
         tabBarContainer->setVisible(!isVisible);
+        
+        // Update button toggle state
+        toggleTabBarButton->setProperty("selected", !isVisible);
+        toggleTabBarButton->style()->unpolish(toggleTabBarButton);
+        toggleTabBarButton->style()->polish(toggleTabBarButton);
 
         QTimer::singleShot(0, this, [this]() {
             if (auto *canvas = currentCanvas()) {
@@ -901,20 +906,13 @@ void MainWindow::setupUi() {
     connect(btnPannScroll, &QPushButton::clicked, this, [this]() { changeDialMode(PanAndPageScroll); });
 
 
-    // ✅ Ensure at least one preset exists (theme-aware default color)
-    // Initialize color presets based on dark/light mode
+    // ✅ Initialize color presets based on palette mode (will be updated after UI setup)
     colorPresets.enqueue(getDefaultPenColor());
-    if (darkMode) {
-        colorPresets.enqueue(QColor("#FF7755"));  // Light red for dark mode
-        colorPresets.enqueue(QColor("#EECC00"));  // Light yellow for dark mode
-        colorPresets.enqueue(QColor("#66CCFF"));  // Light blue for dark mode
-        colorPresets.enqueue(QColor("#55FF77"));  // Light green for dark mode
-    } else {
-        colorPresets.enqueue(QColor("#AA0000"));  // Dark red for light mode
-        colorPresets.enqueue(QColor("#997700"));  // Dark yellow for light mode
-        colorPresets.enqueue(QColor("#0000AA"));  // Dark blue for light mode
-        colorPresets.enqueue(QColor("#007700"));  // Dark green for light mode
-    }
+    colorPresets.enqueue(QColor("#AA0000"));  // Temporary - will be updated later
+    colorPresets.enqueue(QColor("#997700"));
+    colorPresets.enqueue(QColor("#0000AA"));
+    colorPresets.enqueue(QColor("#007700"));
+    colorPresets.enqueue(QColor("#000000"));
     colorPresets.enqueue(QColor("#FFFFFF"));
 
     // ✅ Button to add current color to presets
@@ -923,6 +921,8 @@ void MainWindow::setupUi() {
     addPresetButton->setToolTip(tr("Add Current Color to Presets"));
     addPresetButton->setFixedSize(26, 30);
     connect(addPresetButton, &QPushButton::clicked, this, &MainWindow::addColorPreset);
+
+
 
 
     openControlPanelButton = new QPushButton(this);
@@ -1134,6 +1134,9 @@ void MainWindow::setupUi() {
 
     // Initialize responsive toolbar layout
     createSingleRowLayout();  // Start with single row layout
+    
+    // Now that all UI components are created, update the color palette
+    updateColorPalette();
 
 }
 
@@ -3388,21 +3391,21 @@ void MainWindow::updateTheme() {
     if (prevPageButton) prevPageButton->setStyleSheet(newButtonStyle);
     if (nextPageButton) nextPageButton->setStyleSheet(newButtonStyle);
     
-    // Update color buttons with new theme icons
+    // Update color buttons with palette-based icons
     if (redButton) {
-        QString redIconPath = darkMode ? ":/resources/icons/pen_light_red.png" : ":/resources/icons/pen_dark_red.png";
+        QString redIconPath = useBrighterPalette ? ":/resources/icons/pen_light_red.png" : ":/resources/icons/pen_dark_red.png";
         redButton->setIcon(QIcon(redIconPath));
     }
     if (blueButton) {
-        QString blueIconPath = darkMode ? ":/resources/icons/pen_light_blue.png" : ":/resources/icons/pen_dark_blue.png";
+        QString blueIconPath = useBrighterPalette ? ":/resources/icons/pen_light_blue.png" : ":/resources/icons/pen_dark_blue.png";
         blueButton->setIcon(QIcon(blueIconPath));
     }
     if (yellowButton) {
-        QString yellowIconPath = darkMode ? ":/resources/icons/pen_light_yellow.png" : ":/resources/icons/pen_dark_yellow.png";
+        QString yellowIconPath = useBrighterPalette ? ":/resources/icons/pen_light_yellow.png" : ":/resources/icons/pen_dark_yellow.png";
         yellowButton->setIcon(QIcon(yellowIconPath));
     }
     if (greenButton) {
-        QString greenIconPath = darkMode ? ":/resources/icons/pen_light_green.png" : ":/resources/icons/pen_dark_green.png";
+        QString greenIconPath = useBrighterPalette ? ":/resources/icons/pen_light_green.png" : ":/resources/icons/pen_dark_green.png";
         greenButton->setIcon(QIcon(greenIconPath));
     }
     if (blackButton) {
@@ -3448,6 +3451,7 @@ void MainWindow::saveThemeSettings() {
     if (customAccentColor.isValid()) {
         settings.setValue("customAccentColor", customAccentColor.name());
     }
+    settings.setValue("useBrighterPalette", useBrighterPalette);
 }
 
 void MainWindow::loadThemeSettings() {
@@ -3455,6 +3459,7 @@ void MainWindow::loadThemeSettings() {
     useCustomAccentColor = settings.value("useCustomAccentColor", false).toBool();
     QString colorName = settings.value("customAccentColor", "#0078D4").toString();
     customAccentColor = QColor(colorName);
+    useBrighterPalette = settings.value("useBrighterPalette", false).toBool();
     
     // Ensure valid values
     if (!customAccentColor.isValid()) {
@@ -4104,11 +4109,11 @@ void MainWindow::updateColorButtonStates() {
     blackButton->setProperty("selected", false);
     whiteButton->setProperty("selected", false);
     
-    // Set the selected property for the matching color button based on mode
-    QColor redColor = darkMode ? QColor("#FF7755") : QColor("#AA0000");
-    QColor blueColor = darkMode ? QColor("#66CCFF") : QColor("#0000AA");
-    QColor yellowColor = darkMode ? QColor("#EECC00") : QColor("#997700");
-    QColor greenColor = darkMode ? QColor("#55FF77") : QColor("#007700");
+    // Set the selected property for the matching color button based on current palette
+    QColor redColor = getPaletteColor("red");
+    QColor blueColor = getPaletteColor("blue");
+    QColor yellowColor = getPaletteColor("yellow");
+    QColor greenColor = getPaletteColor("green");
     
     if (currentColor == redColor) {
         redButton->setProperty("selected", true);
@@ -4831,9 +4836,22 @@ void MainWindow::toggleOutlineSidebar() {
     if (outlineSidebarVisible && bookmarksSidebar && bookmarksSidebar->isVisible()) {
         bookmarksSidebar->setVisible(false);
         bookmarksSidebarVisible = false;
+        // Update bookmarks button state
+        if (toggleBookmarksButton) {
+            toggleBookmarksButton->setProperty("selected", false);
+            toggleBookmarksButton->style()->unpolish(toggleBookmarksButton);
+            toggleBookmarksButton->style()->polish(toggleBookmarksButton);
+        }
     }
     
     outlineSidebar->setVisible(outlineSidebarVisible);
+    
+    // Update button toggle state
+    if (toggleOutlineButton) {
+        toggleOutlineButton->setProperty("selected", outlineSidebarVisible);
+        toggleOutlineButton->style()->unpolish(toggleOutlineButton);
+        toggleOutlineButton->style()->polish(toggleOutlineButton);
+    }
     
     // Load PDF outline when showing sidebar for the first time
     if (outlineSidebarVisible) {
@@ -4850,7 +4868,7 @@ void MainWindow::onOutlineItemClicked(QTreeWidgetItem *item, int column) {
     QVariant pageData = item->data(0, Qt::UserRole);
     if (pageData.isValid()) {
         int pageNumber = pageData.toInt();
-        if (pageNumber > 0) {
+        if (pageNumber >= 0) {
             // Switch to the selected page (convert from 0-based to 1-based)
             switchPage(pageNumber + 1);
             pageInput->setValue(pageNumber + 1);
@@ -4875,8 +4893,8 @@ void MainWindow::loadPdfOutline() {
         int pageCount = pdfDoc->numPages();
         for (int i = 0; i < pageCount; ++i) {
             QTreeWidgetItem* item = new QTreeWidgetItem(outlineTree);
-            item->setText(0, QString("Page %1").arg(i + 1));
-            item->setData(0, Qt::UserRole, i + 1); // Store 1-based page number
+            item->setText(0, QString(tr("Page %1")).arg(i + 1));
+            item->setData(0, Qt::UserRole, i); // Store 0-based page index
         }
     } else {
         // Process the actual PDF outline
@@ -5004,10 +5022,23 @@ void MainWindow::toggleBookmarksSidebar() {
     if (!isVisible && outlineSidebar && outlineSidebar->isVisible()) {
         outlineSidebar->setVisible(false);
         outlineSidebarVisible = false;
+        // Update outline button state
+        if (toggleOutlineButton) {
+            toggleOutlineButton->setProperty("selected", false);
+            toggleOutlineButton->style()->unpolish(toggleOutlineButton);
+            toggleOutlineButton->style()->polish(toggleOutlineButton);
+        }
     }
     
     bookmarksSidebar->setVisible(!isVisible);
     bookmarksSidebarVisible = !isVisible;
+    
+    // Update button toggle state
+    if (toggleBookmarksButton) {
+        toggleBookmarksButton->setProperty("selected", bookmarksSidebarVisible);
+        toggleBookmarksButton->style()->unpolish(toggleBookmarksButton);
+        toggleBookmarksButton->style()->polish(toggleBookmarksButton);
+    }
     
     if (bookmarksSidebarVisible) {
         loadBookmarks(); // Refresh bookmarks when opening
@@ -5072,7 +5103,7 @@ void MainWindow::loadBookmarks() {
         itemLayout->setSpacing(5);
         
         // Page number label (fixed width)
-        QLabel *pageLabel = new QLabel(QString("Page %1").arg(it.key()));
+        QLabel *pageLabel = new QLabel(QString(tr("Page %1")).arg(it.key()));
         pageLabel->setFixedWidth(60);
         pageLabel->setStyleSheet("font-weight: bold; color: #666;");
         itemLayout->addWidget(pageLabel);
@@ -5152,7 +5183,7 @@ void MainWindow::toggleCurrentPageBookmark() {
         bookmarks.remove(currentPage);
     } else {
         // Add bookmark with default title
-        QString defaultTitle = QString("Bookmark %1").arg(currentPage);
+        QString defaultTitle = QString(tr("Bookmark %1")).arg(currentPage);
         bookmarks[currentPage] = defaultTitle;
     }
     
@@ -5208,4 +5239,76 @@ QVariant MainWindow::inputMethodQuery(Qt::InputMethodQuery query) const {
     
     // Default handling
     return QMainWindow::inputMethodQuery(query);
+}
+
+// Color palette management
+void MainWindow::setUseBrighterPalette(bool use) {
+    if (useBrighterPalette != use) {
+        useBrighterPalette = use;
+        
+        // Update all colors - call updateColorPalette which handles null checks
+        updateColorPalette();
+        
+        // Save preference
+        QSettings settings("SpeedyNote", "App");
+        settings.setValue("useBrighterPalette", useBrighterPalette);
+    }
+}
+
+void MainWindow::updateColorPalette() {
+    // Clear existing presets
+    colorPresets.clear();
+    currentPresetIndex = 0;
+    
+    // Add default pen color (theme-aware)
+    colorPresets.enqueue(getDefaultPenColor());
+    
+    // Add palette colors
+    colorPresets.enqueue(getPaletteColor("red"));
+    colorPresets.enqueue(getPaletteColor("yellow"));
+    colorPresets.enqueue(getPaletteColor("blue"));
+    colorPresets.enqueue(getPaletteColor("green"));
+    colorPresets.enqueue(QColor("#000000")); // Black (always same)
+    colorPresets.enqueue(QColor("#FFFFFF")); // White (always same)
+    
+    // Only update UI elements if they exist
+    if (redButton && blueButton && yellowButton && greenButton) {
+        bool darkMode = isDarkMode();
+        
+        // Update color button icons based on current palette (not theme)
+        QString redIconPath = useBrighterPalette ? ":/resources/icons/pen_light_red.png" : ":/resources/icons/pen_dark_red.png";
+        QString blueIconPath = useBrighterPalette ? ":/resources/icons/pen_light_blue.png" : ":/resources/icons/pen_dark_blue.png";
+        QString yellowIconPath = useBrighterPalette ? ":/resources/icons/pen_light_yellow.png" : ":/resources/icons/pen_dark_yellow.png";
+        QString greenIconPath = useBrighterPalette ? ":/resources/icons/pen_light_green.png" : ":/resources/icons/pen_dark_green.png";
+        
+        redButton->setIcon(QIcon(redIconPath));
+        blueButton->setIcon(QIcon(blueIconPath));
+        yellowButton->setIcon(QIcon(yellowIconPath));
+        greenButton->setIcon(QIcon(greenIconPath));
+        
+        // Update color button states
+        updateColorButtonStates();
+    }
+}
+
+QColor MainWindow::getPaletteColor(const QString &colorName) {
+    if (useBrighterPalette) {
+        // Brighter colors (good for dark backgrounds)
+        if (colorName == "red") return QColor("#FF7755");
+        if (colorName == "yellow") return QColor("#EECC00");
+        if (colorName == "blue") return QColor("#66CCFF");
+        if (colorName == "green") return QColor("#55FF77");
+    } else {
+        // Darker colors (good for light backgrounds)
+        if (colorName == "red") return QColor("#AA0000");
+        if (colorName == "yellow") return QColor("#997700");
+        if (colorName == "blue") return QColor("#0000AA");
+        if (colorName == "green") return QColor("#007700");
+    }
+    
+    // Fallback colors
+    if (colorName == "black") return QColor("#000000");
+    if (colorName == "white") return QColor("#FFFFFF");
+    
+    return QColor("#000000"); // Default fallback
 }

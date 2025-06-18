@@ -146,6 +146,15 @@ void InkCanvas::clearPdf() {
     if (pdfCacheTimer && pdfCacheTimer->isActive()) {
         pdfCacheTimer->stop();
     }
+    
+    // Cancel and clean up any active PDF watchers
+    for (QFutureWatcher<void>* watcher : activePdfWatchers) {
+        if (watcher && !watcher->isFinished()) {
+            watcher->cancel();
+        }
+        watcher->deleteLater();
+    }
+    activePdfWatchers.clear();
 
     // ✅ Remove the PDF path file when clearing the PDF
     if (!saveFolder.isEmpty()) {
@@ -166,6 +175,15 @@ void InkCanvas::clearPdfNoDelete() {
     if (pdfCacheTimer && pdfCacheTimer->isActive()) {
         pdfCacheTimer->stop();
     }
+    
+    // Cancel and clean up any active PDF watchers
+    for (QFutureWatcher<void>* watcher : activePdfWatchers) {
+        if (watcher && !watcher->isFinished()) {
+            watcher->cancel();
+        }
+        watcher->deleteLater();
+    }
+    activePdfWatchers.clear();
 }
 
 void InkCanvas::loadPdfPage(int pageNumber) {
@@ -2311,6 +2329,9 @@ void InkCanvas::checkAndCacheAdjacentPages(int targetPage) {
         connect(pdfCacheTimer, &QTimer::timeout, this, &InkCanvas::cacheAdjacentPages);
     }
     
+    // Store the target page for validation when timer fires
+    pendingCacheTargetPage = targetPage;
+    
     // Start 1-second delay timer
     pdfCacheTimer->start(1000);
 }
@@ -2318,6 +2339,12 @@ void InkCanvas::checkAndCacheAdjacentPages(int targetPage) {
 void InkCanvas::cacheAdjacentPages() {
     if (!pdfDocument || currentCachedPage < 0) {
         return;
+    }
+    
+    // Check if the user has moved to a different page since the timer was started
+    // If so, skip caching adjacent pages as they're no longer relevant
+    if (pendingCacheTargetPage != currentCachedPage) {
+        return; // User switched pages, don't cache adjacent pages for old page
     }
     
     int targetPage = currentCachedPage;
@@ -2341,10 +2368,16 @@ void InkCanvas::cacheAdjacentPages() {
     for (int pageNum : pagesToCache) {
         QFutureWatcher<void> *watcher = new QFutureWatcher<void>(this);
         
-        connect(watcher, &QFutureWatcher<void>::finished, this, [watcher]() {
+        // Track the watcher for cleanup
+        activePdfWatchers.append(watcher);
+        
+        connect(watcher, &QFutureWatcher<void>::finished, this, [this, watcher]() {
+            // Remove from active list and delete
+            activePdfWatchers.removeOne(watcher);
             watcher->deleteLater();
         });
         
+        // Capture pageNum by value to avoid issues with lambda capture
         QFuture<void> future = QtConcurrent::run([this, pageNum]() {
             renderPdfPageToCache(pageNum);
         });
@@ -2424,6 +2457,9 @@ void InkCanvas::checkAndCacheAdjacentNotePages(int targetPage) {
         connect(noteCacheTimer, &QTimer::timeout, this, &InkCanvas::cacheAdjacentNotePages);
     }
     
+    // Store the target page for validation when timer fires
+    pendingNoteCacheTargetPage = targetPage;
+    
     // Start 1-second delay timer
     noteCacheTimer->start(1000);
 }
@@ -2431,6 +2467,12 @@ void InkCanvas::checkAndCacheAdjacentNotePages(int targetPage) {
 void InkCanvas::cacheAdjacentNotePages() {
     if (saveFolder.isEmpty() || currentCachedNotePage < 0) {
         return;
+    }
+    
+    // Check if the user has moved to a different page since the timer was started
+    // If so, skip caching adjacent pages as they're no longer relevant
+    if (pendingNoteCacheTargetPage != currentCachedNotePage) {
+        return; // User switched pages, don't cache adjacent pages for old page
     }
     
     int targetPage = currentCachedNotePage;
@@ -2454,10 +2496,16 @@ void InkCanvas::cacheAdjacentNotePages() {
     for (int pageNum : notePagesToCache) {
         QFutureWatcher<void> *watcher = new QFutureWatcher<void>(this);
         
-        connect(watcher, &QFutureWatcher<void>::finished, this, [watcher]() {
+        // Track the watcher for cleanup
+        activeNoteWatchers.append(watcher);
+        
+        connect(watcher, &QFutureWatcher<void>::finished, this, [this, watcher]() {
+            // Remove from active list and delete
+            activeNoteWatchers.removeOne(watcher);
             watcher->deleteLater();
         });
         
+        // Capture pageNum by value to avoid issues with lambda capture
         QFuture<void> future = QtConcurrent::run([this, pageNum]() {
             loadNotePageToCache(pageNum);
         });

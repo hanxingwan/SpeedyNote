@@ -79,6 +79,9 @@ private:
     QPushButton *accentColorButton;
     QColor selectedAccentColor;
     
+    // Color palette widgets
+    QCheckBox *useBrighterPaletteCheckbox;
+    
     void createThemeTab();
     void chooseAccentColor();
 };

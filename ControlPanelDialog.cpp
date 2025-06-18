@@ -137,6 +137,9 @@ void ControlPanelDialog::applyChanges() {
         if (selectedAccentColor.isValid()) {
             mainWindowRef->setCustomAccentColor(selectedAccentColor);
         }
+        
+        // ✅ Apply color palette setting
+        mainWindowRef->setUseBrighterPalette(useBrighterPaletteCheckbox->isChecked());
     }
 }
 
@@ -170,6 +173,9 @@ void ControlPanelDialog::loadFromCanvas() {
         
         accentColorButton->setStyleSheet(QString("background-color: %1").arg(selectedAccentColor.name()));
         accentColorButton->setEnabled(useCustomAccentCheckbox->isChecked());
+        
+        // Load color palette setting
+        useBrighterPaletteCheckbox->setChecked(mainWindowRef->isUsingBrighterPalette());
     }
 }
 
@@ -365,6 +371,15 @@ void ControlPanelDialog::createThemeTab() {
     // Enable/disable accent color button based on checkbox
     connect(useCustomAccentCheckbox, &QCheckBox::toggled, accentColorButton, &QPushButton::setEnabled);
     connect(useCustomAccentCheckbox, &QCheckBox::toggled, accentColorLabel, &QLabel::setEnabled);
+    
+    // Color palette preference
+    useBrighterPaletteCheckbox = new QCheckBox(tr("Use Brighter Color Palette"), themeTab);
+    layout->addWidget(useBrighterPaletteCheckbox);
+    
+    QLabel *paletteNote = new QLabel(tr("When enabled, use brighter colors (good for dark PDF backgrounds). When disabled, use darker colors (good for light PDF backgrounds). This setting is independent of the UI theme."));
+    paletteNote->setWordWrap(true);
+    paletteNote->setStyleSheet("color: gray; font-size: 10px;");
+    layout->addWidget(paletteNote);
     
     layout->addStretch();
     
