@@ -11,6 +11,8 @@
 #include <QTableWidget>
 #include <QHeaderView>
 #include <QCheckBox>
+#include <QLabel>
+#include <QLabel>
 
 #include "InkCanvas.h" // Needed for BackgroundStyle enum
 #include "MainWindow.h"
@@ -29,6 +31,7 @@ private slots:
     void addKeyboardMapping();       // New: add keyboard shortcut
     void removeKeyboardMapping();    // New: remove keyboard shortcut
     void openControllerMapping();    // New: open controller mapping dialog
+    void reconnectController();      // New: reconnect controller
 
 private:
     InkCanvas *canvas;
@@ -57,6 +60,8 @@ private:
     void createPerformanceTab();
 
     QWidget *controllerMappingTab;
+    QPushButton *reconnectButton;
+    QLabel *controllerStatusLabel;
 
     // Mapping comboboxes for hold and press
     QMap<QString, QComboBox*> holdMappingCombos;
@@ -84,6 +89,7 @@ private:
     
     void createThemeTab();
     void chooseAccentColor();
+    void updateControllerStatus(); // Update controller connection status display
 };
 
 #endif // CONTROLPANELDIALOG_H

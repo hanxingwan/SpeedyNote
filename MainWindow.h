@@ -246,6 +246,7 @@ public:
     
     // Controller access
     SDLControllerManager* getControllerManager() const { return controllerManager; }
+    void reconnectControllerSignals(); // Reconnect controller signals after reconnection
 
     void updateDialButtonState();     // Update dial button state when switching tabs
     void updateFastForwardButtonState(); // Update fast forward button state when switching tabs
@@ -497,7 +498,7 @@ private:
     QQueue<QColor> colorPresets; // ✅ FIFO queue for color presets
     QPushButton *addPresetButton; // ✅ Button to add current color to queue
     int currentPresetIndex = 0; // ✅ Track selected preset
-    
+
     // Color palette mode (independent of UI theme)
     bool useBrighterPalette = false; // false = darker colors, true = brighter colors
 

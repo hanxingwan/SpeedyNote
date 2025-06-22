@@ -260,3 +260,57 @@ void SDLControllerManager::start() {
 void SDLControllerManager::stop() {
     pollTimer->stop();
 }
+
+void SDLControllerManager::reconnect() {
+    // Stop current polling
+    pollTimer->stop();
+    
+    // Close existing joystick if open
+    if (joystick) {
+        SDL_JoystickClose(joystick);
+        joystick = nullptr;
+    }
+    
+    // Clear any cached state
+    buttonPressTime.clear();
+    buttonHeldEmitted.clear();
+    lastAngle = -1;
+    leftStickActive = false;
+    buttonDetectionMode = false;
+    
+    // Re-initialize SDL joystick subsystem
+    SDL_QuitSubSystem(SDL_INIT_JOYSTICK);
+    if (SDL_InitSubSystem(SDL_INIT_JOYSTICK) != 0) {
+        qWarning() << "Failed to re-initialize SDL joystick subsystem:" << SDL_GetError();
+        sdlInitialized = false;
+        return;
+    }
+    sdlInitialized = true;
+    
+    SDL_JoystickEventState(SDL_ENABLE);
+    
+    // Look for any available joystick
+    int numJoysticks = SDL_NumJoysticks();
+    qDebug() << "Reconnect: Found" << numJoysticks << "joystick(s)";
+    
+    for (int i = 0; i < numJoysticks; ++i) {
+        const char* joystickName = SDL_JoystickNameForIndex(i);
+        qDebug() << "Reconnect: Trying joystick" << i << ":" << (joystickName ? joystickName : "Unknown");
+        
+        joystick = SDL_JoystickOpen(i);
+        if (joystick) {
+            qDebug() << "Reconnect: Joystick connected successfully!";
+            qDebug() << "Number of buttons:" << SDL_JoystickNumButtons(joystick);
+            qDebug() << "Number of axes:" << SDL_JoystickNumAxes(joystick);
+            qDebug() << "Number of hats:" << SDL_JoystickNumHats(joystick);
+            break;
+        }
+    }
+    
+    if (!joystick) {
+        qWarning() << "Reconnect: No joystick could be opened";
+    }
+    
+    // Restart polling
+    pollTimer->start(16); // 60 FPS polling
+}

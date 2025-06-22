@@ -12,6 +12,8 @@
 #include <QColorDialog>
 #include <QInputDialog>
 #include <QMessageBox>
+#include <QApplication>
+#include <QMetaObject>
 
 ControlPanelDialog::ControlPanelDialog(MainWindow *mainWindow, InkCanvas *targetCanvas, QWidget *parent)
     : QDialog(parent), canvas(targetCanvas), selectedColor(canvas->getBackgroundColor()), mainWindowRef(mainWindow) {
@@ -488,27 +490,22 @@ void ControlPanelDialog::createControllerMappingTab() {
     connect(openMappingButton, &QPushButton::clicked, this, &ControlPanelDialog::openControllerMapping);
     layout->addWidget(openMappingButton);
     
+    // Button to reconnect controller
+    reconnectButton = new QPushButton(tr("Reconnect Controller"), controllerMappingTab);
+    reconnectButton->setMinimumHeight(40);
+    reconnectButton->setStyleSheet("QPushButton { background-color: #4CAF50; color: white; font-weight: bold; }");
+    connect(reconnectButton, &QPushButton::clicked, this, &ControlPanelDialog::reconnectController);
+    layout->addWidget(reconnectButton);
+    
     // Status information
     QLabel *statusLabel = new QLabel(tr("Current controller status:"), controllerMappingTab);
     statusLabel->setStyleSheet("font-weight: bold; margin-top: 20px;");
     layout->addWidget(statusLabel);
     
-    // Check if controller is connected
-    if (mainWindowRef && mainWindowRef->getControllerManager()) {
-        if (mainWindowRef->getControllerManager()->getJoystick()) {
-            QLabel *connectedLabel = new QLabel(tr("✓ Controller connected"), controllerMappingTab);
-            connectedLabel->setStyleSheet("color: green;");
-            layout->addWidget(connectedLabel);
-        } else {
-            QLabel *disconnectedLabel = new QLabel(tr("✗ No controller detected"), controllerMappingTab);
-            disconnectedLabel->setStyleSheet("color: red;");
-            layout->addWidget(disconnectedLabel);
-            
-            QLabel *helpLabel = new QLabel(tr("Please connect your controller and restart the application."), controllerMappingTab);
-            helpLabel->setStyleSheet("color: gray; font-size: 10px;");
-            layout->addWidget(helpLabel);
-        }
-    }
+    // Dynamic status label
+    controllerStatusLabel = new QLabel(controllerMappingTab);
+    updateControllerStatus();
+    layout->addWidget(controllerStatusLabel);
     
     layout->addStretch();
     
@@ -536,4 +533,62 @@ void ControlPanelDialog::openControllerMapping() {
     
     ControllerMappingDialog dialog(controllerManager, this);
     dialog.exec();
+}
+
+void ControlPanelDialog::reconnectController() {
+    if (!mainWindowRef) {
+        QMessageBox::warning(this, tr("Error"), tr("MainWindow reference not available."));
+        return;
+    }
+    
+    SDLControllerManager *controllerManager = mainWindowRef->getControllerManager();
+    if (!controllerManager) {
+        QMessageBox::warning(this, tr("Controller Not Available"), 
+            tr("Controller manager is not available."));
+        return;
+    }
+    
+    // Show reconnecting message
+    controllerStatusLabel->setText(tr("🔄 Reconnecting..."));
+    controllerStatusLabel->setStyleSheet("color: orange;");
+    
+    // Force the UI to update immediately
+    QApplication::processEvents();
+    
+    // Attempt to reconnect using thread-safe method
+    QMetaObject::invokeMethod(controllerManager, "reconnect", Qt::BlockingQueuedConnection);
+    
+    // Update status after reconnection attempt
+    updateControllerStatus();
+    
+    // Show result message
+    if (controllerManager->getJoystick()) {
+        // Reconnect the controller signals in MainWindow
+        mainWindowRef->reconnectControllerSignals();
+        
+        QMessageBox::information(this, tr("Reconnection Successful"), 
+            tr("Controller has been successfully reconnected!"));
+    } else {
+        QMessageBox::warning(this, tr("Reconnection Failed"), 
+            tr("Failed to reconnect controller. Please ensure your controller is powered on and in pairing mode, then try again."));
+    }
+}
+
+void ControlPanelDialog::updateControllerStatus() {
+    if (!mainWindowRef || !controllerStatusLabel) return;
+    
+    SDLControllerManager *controllerManager = mainWindowRef->getControllerManager();
+    if (!controllerManager) {
+        controllerStatusLabel->setText(tr("✗ Controller manager not available"));
+        controllerStatusLabel->setStyleSheet("color: red;");
+        return;
+    }
+    
+    if (controllerManager->getJoystick()) {
+        controllerStatusLabel->setText(tr("✓ Controller connected"));
+        controllerStatusLabel->setStyleSheet("color: green; font-weight: bold;");
+    } else {
+        controllerStatusLabel->setText(tr("✗ No controller detected"));
+        controllerStatusLabel->setStyleSheet("color: red; font-weight: bold;");
+    }
 }

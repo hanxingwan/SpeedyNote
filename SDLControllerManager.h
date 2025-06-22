@@ -41,6 +41,7 @@ signals:
 public slots:
     void start();
     void stop();
+    void reconnect(); // Reconnect controller without restarting app
     void startButtonDetection(); // New: Start detecting raw button presses for mapping
     void stopButtonDetection();  // New: Stop detecting raw button presses
 

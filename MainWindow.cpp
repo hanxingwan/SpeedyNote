@@ -1175,7 +1175,7 @@ void MainWindow::applyCustomColor() {
 void MainWindow::updateThickness(int value) {
     // Calculate thickness based on the slider value at 100% zoom
     // The slider value represents the desired visual thickness
-    qreal visualThickness = value * 0.5; // Scale slider value to reasonable thickness
+    qreal visualThickness = value; // Scale slider value to reasonable thickness
     
     // Apply zoom scaling to maintain visual consistency
     qreal actualThickness = visualThickness * (100.0 / currentCanvas()->getZoom()); 
@@ -2775,7 +2775,6 @@ void MainWindow::handleDialZoom(int angle) {
     int newZoom = qBound(10, oldZoom + (delta / 4), 400);  
     zoomSlider->setValue(newZoom);
     updateZoom();  // ✅ Ensure zoom updates immediately
-    adjustThicknessForZoom(oldZoom, newZoom); // ✅ Adjust thickness to maintain visual consistency
     updateDialDisplay(); 
 
     lastAngle = angle;
@@ -3920,6 +3919,11 @@ void MainWindow::loadUserSettings() {
 
     touchGesturesEnabled = settings.value("touchGesturesEnabled", true).toBool();
     setTouchGesturesEnabled(touchGesturesEnabled);
+    
+    // Update button visual state to match loaded setting
+    touchGesturesButton->setProperty("selected", touchGesturesEnabled);
+    touchGesturesButton->style()->unpolish(touchGesturesButton);
+    touchGesturesButton->style()->polish(touchGesturesButton);
     
     // Initialize default background settings if they don't exist
     if (!settings.contains("defaultBackgroundStyle")) {
@@ -5311,4 +5315,40 @@ QColor MainWindow::getPaletteColor(const QString &colorName) {
     if (colorName == "white") return QColor("#FFFFFF");
     
     return QColor("#000000"); // Default fallback
+}
+
+void MainWindow::reconnectControllerSignals() {
+    if (!controllerManager || !pageDial) {
+        return;
+    }
+    
+    // Reset internal dial state
+    tracking = false;
+    accumulatedRotation = 0;
+    grossTotalClicks = 0;
+    tempClicks = 0;
+    lastAngle = 0;
+    startAngle = 0;
+    pendingPageFlip = 0;
+    accumulatedRotationAfterLimit = 0;
+    
+    // Disconnect all existing connections to avoid duplicates
+    disconnect(controllerManager, nullptr, this, nullptr);
+    disconnect(controllerManager, nullptr, pageDial, nullptr);
+    
+    // Reconnect all controller signals
+    connect(controllerManager, &SDLControllerManager::buttonHeld, this, &MainWindow::handleButtonHeld);
+    connect(controllerManager, &SDLControllerManager::buttonReleased, this, &MainWindow::handleButtonReleased);
+    connect(controllerManager, &SDLControllerManager::leftStickAngleChanged, pageDial, &QDial::setValue);
+    connect(controllerManager, &SDLControllerManager::leftStickReleased, pageDial, &QDial::sliderReleased);
+    connect(controllerManager, &SDLControllerManager::buttonSinglePress, this, &MainWindow::handleControllerButton);
+    
+    // Re-establish dial mode connections by changing to current mode
+    DialMode currentMode = currentDialMode;
+    changeDialMode(currentMode);
+    
+    // Update dial display to reflect current state
+    updateDialDisplay();
+    
+    qDebug() << "Controller signals reconnected successfully";
 }

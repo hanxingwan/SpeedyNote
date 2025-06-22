@@ -1275,9 +1275,9 @@ void InkCanvas::loadPage(int pageNumber) {
         // Use the newly cached page or initialize buffer if loading failed
         if (noteCache.contains(pageNumber)) {
             buffer = *noteCache.object(pageNumber);
-        } else {
-            initializeBuffer(); // Clear the canvas if no file exists
-        }
+    } else {
+        initializeBuffer(); // Clear the canvas if no file exists
+    }
     }
     
     // Reset edited state when loading a new page
@@ -1287,20 +1287,20 @@ void InkCanvas::loadPage(int pageNumber) {
     if (isPdfLoaded && pdfDocument && pageNumber >= 0 && pageNumber < pdfDocument->numPages()) {
         // Use PDF as background (should already be cached by loadPdfPage)
         if (pdfCache.contains(pageNumber)) {
-            backgroundImage = *pdfCache.object(pageNumber);
+        backgroundImage = *pdfCache.object(pageNumber);
             
             // Resize canvas to match PDF page size if needed
-            if (backgroundImage.size() != buffer.size()) {
-                QPixmap newBuffer(backgroundImage.size());
-                newBuffer.fill(Qt::transparent);
+        if (backgroundImage.size() != buffer.size()) {
+            QPixmap newBuffer(backgroundImage.size());
+            newBuffer.fill(Qt::transparent);
 
-                // Copy existing drawings
-                QPainter painter(&newBuffer);
-                painter.drawPixmap(0, 0, buffer);
+            // Copy existing drawings
+            QPainter painter(&newBuffer);
+            painter.drawPixmap(0, 0, buffer);
 
-                buffer = newBuffer;
-                setMaximumSize(backgroundImage.width(), backgroundImage.height());
-                
+            buffer = newBuffer;
+            setMaximumSize(backgroundImage.width(), backgroundImage.height());
+        
                 // Update cache with resized buffer
                 noteCache.insert(pageNumber, new QPixmap(buffer));
             }
