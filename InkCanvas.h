@@ -271,7 +271,7 @@ private:
 
     // Background style members
     BackgroundStyle backgroundStyle = BackgroundStyle::None;
-    QColor backgroundColor = Qt::transparent;
+    QColor backgroundColor = Qt::white;
     int backgroundDensity = 40;  // pixels between lines
 
     bool pdfTextSelectionEnabled = false;

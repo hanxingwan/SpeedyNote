@@ -327,34 +327,34 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
     // Set clipping rectangle to canvas bounds to prevent painting outside
     painter.setClipRect(0, 0, buffer.width(), buffer.height());
 
-    // 🟨 Optional notebook-style background rendering
-    if (backgroundImage.isNull() && backgroundStyle != BackgroundStyle::None) {
-        // QPixmap bg(size());
+    // 🟨 Notebook-style background rendering
+    if (backgroundImage.isNull()) {
         painter.save();
-        painter.fillRect(QRectF(0, 0, buffer.width(), buffer.height()), backgroundColor);  // Default: Qt::white or Qt::transparent
+        
+        // Always apply background color regardless of style
+        painter.fillRect(QRectF(0, 0, buffer.width(), buffer.height()), backgroundColor);
 
-        // QPainter bgPainter(&bg);
-        QPen linePen(QColor(100, 100, 100, 100));  // Subtle gray lines
-        linePen.setWidthF(1.0);
-        painter.setPen(linePen);
+        // Only draw grid/lines if not "None" style
+        if (backgroundStyle != BackgroundStyle::None) {
+            QPen linePen(QColor(100, 100, 100, 100));  // Subtle gray lines
+            linePen.setWidthF(1.0);
+            painter.setPen(linePen);
 
-        qreal scaledDensity = backgroundDensity;
+            qreal scaledDensity = backgroundDensity;
 
-        if (devicePixelRatioF() > 1.0)
-            scaledDensity *= devicePixelRatioF();  // Optional DPI handling
+            if (devicePixelRatioF() > 1.0)
+                scaledDensity *= devicePixelRatioF();  // Optional DPI handling
 
-        // const int step = backgroundDensity;  // e.g., 40 px
-
-        if (backgroundStyle == BackgroundStyle::Lines || backgroundStyle == BackgroundStyle::Grid) {
-            for (int y = 0; y < buffer.height(); y += scaledDensity)
-                painter.drawLine(0, y, buffer.width(), y);
+            if (backgroundStyle == BackgroundStyle::Lines || backgroundStyle == BackgroundStyle::Grid) {
+                for (int y = 0; y < buffer.height(); y += scaledDensity)
+                    painter.drawLine(0, y, buffer.width(), y);
+            }
+            if (backgroundStyle == BackgroundStyle::Grid) {
+                for (int x = 0; x < buffer.width(); x += scaledDensity)
+                painter.drawLine(x, 0, x, buffer.height());
+            }
         }
-        if (backgroundStyle == BackgroundStyle::Grid) {
-            for (int x = 0; x < buffer.width(); x += scaledDensity)
-            painter.drawLine(x, 0, x, buffer.height());
-        }
 
-        // painter.drawPixmap(0, 0, buffer);
         painter.restore();
     }
 
