@@ -74,6 +74,7 @@
     <file>resources/icons/color.png</file>
     <file>resources/icons/color_reversed.png</file>
     <file>resources/icons/copy.png</file>
+    <file>resources/icons/copy_reversed.png</file>
     <file>resources/icons/preset.png</file>
     <file>resources/icons/preset_reversed.png</file>
     <file>resources/icons/savepreset.png</file>

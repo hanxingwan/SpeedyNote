@@ -40,7 +40,7 @@
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false) {
 
-    setWindowTitle(tr("SpeedyNote Beta 0.5.2"));
+    setWindowTitle(tr("SpeedyNote Beta 0.5.3"));
 
     // Enable IME support for multi-language input
     setAttribute(Qt::WA_InputMethodEnabled, true);
@@ -300,6 +300,7 @@ void MainWindow::setupUi() {
     redButton->setIcon(redIcon);
     redButton->setStyleSheet(buttonStyle);
     connect(redButton, &QPushButton::clicked, [this]() { 
+        handleColorButtonClick();
         currentCanvas()->setPenColor(getPaletteColor("red")); 
         updateDialDisplay(); 
         updateColorButtonStates();
@@ -312,6 +313,7 @@ void MainWindow::setupUi() {
     blueButton->setIcon(blueIcon);
     blueButton->setStyleSheet(buttonStyle);
     connect(blueButton, &QPushButton::clicked, [this]() { 
+        handleColorButtonClick();
         currentCanvas()->setPenColor(getPaletteColor("blue")); 
         updateDialDisplay(); 
         updateColorButtonStates();
@@ -324,6 +326,7 @@ void MainWindow::setupUi() {
     yellowButton->setIcon(yellowIcon);
     yellowButton->setStyleSheet(buttonStyle);
     connect(yellowButton, &QPushButton::clicked, [this]() { 
+        handleColorButtonClick();
         currentCanvas()->setPenColor(getPaletteColor("yellow")); 
         updateDialDisplay(); 
         updateColorButtonStates();
@@ -336,6 +339,7 @@ void MainWindow::setupUi() {
     greenButton->setIcon(greenIcon);
     greenButton->setStyleSheet(buttonStyle);
     connect(greenButton, &QPushButton::clicked, [this]() { 
+        handleColorButtonClick();
         currentCanvas()->setPenColor(getPaletteColor("green")); 
         updateDialDisplay(); 
         updateColorButtonStates();
@@ -348,6 +352,7 @@ void MainWindow::setupUi() {
     blackButton->setIcon(blackIcon);
     blackButton->setStyleSheet(buttonStyle);
     connect(blackButton, &QPushButton::clicked, [this]() { 
+        handleColorButtonClick();
         currentCanvas()->setPenColor(QColor("#000000")); 
         updateDialDisplay(); 
         updateColorButtonStates();
@@ -360,6 +365,7 @@ void MainWindow::setupUi() {
     whiteButton->setIcon(whiteIcon);
     whiteButton->setStyleSheet(buttonStyle);
     connect(whiteButton, &QPushButton::clicked, [this]() { 
+        handleColorButtonClick();
         currentCanvas()->setPenColor(QColor("#FFFFFF")); 
         updateDialDisplay(); 
         updateColorButtonStates();
@@ -394,7 +400,7 @@ void MainWindow::setupUi() {
     thicknessFrame->setFixedSize(220, 40); // Adjust width/height as needed
 
     thicknessSlider = new QSlider(Qt::Horizontal, this);
-    thicknessSlider->setRange(1, 27);
+    thicknessSlider->setRange(1, 50);
     thicknessSlider->setValue(5);
     thicknessSlider->setMaximumWidth(200);
 
@@ -961,6 +967,8 @@ void MainWindow::setupUi() {
         connect(customColorButton, &QPushButton::clicked, this, [=]() {
             if (!currentCanvas()) return;
             
+            handleColorButtonClick();
+            
             // Get the current custom color from the button text
             QString buttonText = customColorButton->text();
             QColor customColor(buttonText);
@@ -1184,14 +1192,20 @@ void MainWindow::updateThickness(int value) {
 }
 
 void MainWindow::adjustThicknessForZoom(int oldZoom, int newZoom) {
-    // Adjust the current thickness to maintain visual consistency when zoom changes
-    // This preserves the current visual thickness instead of recalculating from slider
+    // Adjust all tool thicknesses to maintain visual consistency when zoom changes
     if (oldZoom == newZoom || oldZoom <= 0 || newZoom <= 0) return;
     
-    qreal currentThickness = currentCanvas()->getPenThickness();
-    qreal adjustedThickness = currentThickness * (qreal(oldZoom) / qreal(newZoom));
+    InkCanvas* canvas = currentCanvas();
+    if (!canvas) return;
     
-    currentCanvas()->setPenThickness(adjustedThickness);
+    qreal zoomRatio = qreal(oldZoom) / qreal(newZoom);
+    ToolType currentTool = canvas->getCurrentTool();
+    
+    // Adjust thickness for all tools, not just the current one
+    canvas->adjustAllToolThicknesses(zoomRatio);
+    
+    // Update the thickness slider to reflect the current tool's new thickness
+    updateThicknessSliderForCurrentTool();
 }
 
 
@@ -1204,6 +1218,7 @@ void MainWindow::changeTool(int index) {
         currentCanvas()->setTool(ToolType::Eraser);
     }
     updateToolButtonStates();
+    updateThicknessSliderForCurrentTool();
     updateDialDisplay();
 }
 
@@ -1211,6 +1226,7 @@ void MainWindow::setPenTool() {
     if (!currentCanvas()) return;
     currentCanvas()->setTool(ToolType::Pen);
     updateToolButtonStates();
+    updateThicknessSliderForCurrentTool();
     updateDialDisplay();
 }
 
@@ -1218,6 +1234,7 @@ void MainWindow::setMarkerTool() {
     if (!currentCanvas()) return;
     currentCanvas()->setTool(ToolType::Marker);
     updateToolButtonStates();
+    updateThicknessSliderForCurrentTool();
     updateDialDisplay();
 }
 
@@ -1225,6 +1242,7 @@ void MainWindow::setEraserTool() {
     if (!currentCanvas()) return;
     currentCanvas()->setTool(ToolType::Eraser);
     updateToolButtonStates();
+    updateThicknessSliderForCurrentTool();
     updateDialDisplay();
 }
 
@@ -1257,6 +1275,45 @@ void MainWindow::updateToolButtonStates() {
     markerToolButton->style()->polish(markerToolButton);
     eraserToolButton->style()->unpolish(eraserToolButton);
     eraserToolButton->style()->polish(eraserToolButton);
+}
+
+void MainWindow::handleColorButtonClick() {
+    if (!currentCanvas()) return;
+    
+    ToolType currentTool = currentCanvas()->getCurrentTool();
+    
+    // If in eraser mode, switch back to pen mode
+    if (currentTool == ToolType::Eraser) {
+        currentCanvas()->setTool(ToolType::Pen);
+        updateToolButtonStates();
+        updateThicknessSliderForCurrentTool();
+    }
+    
+    // If rope tool is enabled, turn it off
+    if (currentCanvas()->isRopeToolMode()) {
+        currentCanvas()->setRopeToolMode(false);
+        updateRopeToolButtonState();
+    }
+    
+    // For marker and straight line mode, leave them as they are
+    // No special handling needed - they can work with color changes
+}
+
+void MainWindow::updateThicknessSliderForCurrentTool() {
+    if (!currentCanvas() || !thicknessSlider) return;
+    
+    // Block signals to prevent recursive calls
+    thicknessSlider->blockSignals(true);
+    
+    // Update slider to reflect current tool's thickness
+    qreal currentThickness = currentCanvas()->getPenThickness();
+    
+    // Convert thickness back to slider value (reverse of updateThickness calculation)
+    qreal visualThickness = currentThickness * (currentCanvas()->getZoom() / 100.0);
+    int sliderValue = qBound(1, static_cast<int>(qRound(visualThickness)), 50);
+    
+    thicknessSlider->setValue(sliderValue);
+    thicknessSlider->blockSignals(false);
 }
 
 void MainWindow::selectFolder() {
@@ -1646,6 +1703,7 @@ void MainWindow::switchTab(int index) {
             updateDialButtonState();     // Update dial button state when switching tabs
             updateFastForwardButtonState(); // Update fast forward button state when switching tabs
             updateToolButtonStates();   // Update tool button states when switching tabs
+            updateThicknessSliderForCurrentTool(); // Update thickness slider for current tool when switching tabs
             
             // Refresh PDF outline if sidebar is visible
             if (outlineSidebarVisible) {
@@ -2289,8 +2347,22 @@ void MainWindow::updateDialDisplay() {
             dialIconView->setPixmap(QPixmap(":/resources/reversed_icons/bookpage_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
             break;
         case DialMode::ThicknessControl:
-            dialDisplay->setText(QString(tr("\n\nThickness\n%1").arg(currentCanvas()->getPenThickness())));
+            {
+                QString toolName;
+                switch (currentCanvas()->getCurrentTool()) {
+                    case ToolType::Pen:
+                        toolName = tr("Pen");
+                        break;
+                    case ToolType::Marker:
+                        toolName = tr("Marker");
+                        break;
+                    case ToolType::Eraser:
+                        toolName = tr("Eraser");
+                        break;
+                }
+                dialDisplay->setText(QString(tr("\n\n%1\n%2").arg(toolName).arg(QString::number(currentCanvas()->getPenThickness(), 'f', 1))));
             dialIconView->setPixmap(QPixmap(":/resources/reversed_icons/thickness_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+            }
             break;
         case DialMode::ZoomControl:
             dialDisplay->setText(QString(tr("\n\nZoom\n%1%").arg(zoomSlider->value() * initialDpr)));
@@ -2498,7 +2570,7 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
     static bool dragging = false;
     static QPoint lastMousePos;
     static QTimer *longPressTimer = nullptr;
-    
+
     // Handle IME focus events for text input widgets
     QLineEdit *lineEdit = qobject_cast<QLineEdit*>(obj);
     if (lineEdit) {
@@ -4969,6 +5041,15 @@ void MainWindow::showRopeSelectionMenu(const QPoint &position) {
     // Create context menu for rope tool selection
     QMenu *contextMenu = new QMenu(this);
     contextMenu->setAttribute(Qt::WA_DeleteOnClose);
+    
+    // Add Copy action
+    QAction *copyAction = contextMenu->addAction(tr("Copy"));
+    copyAction->setIcon(loadThemedIcon("copy"));
+    connect(copyAction, &QAction::triggered, this, [this]() {
+        if (currentCanvas()) {
+            currentCanvas()->copyRopeSelection();
+        }
+    });
     
     // Add Delete action
     QAction *deleteAction = contextMenu->addAction(tr("Delete"));

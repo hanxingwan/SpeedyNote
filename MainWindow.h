@@ -251,6 +251,8 @@ public:
     void updateDialButtonState();     // Update dial button state when switching tabs
     void updateFastForwardButtonState(); // Update fast forward button state when switching tabs
     void updateToolButtonStates();   // Update tool button states when switching tabs
+    void handleColorButtonClick();    // Handle tool switching when color buttons are clicked
+    void updateThicknessSliderForCurrentTool(); // Update thickness slider to reflect current tool's thickness
     void updatePdfTextSelectButtonState(); // Update PDF text selection button state when switching tabs
 
 private slots:

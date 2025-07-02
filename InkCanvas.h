@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QTabletEvent>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPixmap>
 #include <QElapsedTimer>
 #include <deque>
@@ -44,6 +45,7 @@ public:
     int getProcessedRate();
     void setPenColor(const QColor &color); // Added function to set pen color
     void setPenThickness(qreal thickness); // Added function to set pen thickness
+    void adjustAllToolThicknesses(qreal zoomRatio); // Adjust all tool thicknesses for zoom changes
     void setTool(ToolType tool);
     void setSaveFolder(const QString &folderPath); // Function to set save folder
     void saveToFile(int pageNumber); // Function to save canvas to file
@@ -149,6 +151,7 @@ public:
     // Rope tool selection actions
     void deleteRopeSelection(); // Delete the current rope tool selection
     void cancelRopeSelection(); // Cancel the current rope tool selection
+    void copyRopeSelection(); // Copy the current rope tool selection
 
     // PDF text selection and link functionality
     void setPdfTextSelectionEnabled(bool enabled) { 
@@ -199,6 +202,11 @@ private:
     qreal penThickness; // Added pen thickness property
     ToolType currentTool;
     ToolType previousTool; // To restore tool after erasing
+    
+    // Separate thickness values for each tool
+    qreal penToolThickness = 5.0;    // Default pen thickness
+    qreal markerToolThickness = 5.0; // Default marker thickness (will be scaled by 8x in drawing)
+    qreal eraserToolThickness = 5.0; // Default eraser thickness (will be scaled by 6x in drawing)
     QString saveFolder; // Folder to save images
     QPixmap backgroundImage;
     bool straightLineMode = false;  // Flag for straight line mode
@@ -209,6 +217,10 @@ private:
     QPolygonF lassoPathPoints; // Points of the lasso selection in LOGICAL WIDGET coordinates
     bool selectingWithRope = false; // True if currently drawing the lasso
     bool movingSelection = false; // True if currently moving the selection
+    bool selectionJustCopied = false; // True if selection was just copied and hasn't been moved yet
+    bool selectionAreaCleared = false; // True if the selection area has been cleared from the buffer
+    QPainterPath selectionMaskPath; // Path used to clear the selection area from buffer
+    QRectF selectionBufferRect; // Buffer rectangle for the selection area
     QPointF lastMovePoint; // Last point during selection movement (logical widget coordinates)
 
     int zoomFactor;     // Zoom percentage (100 = normal)
