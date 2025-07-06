@@ -18,6 +18,8 @@
 #include <QClipboard>
 #include <QFutureWatcher>
 
+class MarkdownWindowManager;
+
 enum class BackgroundStyle {
     None,
     Grid,
@@ -35,6 +37,7 @@ signals:
     void pdfLinkClicked(int targetPage); // Signal emitted when a PDF link is clicked
     void pdfTextSelected(const QString &text); // Signal emitted when PDF text is selected
     void pdfLoaded(); // Signal emitted when a PDF is loaded
+    void markdownSelectionModeChanged(bool enabled); // Signal emitted when markdown selection mode changes
 
 public:
     explicit InkCanvas(QWidget *parent = nullptr);
@@ -152,6 +155,11 @@ public:
     void deleteRopeSelection(); // Delete the current rope tool selection
     void cancelRopeSelection(); // Cancel the current rope tool selection
     void copyRopeSelection(); // Copy the current rope tool selection
+    
+    // Markdown integration
+    MarkdownWindowManager* getMarkdownManager() const { return markdownManager; }
+    void setMarkdownSelectionMode(bool enabled);
+    bool isMarkdownSelectionMode() const;
 
     // PDF text selection and link functionality
     void setPdfTextSelectionEnabled(bool enabled) { 
@@ -302,6 +310,13 @@ private:
     int currentCachedNotePage = -1; // Currently displayed note page for cache management
     int pendingNoteCacheTargetPage = -1; // Target page for pending note cache operation (to validate timer relevance)
     QList<QFutureWatcher<void>*> activeNoteWatchers; // Track active note cache watchers for cleanup
+    
+    // Markdown integration
+    MarkdownWindowManager* markdownManager = nullptr;
+    bool markdownSelectionMode = false;
+    QPoint markdownSelectionStart;
+    QPoint markdownSelectionEnd;
+    bool markdownSelecting = false;
     
     // Helper methods for PDF text selection
     void loadPdfTextBoxes(int pageNumber); // Load text boxes for a page

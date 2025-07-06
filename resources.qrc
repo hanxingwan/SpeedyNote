@@ -86,6 +86,8 @@
     <file>resources/icons/settings_reversed.png</file>
     <file>resources/icons/scroll.png</file>
     <file>resources/icons/scroll_reversed.png</file>
+    <file>resources/icons/markdown.png</file>
+    <file>resources/icons/markdown_reversed.png</file>
     <file>resources/icons/import.png</file>
     <file>resources/icons/import_reversed.png</file>
     <file>resources/icons/export.png</file>

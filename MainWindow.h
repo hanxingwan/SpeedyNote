@@ -336,6 +336,7 @@ private slots:
     void selectColorButton(QPushButton* selectedButton);
     void updateStraightLineButtonState();
     void updateRopeToolButtonState(); // New slot for rope tool button
+    void updateMarkdownButtonState(); // New slot for markdown button
 
     void setPenTool();               // Set pen tool
     void setMarkerTool();            // Set marker tool
@@ -409,6 +410,7 @@ private:
     QPushButton *backgroundButton; // New button to set background
     QPushButton *straightLineToggleButton; // Button to toggle straight line mode
     QPushButton *ropeToolButton; // Button to toggle rope tool mode
+    QPushButton *markdownButton; // Button to toggle markdown mode
 
     QSlider *zoomSlider;
     QPushButton *zoomButton;

@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 #include "InkCanvas.h"
+#include "MarkdownWindowManager.h"
 #include "ButtonMappingTypes.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -40,7 +41,7 @@
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false) {
 
-    setWindowTitle(tr("SpeedyNote Beta 0.5.3"));
+    setWindowTitle(tr("SpeedyNote Beta 0.6.0"));
 
     // Enable IME support for multi-language input
     setAttribute(Qt::WA_InputMethodEnabled, true);
@@ -490,6 +491,21 @@ void MainWindow::setupUi() {
         bool newMode = !currentCanvas()->isRopeToolMode();
         currentCanvas()->setRopeToolMode(newMode);
         updateRopeToolButtonState();
+    });
+    
+    markdownButton = new QPushButton(this);
+    markdownButton->setFixedSize(26, 30);
+    QIcon markdownIcon(loadThemedIcon("markdown")); // Using text icon for markdown
+    markdownButton->setIcon(markdownIcon);
+    markdownButton->setStyleSheet(buttonStyle);
+    markdownButton->setToolTip(tr("Add Markdown Window"));
+    connect(markdownButton, &QPushButton::clicked, this, [this]() {
+        if (!currentCanvas()) return;
+        
+        // Toggle markdown selection mode
+        bool newMode = !currentCanvas()->isMarkdownSelectionMode();
+        currentCanvas()->setMarkdownSelectionMode(newMode);
+        updateMarkdownButtonState();
     });
     
     deletePageButton = new QPushButton(this);
@@ -1020,6 +1036,7 @@ void MainWindow::setupUi() {
     controlLayout->addWidget(customColorButton);
     controlLayout->addWidget(straightLineToggleButton);
     controlLayout->addWidget(ropeToolButton); // Add rope tool button to layout
+    controlLayout->addWidget(markdownButton); // Add markdown button to layout
     // controlLayout->addWidget(colorPreview);
     // controlLayout->addWidget(thicknessButton);
     // controlLayout->addWidget(jumpToPageButton);
@@ -1437,6 +1454,11 @@ void MainWindow::saveCurrentPageConcurrent() {
     // Create a copy of the buffer for concurrent saving
     QPixmap bufferCopy = canvas->getBuffer();
     
+    // Save markdown windows for this page (this must be done on the main thread)
+    if (canvas->getMarkdownManager()) {
+        canvas->getMarkdownManager()->saveWindowsForPage(pageNumber);
+    }
+    
     // Run the save operation concurrently
     QFuture<void> future = QtConcurrent::run([saveFolder, pageNumber, bufferCopy]() {
         // Get notebook ID from the save folder (similar to how InkCanvas does it)
@@ -1698,6 +1720,7 @@ void MainWindow::switchTab(int index) {
             updateColorButtonStates();  // Update button states when switching tabs
             updateStraightLineButtonState();  // Update straight line button state when switching tabs
             updateRopeToolButtonState(); // Update rope tool button state when switching tabs
+            updateMarkdownButtonState(); // Update markdown button state when switching tabs
             updatePdfTextSelectButtonState(); // Update PDF text selection button state when switching tabs
             updateBookmarkButtonState(); // Update bookmark button state when switching tabs
             updateDialButtonState();     // Update dial button state when switching tabs
@@ -1878,6 +1901,7 @@ void MainWindow::addNewTab() {
             loadPdfOutline();
         }
     });
+    connect(newCanvas, &InkCanvas::markdownSelectionModeChanged, this, &MainWindow::updateMarkdownButtonState);
     
     // Install event filter to detect mouse movement for scrollbar visibility
     newCanvas->setMouseTracking(true);
@@ -1910,6 +1934,7 @@ void MainWindow::addNewTab() {
     updateRopeToolButtonState(); // Initialize rope tool button state for the new tab
     updatePdfTextSelectButtonState(); // Initialize PDF text selection button state for the new tab
     updateBookmarkButtonState(); // Initialize bookmark button state for the new tab
+    updateMarkdownButtonState(); // Initialize markdown button state for the new tab
     updateDialButtonState();     // Initialize dial button state for the new tab
     updateFastForwardButtonState(); // Initialize fast forward button state for the new tab
     updateToolButtonStates();   // Initialize tool button states for the new tab
@@ -3391,6 +3416,7 @@ void MainWindow::updateTheme() {
     if (backgroundButton) backgroundButton->setIcon(loadThemedIcon("background"));
     if (straightLineToggleButton) straightLineToggleButton->setIcon(loadThemedIcon("straightLine"));
     if (ropeToolButton) ropeToolButton->setIcon(loadThemedIcon("rope"));
+    if (markdownButton) markdownButton->setIcon(loadThemedIcon("markdown"));
     if (deletePageButton) deletePageButton->setIcon(loadThemedIcon("trash"));
     if (zoomButton) zoomButton->setIcon(loadThemedIcon("zoom"));
     if (dialToggleButton) dialToggleButton->setIcon(loadThemedIcon("dial"));
@@ -3442,6 +3468,7 @@ void MainWindow::updateTheme() {
     if (backgroundButton) backgroundButton->setStyleSheet(newButtonStyle);
     if (straightLineToggleButton) straightLineToggleButton->setStyleSheet(newButtonStyle);
     if (ropeToolButton) ropeToolButton->setStyleSheet(newButtonStyle);
+    if (markdownButton) markdownButton->setStyleSheet(newButtonStyle);
     if (deletePageButton) deletePageButton->setStyleSheet(newButtonStyle);
     if (zoomButton) zoomButton->setStyleSheet(newButtonStyle);
     if (dialToggleButton) dialToggleButton->setStyleSheet(newButtonStyle);
@@ -4284,6 +4311,23 @@ void MainWindow::updateRopeToolButtonState() {
     }
 }
 
+void MainWindow::updateMarkdownButtonState() {
+    // Check if there's a current canvas
+    if (!currentCanvas()) return;
+
+    // Update the button state to match the canvas markdown selection mode
+    bool isEnabled = currentCanvas()->isMarkdownSelectionMode();
+
+    // Set visual indicator that the button is active/inactive
+    if (markdownButton) {
+        markdownButton->setProperty("selected", isEnabled);
+
+        // Force style update
+        markdownButton->style()->unpolish(markdownButton);
+        markdownButton->style()->polish(markdownButton);
+    }
+}
+
 void MainWindow::updateDialButtonState() {
     // Check if dial is visible
     bool isDialVisible = dialContainer && dialContainer->isVisible();
@@ -4411,19 +4455,19 @@ void MainWindow::updateToolbarLayout() {
     int scaledWidth = width();
     
     // Dynamic threshold based on zoom button visibility
-    int threshold = areZoomButtonsVisible() ? 1520 : 1412;
+    int threshold = areZoomButtonsVisible() ? 1548 : 1438;
     
     // Debug output to understand what's happening
-    // qDebug() << "Window width:" << scaledWidth << "Threshold:" << threshold << "Zoom buttons visible:" << areZoomButtonsVisible();
+    qDebug() << "Window width:" << scaledWidth << "Threshold:" << threshold << "Zoom buttons visible:" << areZoomButtonsVisible();
     
     bool shouldBeTwoRows = scaledWidth <= threshold;
     
-    // qDebug() << "Should be two rows:" << shouldBeTwoRows << "Currently is two rows:" << isToolbarTwoRows;
+    qDebug() << "Should be two rows:" << shouldBeTwoRows << "Currently is two rows:" << isToolbarTwoRows;
     
     if (shouldBeTwoRows != isToolbarTwoRows) {
         isToolbarTwoRows = shouldBeTwoRows;
         
-        // qDebug() << "Switching to" << (isToolbarTwoRows ? "two rows" : "single row");
+        qDebug() << "Switching to" << (isToolbarTwoRows ? "two rows" : "single row");
         
         if (isToolbarTwoRows) {
             createTwoRowLayout();
@@ -4472,6 +4516,7 @@ void MainWindow::createSingleRowLayout() {
     newLayout->addWidget(eraserToolButton);
     newLayout->addWidget(straightLineToggleButton);
     newLayout->addWidget(ropeToolButton);
+    newLayout->addWidget(markdownButton);
     newLayout->addWidget(dialToggleButton);
     newLayout->addWidget(fastForwardButton);
     newLayout->addWidget(btnPageSwitch);
@@ -4576,6 +4621,7 @@ void MainWindow::createTwoRowLayout() {
     // Second row: everything after customColorButton
     newSecondRowLayout->addWidget(straightLineToggleButton);
     newSecondRowLayout->addWidget(ropeToolButton);
+    newSecondRowLayout->addWidget(markdownButton);
     newSecondRowLayout->addWidget(dialToggleButton);
     newSecondRowLayout->addWidget(fastForwardButton);
     newSecondRowLayout->addWidget(btnPageSwitch);

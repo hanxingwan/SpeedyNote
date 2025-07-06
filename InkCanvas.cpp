@@ -1,5 +1,7 @@
 #include "InkCanvas.h"
 #include "ToolType.h"
+#include "MarkdownWindowManager.h"
+#include "MarkdownWindow.h" // Include the full definition
 #include <QMouseEvent>
 #include <QScreen>
 #include <QGuiApplication>
@@ -84,6 +86,13 @@ InkCanvas::InkCanvas(QWidget *parent)
     noteCache.setMaxCost(15); // Cache up to 15 note pages (more than PDF since they're smaller)
     noteCacheTimer = nullptr;
     currentCachedNotePage = -1;
+    
+    // Initialize markdown manager
+    markdownManager = new MarkdownWindowManager(this, this);
+    
+    // Connect pan/zoom signals to update markdown window positions
+    connect(this, &InkCanvas::panChanged, markdownManager, &MarkdownWindowManager::updateAllWindowPositions);
+    connect(this, &InkCanvas::zoomChanged, markdownManager, &MarkdownWindowManager::updateAllWindowPositions);
 }
 
 InkCanvas::~InkCanvas() {
@@ -323,7 +332,7 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
 
     // Pan offset needs to be reversed because painter works in transformed coordinates
     painter.translate(-panOffsetX, -panOffsetY);
-    
+
     // Set clipping rectangle to canvas bounds to prevent painting outside
     painter.setClipRect(0, 0, buffer.width(), buffer.height());
 
@@ -336,22 +345,22 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
 
         // Only draw grid/lines if not "None" style
         if (backgroundStyle != BackgroundStyle::None) {
-            QPen linePen(QColor(100, 100, 100, 100));  // Subtle gray lines
-            linePen.setWidthF(1.0);
-            painter.setPen(linePen);
+        QPen linePen(QColor(100, 100, 100, 100));  // Subtle gray lines
+        linePen.setWidthF(1.0);
+        painter.setPen(linePen);
 
-            qreal scaledDensity = backgroundDensity;
+        qreal scaledDensity = backgroundDensity;
 
-            if (devicePixelRatioF() > 1.0)
-                scaledDensity *= devicePixelRatioF();  // Optional DPI handling
+        if (devicePixelRatioF() > 1.0)
+            scaledDensity *= devicePixelRatioF();  // Optional DPI handling
 
-            if (backgroundStyle == BackgroundStyle::Lines || backgroundStyle == BackgroundStyle::Grid) {
-                for (int y = 0; y < buffer.height(); y += scaledDensity)
-                    painter.drawLine(0, y, buffer.width(), y);
-            }
-            if (backgroundStyle == BackgroundStyle::Grid) {
-                for (int x = 0; x < buffer.width(); x += scaledDensity)
-                painter.drawLine(x, 0, x, buffer.height());
+        if (backgroundStyle == BackgroundStyle::Lines || backgroundStyle == BackgroundStyle::Grid) {
+            for (int y = 0; y < buffer.height(); y += scaledDensity)
+                painter.drawLine(0, y, buffer.width(), y);
+        }
+        if (backgroundStyle == BackgroundStyle::Grid) {
+            for (int x = 0; x < buffer.width(); x += scaledDensity)
+            painter.drawLine(x, 0, x, buffer.height());
             }
         }
 
@@ -489,7 +498,21 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
     // Reset clipping for overlay elements that should appear on top
     painter.setClipping(false);
     
-
+    // Draw markdown selection overlay
+    if (markdownSelectionMode && markdownSelecting) {
+        painter.save();
+        QPen selectionPen(Qt::DashLine);
+        selectionPen.setColor(Qt::green);
+        selectionPen.setWidthF(2.0);
+        painter.setPen(selectionPen);
+        
+        QBrush selectionBrush(QColor(0, 255, 0, 30)); // Semi-transparent green
+        painter.setBrush(selectionBrush);
+        
+        QRect selectionRect = QRect(markdownSelectionStart, markdownSelectionEnd).normalized();
+        painter.drawRect(selectionRect);
+        painter.restore();
+    }
     
     // Draw PDF text selection overlay on top of everything
     if (pdfTextSelectionEnabled && isPdfLoaded) {
@@ -992,6 +1015,15 @@ QRectF InkCanvas::calculatePreviewRect(const QPointF &start, const QPointF &oldE
 }
 
 void InkCanvas::mousePressEvent(QMouseEvent *event) {
+    // Handle markdown selection when enabled
+    if (markdownSelectionMode && event->button() == Qt::LeftButton) {
+        markdownSelecting = true;
+        markdownSelectionStart = event->pos();
+        markdownSelectionEnd = markdownSelectionStart;
+        event->accept();
+        return;
+    }
+    
     // Handle PDF text selection when enabled (mouse/touch fallback - stylus handled in tabletEvent)
     if (pdfTextSelectionEnabled && isPdfLoaded) {
         if (event->button() == Qt::LeftButton) {
@@ -1014,6 +1046,14 @@ void InkCanvas::mousePressEvent(QMouseEvent *event) {
 }
 
 void InkCanvas::mouseMoveEvent(QMouseEvent *event) {
+    // Handle markdown selection when enabled
+    if (markdownSelectionMode && markdownSelecting) {
+        markdownSelectionEnd = event->pos();
+        update(); // Refresh to show selection rectangle
+        event->accept();
+        return;
+    }
+    
     // Handle PDF text selection when enabled (mouse/touch fallback - stylus handled in tabletEvent)
     if (pdfTextSelectionEnabled && isPdfLoaded && pdfTextSelecting) {
         pdfSelectionEnd = event->position();
@@ -1041,6 +1081,22 @@ void InkCanvas::mouseMoveEvent(QMouseEvent *event) {
 }
 
 void InkCanvas::mouseReleaseEvent(QMouseEvent *event) {
+    // Handle markdown selection when enabled
+    if (markdownSelectionMode && markdownSelecting && event->button() == Qt::LeftButton) {
+        markdownSelecting = false;
+        
+        // Create markdown window if selection is valid
+        QRect selectionRect = QRect(markdownSelectionStart, markdownSelectionEnd).normalized();
+        if (selectionRect.width() > 50 && selectionRect.height() > 50 && markdownManager) {
+            markdownManager->createMarkdownWindow(selectionRect);
+        }
+        
+        // Exit selection mode
+        setMarkdownSelectionMode(false);
+        event->accept();
+        return;
+    }
+    
     // Handle PDF text selection when enabled (mouse/touch fallback - stylus handled in tabletEvent)
     if (pdfTextSelectionEnabled && isPdfLoaded && pdfTextSelecting) {
         if (event->button() == Qt::LeftButton) {
@@ -1325,6 +1381,11 @@ void InkCanvas::saveToFile(int pageNumber) {
     image.save(filePath, "PNG");
     edited = false;
     
+    // Save markdown windows for this page
+    if (markdownManager) {
+        markdownManager->saveWindowsForPage(pageNumber);
+    }
+    
     // Update note cache with the saved buffer
     noteCache.insert(pageNumber, new QPixmap(buffer));
 }
@@ -1351,13 +1412,23 @@ void InkCanvas::saveAnnotated(int pageNumber) {
 void InkCanvas::loadPage(int pageNumber) {
     if (saveFolder.isEmpty()) return;
 
+    // Hide any markdown windows from the previous page BEFORE loading the new page content.
+    // This ensures the correct repaint area.
+    if (markdownManager) {
+        for (MarkdownWindow *window : markdownManager->getCurrentPageWindows()) {
+            window->hide();
+        }
+    }
+
     // Update current note page tracker
     currentCachedNotePage = pageNumber;
 
     // Check if note page is already cached
+    bool loadedFromCache = false;
     if (noteCache.contains(pageNumber)) {
         // Use cached note page immediately
         buffer = *noteCache.object(pageNumber);
+        loadedFromCache = true;
     } else {
         // Load note page from disk and cache it
         loadNotePageToCache(pageNumber);
@@ -1365,8 +1436,10 @@ void InkCanvas::loadPage(int pageNumber) {
         // Use the newly cached page or initialize buffer if loading failed
         if (noteCache.contains(pageNumber)) {
             buffer = *noteCache.object(pageNumber);
+            loadedFromCache = true;
     } else {
         initializeBuffer(); // Clear the canvas if no file exists
+        loadedFromCache = false;
     }
     }
     
@@ -1433,6 +1506,29 @@ void InkCanvas::loadPage(int pageNumber) {
             }
         } else {
             backgroundImage = QPixmap(); // No background for this page
+            // Only apply device pixel ratio fix if buffer was NOT loaded from cache
+            // This prevents resizing cached buffers that might already be correctly sized
+            if (!loadedFromCache) {
+                QScreen *screen = QGuiApplication::primaryScreen();
+                qreal dpr = screen ? screen->devicePixelRatio() : 1.0;
+                QSize logicalSize = screen ? screen->size() : QSize(1440, 900);
+                QSize expectedPixelSize = logicalSize * dpr;
+                
+                if (buffer.size() != expectedPixelSize) {
+                    // Buffer is wrong size, need to resize it properly
+                    QPixmap newBuffer(expectedPixelSize);
+                    newBuffer.fill(Qt::transparent);
+                    
+                    // Copy existing drawings if buffer was smaller
+                    if (!buffer.isNull()) {
+                        QPainter painter(&newBuffer);
+                        painter.drawPixmap(0, 0, buffer);
+                    }
+                    
+                    buffer = newBuffer;
+                    setMaximumSize(expectedPixelSize);
+                }
+            }
         }
     }
 
@@ -1442,6 +1538,14 @@ void InkCanvas::loadPage(int pageNumber) {
     update();
     adjustSize();            // Force the widget to update its size
     parentWidget()->update();
+    
+    // Load markdown windows AFTER canvas is fully rendered and sized
+    // Use a single-shot timer to ensure the canvas is fully updated
+    QTimer::singleShot(0, this, [this, pageNumber]() {
+        if (markdownManager) {
+            markdownManager->loadWindowsForPage(pageNumber);
+        }
+    });
 }
 
 void InkCanvas::deletePage(int pageNumber) {
@@ -1463,6 +1567,11 @@ void InkCanvas::deletePage(int pageNumber) {
 
     // Remove deleted page from note cache
     noteCache.remove(pageNumber);
+
+    // Delete markdown windows for this page
+    if (markdownManager) {
+        markdownManager->deleteWindowsForPage(pageNumber);
+    }
 
     if (pdfDocument){
         loadPdfPage(pageNumber);
@@ -2720,6 +2829,30 @@ void InkCanvas::invalidateCurrentPageCache() {
     if (currentCachedNotePage >= 0) {
         noteCache.remove(currentCachedNotePage);
     }
+}
+
+// Markdown integration methods
+void InkCanvas::setMarkdownSelectionMode(bool enabled) {
+    markdownSelectionMode = enabled;
+    if (markdownManager) {
+        markdownManager->setSelectionMode(enabled);
+    }
+    
+    // Update cursor
+    if (enabled) {
+        setCursor(Qt::CrossCursor);
+    } else {
+        setCursor(Qt::ArrowCursor);
+        // Cancel any ongoing selection
+        markdownSelecting = false;
+    }
+    
+    // Emit signal to notify MainWindow about the change
+    emit markdownSelectionModeChanged(enabled);
+}
+
+bool InkCanvas::isMarkdownSelectionMode() const {
+    return markdownSelectionMode;
 }
 
 

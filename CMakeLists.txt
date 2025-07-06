@@ -27,8 +27,38 @@ find_package(Poppler REQUIRED)
 find_package(SDL2 REQUIRED CONFIG)
 unset(SDL2main CACHE)  # Ensure SDL2main isn't picked up
 
+# ✅ QMarkdownTextEdit sources
+set(QMARKDOWNTEXTEDIT_SOURCES
+    markdown/qmarkdowntextedit.cpp
+    markdown/markdownhighlighter.cpp
+    markdown/qownlanguagedata.cpp
+    markdown/qplaintexteditsearchwidget.cpp
+)
+
+set(QMARKDOWNTEXTEDIT_HEADERS
+    markdown/qmarkdowntextedit.h
+    markdown/markdownhighlighter.h
+    markdown/qownlanguagedata.h
+    markdown/qplaintexteditsearchwidget.h
+    markdown/linenumberarea.h
+)
+
+# Process headers that contain Q_OBJECT for MOC
+qt6_wrap_cpp(QMARKDOWNTEXTEDIT_MOC_SOURCES markdown/linenumberarea.h)
+
+set(QMARKDOWNTEXTEDIT_UI
+    markdown/qplaintexteditsearchwidget.ui
+)
+
+set(QMARKDOWNTEXTEDIT_RESOURCES
+    markdown/media.qrc
+)
+
+# Process UI files to generate headers
+qt6_wrap_ui(QMARKDOWNTEXTEDIT_UI_HEADERS ${QMARKDOWNTEXTEDIT_UI})
+
 # ✅ Resources
-set(RESOURCES resources.qrc)
+set(RESOURCES resources.qrc ${QMARKDOWNTEXTEDIT_RESOURCES})
 QT6_ADD_RESOURCES(QRCC_FILES ${RESOURCES})
 
 # ✅ Include + Link paths
@@ -37,6 +67,7 @@ include_directories(
     "C:/msys64/mingw64/include/poppler/cpp"
     "C:/msys64/mingw64/include/poppler/qt6"
     "${SDL2_ROOT}/include"
+    ${CMAKE_CURRENT_BINARY_DIR}  # Include generated UI headers
 )
 link_directories("C:/msys64/mingw64/lib")
 
@@ -57,6 +88,11 @@ add_executable(NoteApp
     RecentNotebooksDialog.cpp
     KeyCaptureDialog.cpp
     ControllerMappingDialog.cpp
+    MarkdownWindow.cpp
+    MarkdownWindowManager.cpp
+    ${QMARKDOWNTEXTEDIT_SOURCES}
+    ${QMARKDOWNTEXTEDIT_UI_HEADERS}
+    ${QMARKDOWNTEXTEDIT_MOC_SOURCES}
     ${WIN_RESOURCES}  # Windows resource file for executable icon (only on Windows)
 )
 
