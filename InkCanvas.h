@@ -60,7 +60,6 @@ public:
 
     void setZoom(int zoomLevel);
     int getZoom() const;
-    QSize getCanvasSize() const;
     void updatePanOffsets(int xOffset, int yOffset);
 
     int getPanOffsetX() const;  // Getter for panOffsetX
@@ -185,6 +184,18 @@ public:
     bool isPdfTextSelectionEnabled() const { return pdfTextSelectionEnabled; }
     void clearPdfTextSelection(); // Clear current PDF text selection
     QString getSelectedPdfText() const; // Get currently selected PDF text
+
+    // Canvas coordinate system support
+    QSize getCanvasSize() const { return buffer.size(); }
+    QRect getCanvasRect() const { return QRect(0, 0, buffer.width(), buffer.height()); }
+    qreal getZoomFactor() const { return zoomFactor / 100.0; }
+    QPointF getPanOffset() const { return QPointF(panOffsetX, panOffsetY); }
+    
+    // Coordinate conversion methods
+    QPointF mapWidgetToCanvas(const QPointF &widgetPoint) const;
+    QPointF mapCanvasToWidget(const QPointF &canvasPoint) const;
+    QRect mapWidgetToCanvas(const QRect &widgetRect) const;
+    QRect mapCanvasToWidget(const QRect &canvasRect) const;
 
 protected:
     void paintEvent(QPaintEvent *event) override;

@@ -1093,6 +1093,10 @@ void InkCanvas::mouseReleaseEvent(QMouseEvent *event) {
         
         // Exit selection mode
         setMarkdownSelectionMode(false);
+        
+        // Force screen update to clear the green selection overlay
+        update();
+        
         event->accept();
         return;
     }
@@ -1413,11 +1417,9 @@ void InkCanvas::loadPage(int pageNumber) {
     if (saveFolder.isEmpty()) return;
 
     // Hide any markdown windows from the previous page BEFORE loading the new page content.
-    // This ensures the correct repaint area.
+    // This ensures the correct repaint area and stops the transparency timer.
     if (markdownManager) {
-        for (MarkdownWindow *window : markdownManager->getCurrentPageWindows()) {
-            window->hide();
-        }
+        markdownManager->hideAllWindows();
     }
 
     // Update current note page tracker
@@ -1639,9 +1641,13 @@ void InkCanvas::setBackground(const QString &filePath, int pageNumber) {
 }
 
 void InkCanvas::setZoom(int zoomLevel) {
-    zoomFactor = qMax(10, qMin(zoomLevel, 400)); // Limit zoom to 10%-400%
-    internalZoomFactor = zoomFactor; // Sync internal zoom
-    update();
+    int newZoom = qMax(10, qMin(zoomLevel, 400)); // Limit zoom to 10%-400%
+    if (zoomFactor != newZoom) {
+        zoomFactor = newZoom;
+        internalZoomFactor = zoomFactor; // Sync internal zoom
+        update();
+        emit zoomChanged(zoomFactor);
+    }
 }
 
 void InkCanvas::updatePanOffsets(int xOffset, int yOffset) {
@@ -1662,18 +1668,20 @@ int InkCanvas::getZoom() const {
     return zoomFactor;
 }
 
-QSize InkCanvas::getCanvasSize() const{
-    return buffer.size();
-}
-
 void InkCanvas::setPanX(int value) {
-    panOffsetX = value;
-    update();
+    if (panOffsetX != value) {
+        panOffsetX = value;
+        update();
+        emit panChanged(panOffsetX, panOffsetY);
+    }
 }
 
 void InkCanvas::setPanY(int value) {
-    panOffsetY = value;
-    update();
+    if (panOffsetY != value) {
+        panOffsetY = value;
+        update();
+        emit panChanged(panOffsetX, panOffsetY);
+    }
 }
 
 bool InkCanvas::isPdfLoadedFunc() const {
@@ -2834,25 +2842,66 @@ void InkCanvas::invalidateCurrentPageCache() {
 // Markdown integration methods
 void InkCanvas::setMarkdownSelectionMode(bool enabled) {
     markdownSelectionMode = enabled;
+    
     if (markdownManager) {
         markdownManager->setSelectionMode(enabled);
     }
     
-    // Update cursor
-    if (enabled) {
-        setCursor(Qt::CrossCursor);
-    } else {
-        setCursor(Qt::ArrowCursor);
-        // Cancel any ongoing selection
+    if (!enabled) {
         markdownSelecting = false;
     }
     
-    // Emit signal to notify MainWindow about the change
+    // Update cursor
+    setCursor(enabled ? Qt::CrossCursor : Qt::ArrowCursor);
+    
+    // Notify signal
     emit markdownSelectionModeChanged(enabled);
 }
 
 bool InkCanvas::isMarkdownSelectionMode() const {
     return markdownSelectionMode;
+}
+
+// Canvas coordinate conversion methods
+QPointF InkCanvas::mapWidgetToCanvas(const QPointF &widgetPoint) const {
+    // Use the same coordinate transformation logic as mapLogicalWidgetToPhysicalBuffer
+    qreal scaledCanvasWidth = buffer.width() * (zoomFactor / 100.0);
+    qreal scaledCanvasHeight = buffer.height() * (zoomFactor / 100.0);
+    qreal centerOffsetX = (scaledCanvasWidth < width()) ? (width() - scaledCanvasWidth) / 2.0 : 0;
+    qreal centerOffsetY = (scaledCanvasHeight < height()) ? (height() - scaledCanvasHeight) / 2.0 : 0;
+    
+    // Convert widget position to canvas position
+    QPointF adjustedPoint = widgetPoint - QPointF(centerOffsetX, centerOffsetY);
+    QPointF canvasPoint = (adjustedPoint / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
+    
+    return canvasPoint;
+}
+
+QPointF InkCanvas::mapCanvasToWidget(const QPointF &canvasPoint) const {
+    // Reverse the transformation from mapWidgetToCanvas
+    qreal scaledCanvasWidth = buffer.width() * (zoomFactor / 100.0);
+    qreal scaledCanvasHeight = buffer.height() * (zoomFactor / 100.0);
+    qreal centerOffsetX = (scaledCanvasWidth < width()) ? (width() - scaledCanvasWidth) / 2.0 : 0;
+    qreal centerOffsetY = (scaledCanvasHeight < height()) ? (height() - scaledCanvasHeight) / 2.0 : 0;
+    
+    // Convert canvas position to widget position
+    QPointF widgetPoint = (canvasPoint - QPointF(panOffsetX, panOffsetY)) * (zoomFactor / 100.0) + QPointF(centerOffsetX, centerOffsetY);
+    
+    return widgetPoint;
+}
+
+QRect InkCanvas::mapWidgetToCanvas(const QRect &widgetRect) const {
+    QPointF topLeft = mapWidgetToCanvas(widgetRect.topLeft());
+    QPointF bottomRight = mapWidgetToCanvas(widgetRect.bottomRight());
+    
+    return QRect(topLeft.toPoint(), bottomRight.toPoint());
+}
+
+QRect InkCanvas::mapCanvasToWidget(const QRect &canvasRect) const {
+    QPointF topLeft = mapCanvasToWidget(canvasRect.topLeft());
+    QPointF bottomRight = mapCanvasToWidget(canvasRect.bottomRight());
+    
+    return QRect(topLeft.toPoint(), bottomRight.toPoint());
 }
 
 

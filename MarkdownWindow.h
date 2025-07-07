@@ -40,12 +40,28 @@ public:
     // Focus management
     void focusEditor();
     bool isEditorFocused() const;
+    
+    // Transparency support
+    void setTransparent(bool transparent);
+    bool isTransparent() const;
+    
+    // Canvas validation
+    bool isValidForCanvas() const; // Check if window coordinates are valid for current canvas
+    
+    // Debug information
+    QString getCoordinateInfo() const; // Get detailed coordinate information for debugging
+    
+    // Connection management
+    void ensureCanvasConnections(); // Ensure pan/zoom signals are connected
 
 signals:
     void deleteRequested(MarkdownWindow *window);
     void contentChanged();
     void windowMoved(MarkdownWindow *window);
     void windowResized(MarkdownWindow *window);
+    void focusChanged(MarkdownWindow *window, bool focused);
+    void editorFocusChanged(MarkdownWindow *window, bool focused);
+    void windowInteracted(MarkdownWindow *window);
 
 protected:
     void mousePressEvent(QMouseEvent *event) override;
@@ -53,6 +69,9 @@ protected:
     void mouseReleaseEvent(QMouseEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
     void paintEvent(QPaintEvent *event) override;
+    void focusInEvent(QFocusEvent *event) override;
+    void focusOutEvent(QFocusEvent *event) override;
+    bool eventFilter(QObject *obj, QEvent *event) override;
 
 private slots:
     void onDeleteClicked();
@@ -92,10 +111,20 @@ private:
     // Canvas coordinate storage
     QRect canvasRect; // Position and size in canvas coordinates
     
+    // Transparency state
+    bool isTransparentState = false;
+    
+    // Update prevention flag
+    bool isUpdatingPosition = false;
+    
+    // User interaction tracking
+    bool isUserInteracting = false;
+    
     ResizeHandle getResizeHandle(const QPoint &pos) const;
     void updateCursor(const QPoint &pos);
     void setupUI();
     void applyStyle();
+    void applyTransparentStyle();
     void convertScreenToCanvasRect(const QRect &screenRect);
 };
 

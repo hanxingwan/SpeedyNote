@@ -41,7 +41,7 @@
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false) {
 
-    setWindowTitle(tr("SpeedyNote Beta 0.6.0"));
+    setWindowTitle(tr("SpeedyNote Beta 0.6.1"));
 
     // Enable IME support for multi-language input
     setAttribute(Qt::WA_InputMethodEnabled, true);
@@ -4458,16 +4458,16 @@ void MainWindow::updateToolbarLayout() {
     int threshold = areZoomButtonsVisible() ? 1548 : 1438;
     
     // Debug output to understand what's happening
-    qDebug() << "Window width:" << scaledWidth << "Threshold:" << threshold << "Zoom buttons visible:" << areZoomButtonsVisible();
+    // qDebug() << "Window width:" << scaledWidth << "Threshold:" << threshold << "Zoom buttons visible:" << areZoomButtonsVisible();
     
     bool shouldBeTwoRows = scaledWidth <= threshold;
     
-    qDebug() << "Should be two rows:" << shouldBeTwoRows << "Currently is two rows:" << isToolbarTwoRows;
+    // qDebug() << "Should be two rows:" << shouldBeTwoRows << "Currently is two rows:" << isToolbarTwoRows;
     
     if (shouldBeTwoRows != isToolbarTwoRows) {
         isToolbarTwoRows = shouldBeTwoRows;
         
-        qDebug() << "Switching to" << (isToolbarTwoRows ? "two rows" : "single row");
+        // qDebug() << "Switching to" << (isToolbarTwoRows ? "two rows" : "single row");
         
         if (isToolbarTwoRows) {
             createTwoRowLayout();
@@ -5477,5 +5477,5 @@ void MainWindow::reconnectControllerSignals() {
     // Update dial display to reflect current state
     updateDialDisplay();
     
-    qDebug() << "Controller signals reconnected successfully";
+    // qDebug() << "Controller signals reconnected successfully";
 }

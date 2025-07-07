@@ -793,103 +793,103 @@ This will overwrite your current configuration.</source>
 <context>
     <name>InkCanvas</name>
     <message>
-        <location filename="../../InkCanvas.cpp" line="1753"/>
-        <location filename="../../InkCanvas.cpp" line="1758"/>
-        <location filename="../../InkCanvas.cpp" line="1774"/>
-        <location filename="../../InkCanvas.cpp" line="1788"/>
-        <location filename="../../InkCanvas.cpp" line="1810"/>
+        <location filename="../../InkCanvas.cpp" line="1761"/>
+        <location filename="../../InkCanvas.cpp" line="1766"/>
+        <location filename="../../InkCanvas.cpp" line="1782"/>
+        <location filename="../../InkCanvas.cpp" line="1796"/>
         <location filename="../../InkCanvas.cpp" line="1818"/>
+        <location filename="../../InkCanvas.cpp" line="1826"/>
         <source>Export Error</source>
         <translation type="unfinished">导出失败</translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="1753"/>
+        <location filename="../../InkCanvas.cpp" line="1761"/>
         <source>No export file specified.</source>
         <translation type="unfinished">没有指定导出文件。</translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="1758"/>
+        <location filename="../../InkCanvas.cpp" line="1766"/>
         <source>No notebook loaded (saveFolder is empty)</source>
         <translation type="unfinished">没有读取笔记本。（保存文件夹为空）</translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="1774"/>
+        <location filename="../../InkCanvas.cpp" line="1782"/>
         <source>No files found to export.</source>
         <translation type="unfinished">找不到可导出的文件。</translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="1788"/>
+        <location filename="../../InkCanvas.cpp" line="1796"/>
         <source>Failed to create temporary file list.</source>
         <translation type="unfinished">创建临时文件列表失败。</translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="1810"/>
+        <location filename="../../InkCanvas.cpp" line="1818"/>
         <source>Tar process failed to finish.</source>
         <translation type="unfinished">TAR处理无法完成。</translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="1818"/>
+        <location filename="../../InkCanvas.cpp" line="1826"/>
         <source>Tar process failed.</source>
         <translation type="unfinished">TAR处理失败。</translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="1822"/>
+        <location filename="../../InkCanvas.cpp" line="1830"/>
         <source>Export</source>
         <translation type="unfinished">导出</translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="1822"/>
+        <location filename="../../InkCanvas.cpp" line="1830"/>
         <source>Notebook exported successfully.</source>
         <translation type="unfinished">笔记本成功导出。</translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="1829"/>
+        <location filename="../../InkCanvas.cpp" line="1837"/>
         <source>Select Destination Folder for Imported Notebook</source>
         <translation type="unfinished">给导入的笔记本选择一个目标文件夹</translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="1832"/>
+        <location filename="../../InkCanvas.cpp" line="1840"/>
         <source>Import Canceled</source>
         <translation type="unfinished">导入中止</translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="1832"/>
+        <location filename="../../InkCanvas.cpp" line="1840"/>
         <source>No destination folder selected.</source>
         <translation type="unfinished">没有选择目标文件夹。</translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="1839"/>
+        <location filename="../../InkCanvas.cpp" line="1847"/>
         <source>Destination Not Empty</source>
         <translation type="unfinished">目标文件夹不为空</translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="1840"/>
+        <location filename="../../InkCanvas.cpp" line="1848"/>
         <source>The selected folder is not empty. Files may be overwritten. Continue?</source>
         <translation type="unfinished">选中的文件夹不为空。文件可能会被覆盖。是否继续？</translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="1866"/>
+        <location filename="../../InkCanvas.cpp" line="1874"/>
         <source>Import Complete</source>
         <translation type="unfinished">导入成功</translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="1866"/>
-        <location filename="../../InkCanvas.cpp" line="1915"/>
+        <location filename="../../InkCanvas.cpp" line="1874"/>
+        <location filename="../../InkCanvas.cpp" line="1923"/>
         <source>Notebook imported successfully.</source>
         <translation type="unfinished">笔记本导入成功。</translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="1915"/>
+        <location filename="../../InkCanvas.cpp" line="1923"/>
         <source>Import</source>
         <translation type="unfinished">导入</translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="2547"/>
+        <location filename="../../InkCanvas.cpp" line="2555"/>
         <source>Copy</source>
         <translation type="unfinished">复制</translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="2558"/>
+        <location filename="../../InkCanvas.cpp" line="2566"/>
         <source>Cancel</source>
         <translation type="unfinished">取消</translation>
     </message>
@@ -1027,9 +1027,13 @@ This will overwrite your current configuration.</source>
         <translation type="obsolete">极疾记 Beta 0.5.3</translation>
     </message>
     <message>
-        <location filename="../../MainWindow.cpp" line="44"/>
         <source>SpeedyNote Beta 0.6.0</source>
-        <translation type="unfinished">极疾记 Beta 0.6.0</translation>
+        <translation type="obsolete">极疾记 Beta 0.6.0</translation>
+    </message>
+    <message>
+        <location filename="../../MainWindow.cpp" line="44"/>
+        <source>SpeedyNote Beta 0.6.1</source>
+        <translation type="unfinished">极疾记 Beta 0.6.1</translation>
     </message>
     <message>
         <location filename="../../MainWindow.cpp" line="224"/>

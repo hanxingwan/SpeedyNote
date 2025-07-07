@@ -766,103 +766,103 @@ This will overwrite your current configuration.</source>
 <context>
     <name>InkCanvas</name>
     <message>
-        <location filename="../../InkCanvas.cpp" line="1753"/>
-        <location filename="../../InkCanvas.cpp" line="1758"/>
-        <location filename="../../InkCanvas.cpp" line="1774"/>
-        <location filename="../../InkCanvas.cpp" line="1788"/>
-        <location filename="../../InkCanvas.cpp" line="1810"/>
+        <location filename="../../InkCanvas.cpp" line="1761"/>
+        <location filename="../../InkCanvas.cpp" line="1766"/>
+        <location filename="../../InkCanvas.cpp" line="1782"/>
+        <location filename="../../InkCanvas.cpp" line="1796"/>
         <location filename="../../InkCanvas.cpp" line="1818"/>
+        <location filename="../../InkCanvas.cpp" line="1826"/>
         <source>Export Error</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="1753"/>
+        <location filename="../../InkCanvas.cpp" line="1761"/>
         <source>No export file specified.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="1758"/>
+        <location filename="../../InkCanvas.cpp" line="1766"/>
         <source>No notebook loaded (saveFolder is empty)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="1774"/>
+        <location filename="../../InkCanvas.cpp" line="1782"/>
         <source>No files found to export.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="1788"/>
+        <location filename="../../InkCanvas.cpp" line="1796"/>
         <source>Failed to create temporary file list.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="1810"/>
+        <location filename="../../InkCanvas.cpp" line="1818"/>
         <source>Tar process failed to finish.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="1818"/>
+        <location filename="../../InkCanvas.cpp" line="1826"/>
         <source>Tar process failed.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="1822"/>
+        <location filename="../../InkCanvas.cpp" line="1830"/>
         <source>Export</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="1822"/>
+        <location filename="../../InkCanvas.cpp" line="1830"/>
         <source>Notebook exported successfully.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="1829"/>
+        <location filename="../../InkCanvas.cpp" line="1837"/>
         <source>Select Destination Folder for Imported Notebook</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="1832"/>
+        <location filename="../../InkCanvas.cpp" line="1840"/>
         <source>Import Canceled</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="1832"/>
+        <location filename="../../InkCanvas.cpp" line="1840"/>
         <source>No destination folder selected.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="1839"/>
+        <location filename="../../InkCanvas.cpp" line="1847"/>
         <source>Destination Not Empty</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="1840"/>
+        <location filename="../../InkCanvas.cpp" line="1848"/>
         <source>The selected folder is not empty. Files may be overwritten. Continue?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="1866"/>
+        <location filename="../../InkCanvas.cpp" line="1874"/>
         <source>Import Complete</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="1866"/>
-        <location filename="../../InkCanvas.cpp" line="1915"/>
+        <location filename="../../InkCanvas.cpp" line="1874"/>
+        <location filename="../../InkCanvas.cpp" line="1923"/>
         <source>Notebook imported successfully.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="1915"/>
+        <location filename="../../InkCanvas.cpp" line="1923"/>
         <source>Import</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="2547"/>
+        <location filename="../../InkCanvas.cpp" line="2555"/>
         <source>Copy</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../InkCanvas.cpp" line="2558"/>
+        <location filename="../../InkCanvas.cpp" line="2566"/>
         <source>Cancel</source>
         <translation type="unfinished">Annuler</translation>
     </message>
@@ -953,7 +953,7 @@ This will overwrite your current configuration.</source>
     </message>
     <message>
         <location filename="../../MainWindow.cpp" line="44"/>
-        <source>SpeedyNote Beta 0.6.0</source>
+        <source>SpeedyNote Beta 0.6.1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

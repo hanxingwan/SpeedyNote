@@ -7,6 +7,7 @@
 #include <QList>
 #include <QRect>
 #include <QString>
+#include <QTimer>
 
 class MarkdownWindow;
 class InkCanvas;
@@ -37,6 +38,11 @@ public:
     
     // Get canvas
     InkCanvas* getCanvas() const { return canvas; }
+    
+    // Transparency management
+    void resetTransparencyTimer();
+    void setWindowsTransparent(bool transparent);
+    void hideAllWindows(); // Hide all windows and stop transparency timer
 
 signals:
     void windowCreated(MarkdownWindow *window);
@@ -44,6 +50,9 @@ signals:
 
 private slots:
     void onWindowDeleteRequested(MarkdownWindow *window);
+    void onWindowFocusChanged(MarkdownWindow *window, bool focused);
+    void onWindowContentChanged(MarkdownWindow *window);
+    void onTransparencyTimerTimeout();
 
 private:
     InkCanvas *canvas;
@@ -55,6 +64,11 @@ private:
     // Current page windows (for quick access)
     QList<MarkdownWindow*> currentWindows;
     
+    // Transparency timer system
+    QTimer *transparencyTimer;
+    MarkdownWindow *currentlyFocusedWindow = nullptr;
+    bool windowsAreTransparent = false;
+    
     // Helper methods
     QString getWindowDataFilePath(int pageNumber) const;
     void saveWindowData(int pageNumber, const QList<MarkdownWindow*> &windows);
@@ -62,6 +76,7 @@ private:
     QString getSaveFolder() const;
     QString getNotebookId() const;
     QRect convertScreenToCanvasRect(const QRect &screenRect) const;
+    void connectWindowSignals(MarkdownWindow *window);
     
 public slots:
     void updateAllWindowPositions(); // Update all window positions when canvas pan/zoom changes
