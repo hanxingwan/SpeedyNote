@@ -1564,7 +1564,7 @@ void MainWindow::updatePanRange() {
         // No need for vertical scrollbar
         panYSlider->setVisible(false);
     } else {
-    panYSlider->setRange(0, maxPanY_scaled);
+        panYSlider->setRange(0, maxPanY_scaled);
         // Show scrollbar only if mouse is near and timeout hasn't occurred
         if (scrollbarsVisible && !scrollbarHideTimer->isActive()) {
             scrollbarHideTimer->start();

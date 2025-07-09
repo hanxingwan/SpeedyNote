@@ -287,16 +287,10 @@ int InkCanvas::getProcessedRate() {
 
 
 void InkCanvas::resizeEvent(QResizeEvent *event) {
-    // Only resize the buffer if the new size is larger
-    if (event->size().width() > buffer.width() || event->size().height() > buffer.height()) {
-        QPixmap newBuffer(event->size());
-        newBuffer.fill(Qt::transparent);
-
-        QPainter painter(&newBuffer);
-        painter.drawPixmap(0, 0, buffer);
-        buffer = newBuffer;
-    }
-
+    // Don't resize the buffer when the widget resizes
+    // The buffer size should be determined by the PDF/document content, not the widget size
+    // The paintEvent will handle centering the buffer content within the widget
+    
     QWidget::resizeEvent(event);
 }
 
@@ -1454,7 +1448,7 @@ void InkCanvas::loadPage(int pageNumber) {
         if (pdfCache.contains(pageNumber)) {
         backgroundImage = *pdfCache.object(pageNumber);
             
-            // Resize canvas to match PDF page size if needed
+            // Resize canvas buffer to match PDF page size if needed
         if (backgroundImage.size() != buffer.size()) {
             QPixmap newBuffer(backgroundImage.size());
             newBuffer.fill(Qt::transparent);
@@ -1464,7 +1458,8 @@ void InkCanvas::loadPage(int pageNumber) {
             painter.drawPixmap(0, 0, buffer);
 
             buffer = newBuffer;
-            setMaximumSize(backgroundImage.width(), backgroundImage.height());
+            // Don't constrain widget size - let it expand to fill available space
+            // The paintEvent will center the PDF content within the widget
         
                 // Update cache with resized buffer
                 noteCache.insert(pageNumber, new QPixmap(buffer));
@@ -1645,7 +1640,7 @@ void InkCanvas::setZoom(int zoomLevel) {
     if (zoomFactor != newZoom) {
         zoomFactor = newZoom;
         internalZoomFactor = zoomFactor; // Sync internal zoom
-        update();
+    update();
         emit zoomChanged(zoomFactor);
     }
 }
@@ -1670,16 +1665,16 @@ int InkCanvas::getZoom() const {
 
 void InkCanvas::setPanX(int value) {
     if (panOffsetX != value) {
-        panOffsetX = value;
-        update();
+    panOffsetX = value;
+    update();
         emit panChanged(panOffsetX, panOffsetY);
     }
 }
 
 void InkCanvas::setPanY(int value) {
     if (panOffsetY != value) {
-        panOffsetY = value;
-        update();
+    panOffsetY = value;
+    update();
         emit panChanged(panOffsetX, panOffsetY);
     }
 }
