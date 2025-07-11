@@ -36,12 +36,13 @@
 #include "ControlPanelDialog.h"
 #include "SDLControllerManager.h"
 #include "RecentNotebooksDialog.h" // Added
+#include "PdfOpenDialog.h" // Added for PDF file association
 #include <poppler-qt6.h> // For PDF outline parsing
 
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false) {
 
-    setWindowTitle(tr("SpeedyNote Beta 0.6.1"));
+    setWindowTitle(tr("SpeedyNote Beta 0.6.2"));
 
     // Enable IME support for multi-language input
     setAttribute(Qt::WA_InputMethodEnabled, true);
@@ -3979,6 +3980,104 @@ void MainWindow::importNotebookFromFile(const QString &packageFile) {
     canvas->setSaveFolder(destDir);
     canvas->loadPage(0);
     updateZoom(); // ✅ Update zoom and pan range after importing notebook
+}
+
+void MainWindow::openPdfFile(const QString &pdfPath) {
+    // Check if the PDF file exists
+    if (!QFile::exists(pdfPath)) {
+        QMessageBox::warning(this, tr("File Not Found"), tr("The PDF file could not be found:\n%1").arg(pdfPath));
+        return;
+    }
+    
+    // Show the PDF opening dialog
+    PdfOpenDialog dialog(pdfPath, this);
+    dialog.exec();
+    
+    PdfOpenDialog::Result result = dialog.getResult();
+    QString selectedFolder = dialog.getSelectedFolder();
+    
+    if (result == PdfOpenDialog::Cancel) {
+        return; // User cancelled, do nothing
+    }
+    
+    InkCanvas *canvas = currentCanvas();
+    if (!canvas) return;
+    
+    // Save current work if edited
+    if (canvas->isEdited()) {
+        saveCurrentPage();
+    }
+    
+    if (result == PdfOpenDialog::CreateNewFolder) {
+        // Set the new folder as save folder
+        canvas->setSaveFolder(selectedFolder);
+        
+        // Load the PDF
+        canvas->loadPdf(pdfPath);
+        
+        // Update tab label and recent notebooks
+        updateTabLabel();
+        if (recentNotebooksManager) {
+            recentNotebooksManager->addRecentNotebook(selectedFolder, canvas);
+        }
+        
+        // Switch to page 1 and update UI
+        switchPageWithDirection(1, 1);
+        pageInput->setValue(1);
+        updateZoom();
+        updatePanRange();
+        
+    } else if (result == PdfOpenDialog::UseExistingFolder) {
+        // Check if the existing folder is linked to the same PDF
+        QString metadataFile = selectedFolder + "/.pdf_path.txt";
+        bool isLinkedToSamePdf = false;
+        
+        if (QFile::exists(metadataFile)) {
+            QFile file(metadataFile);
+            if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                QTextStream in(&file);
+                QString existingPdfPath = in.readLine().trimmed();
+                file.close();
+                
+                // Compare absolute paths
+                QFileInfo existingInfo(existingPdfPath);
+                QFileInfo newInfo(pdfPath);
+                isLinkedToSamePdf = (existingInfo.absoluteFilePath() == newInfo.absoluteFilePath());
+            }
+        }
+        
+        if (!isLinkedToSamePdf && QFile::exists(metadataFile)) {
+            // Folder is linked to a different PDF, ask user what to do
+            QMessageBox::StandardButton reply = QMessageBox::question(
+                this,
+                tr("Different PDF Linked"),
+                tr("This notebook folder is already linked to a different PDF file.\n\nDo you want to replace the link with the new PDF?"),
+                QMessageBox::Yes | QMessageBox::No
+            );
+            
+            if (reply == QMessageBox::No) {
+                return; // User chose not to replace
+            }
+        }
+        
+        // Set the existing folder as save folder
+        canvas->setSaveFolder(selectedFolder);
+        
+        // Load the PDF
+        canvas->loadPdf(pdfPath);
+        
+        // Update tab label and recent notebooks
+        updateTabLabel();
+        if (recentNotebooksManager) {
+            recentNotebooksManager->addRecentNotebook(selectedFolder, canvas);
+        }
+        
+        // Switch to page 1 and update UI
+        switchPageWithDirection(1, 1);
+        pageInput->setValue(1);
+        updateZoom();
+        updatePanRange();
+    }
 }
 
 void MainWindow::setPdfDPI(int dpi) {

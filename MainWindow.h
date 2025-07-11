@@ -210,6 +210,7 @@ public:
     DialMode dialModeFromString(const QString &mode);
 
     void importNotebookFromFile(const QString &packageFile);
+    void openPdfFile(const QString &pdfPath);
 
     int getPdfDPI() const { return pdfRenderDPI; }
     void setPdfDPI(int dpi);

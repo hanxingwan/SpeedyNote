@@ -66,16 +66,29 @@ int main(int argc, char *argv[]) {
         app.installTranslator(&translator);
     }
 
-    QString notebookFile;
+    QString inputFile;
     if (argc >= 2) {
-        notebookFile = QString::fromLocal8Bit(argv[1]);
-        // qDebug() << "Notebook file received:" << notebookFile;
+        inputFile = QString::fromLocal8Bit(argv[1]);
+        // qDebug() << "Input file received:" << inputFile;
     }
 
     MainWindow w;
-    if (!notebookFile.isEmpty()) {
-        w.importNotebookFromFile(notebookFile);
+    if (!inputFile.isEmpty()) {
+        // Check file extension to determine how to handle it
+        if (inputFile.toLower().endsWith(".pdf")) {
+            // Handle PDF file association
+            w.show(); // Show window first for dialog parent
+            w.openPdfFile(inputFile);
+        } else if (inputFile.toLower().endsWith(".snpkg")) {
+            // Handle notebook package import
+            w.importNotebookFromFile(inputFile);
+            w.show();
+        } else {
+            // Unknown file type, just show the application
+            w.show();
+        }
+    } else {
+        w.show();
     }
-    w.show();
     return app.exec();
 }

@@ -90,6 +90,7 @@ add_executable(NoteApp
     ControllerMappingDialog.cpp
     MarkdownWindow.cpp
     MarkdownWindowManager.cpp
+    PdfOpenDialog.cpp
     ${QMARKDOWNTEXTEDIT_SOURCES}
     ${QMARKDOWNTEXTEDIT_UI_HEADERS}
     ${QMARKDOWNTEXTEDIT_MOC_SOURCES}
