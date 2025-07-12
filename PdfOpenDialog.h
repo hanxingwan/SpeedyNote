@@ -16,15 +16,18 @@ class PdfOpenDialog : public QDialog {
 
 public:
     enum Result {
+        Cancel,
         CreateNewFolder,
-        UseExistingFolder,
-        Cancel
+        UseExistingFolder
     };
 
     explicit PdfOpenDialog(const QString &pdfPath, QWidget *parent = nullptr);
     
     Result getResult() const { return result; }
     QString getSelectedFolder() const { return selectedFolder; }
+    
+    // Static method to check if a matching notebook folder exists and is valid
+    static bool hasValidNotebookFolder(const QString &pdfPath, QString &folderPath);
 
 protected:
     void resizeEvent(QResizeEvent *event) override;
@@ -35,11 +38,12 @@ private slots:
     void onCancel();
 
 private:
-    Result result;
-    QString pdfPath;
-    QString selectedFolder;
-    
     void setupUI();
+    static bool isValidNotebookFolder(const QString &folderPath, const QString &pdfPath);
+
+    Result result;
+    QString selectedFolder;
+    QString pdfPath;
 };
 
 #endif // PDFOPENDIALOG_H 

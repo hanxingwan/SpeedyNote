@@ -6,6 +6,8 @@
 #include <QStyle>
 #include <QScreen>
 #include <QGuiApplication>
+#include <QFile>
+#include <QTextStream>
 
 PdfOpenDialog::PdfOpenDialog(const QString &pdfPath, QWidget *parent)
     : QDialog(parent), result(Cancel), pdfPath(pdfPath)
@@ -266,4 +268,75 @@ void PdfOpenDialog::onCancel()
 {
     result = Cancel;
     reject();
+}
+
+// Static method to check if a matching notebook folder exists and is valid
+// This checks for a folder with the same name as the PDF (without extension)
+// in the same directory as the PDF file
+bool PdfOpenDialog::hasValidNotebookFolder(const QString &pdfPath, QString &folderPath)
+{
+    QFileInfo fileInfo(pdfPath);
+    QString suggestedFolderName = fileInfo.baseName(); // Filename without extension
+    QString pdfDir = fileInfo.absolutePath(); // Directory containing the PDF
+    QString potentialFolderPath = pdfDir + "/" + suggestedFolderName;
+    
+    if (isValidNotebookFolder(potentialFolderPath, pdfPath)) {
+        folderPath = potentialFolderPath;
+        return true;
+    }
+    
+    return false;
+}
+
+// Static method to validate if a folder is a valid SpeedyNote notebook folder for the given PDF
+// Returns true only if the folder exists, contains SpeedyNote data, and is linked to the exact same PDF
+bool PdfOpenDialog::isValidNotebookFolder(const QString &folderPath, const QString &pdfPath)
+{
+    QDir folder(folderPath);
+    if (!folder.exists()) {
+        return false;
+    }
+    
+    // Priority 1: Check for .pdf_path.txt file with matching PDF path
+    QString pdfPathFile = folderPath + "/.pdf_path.txt";
+    if (QFile::exists(pdfPathFile)) {
+        QFile file(pdfPathFile);
+        if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QTextStream in(&file);
+            QString storedPdfPath = in.readLine().trimmed();
+            file.close();
+            
+            if (!storedPdfPath.isEmpty()) {
+                // Compare absolute paths to handle relative path differences
+                QFileInfo currentPdf(pdfPath);
+                QFileInfo storedPdf(storedPdfPath);
+                
+                // Check if the stored PDF file still exists and matches
+                if (storedPdf.exists() && 
+                    currentPdf.absoluteFilePath() == storedPdf.absoluteFilePath()) {
+                    return true;
+                }
+            }
+        }
+    }
+    
+    // Priority 2: Check for .notebook_id.txt file (SpeedyNote notebook folder)
+    QString notebookIdFile = folderPath + "/.notebook_id.txt";
+    if (QFile::exists(notebookIdFile)) {
+        // Additional check: ensure this folder has some notebook content
+        QStringList contentFiles = folder.entryList(
+            QStringList() << "*.png" << ".pdf_path.txt" << ".bookmarks.txt" << ".background_config.txt", 
+            QDir::Files
+        );
+        
+        // If it has notebook-related files, it's likely a valid SpeedyNote folder
+        // but not necessarily for this specific PDF
+        if (!contentFiles.isEmpty()) {
+            // This is a SpeedyNote notebook, but for a different PDF
+            // Return false so the user gets the dialog to choose what to do
+            return false;
+        }
+    }
+    
+    return false;
 } 

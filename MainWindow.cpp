@@ -1224,6 +1224,9 @@ void MainWindow::adjustThicknessForZoom(int oldZoom, int newZoom) {
     
     // Update the thickness slider to reflect the current tool's new thickness
     updateThicknessSliderForCurrentTool();
+    
+    // ✅ FIXED: Update dial display to show new thickness immediately during zoom changes
+    updateDialDisplay();
 }
 
 
@@ -2391,7 +2394,7 @@ void MainWindow::updateDialDisplay() {
             }
             break;
         case DialMode::ZoomControl:
-            dialDisplay->setText(QString(tr("\n\nZoom\n%1%").arg(zoomSlider->value() * initialDpr)));
+            dialDisplay->setText(QString(tr("\n\nZoom\n%1%").arg(currentCanvas() ? currentCanvas()->getZoom() * initialDpr : zoomSlider->value() * initialDpr)));
             dialIconView->setPixmap(QPixmap(":/resources/reversed_icons/zoom_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
             break;
   
@@ -3989,7 +3992,40 @@ void MainWindow::openPdfFile(const QString &pdfPath) {
         return;
     }
     
-    // Show the PDF opening dialog
+    // First, check if there's already a valid notebook folder for this PDF
+    QString existingFolderPath;
+    if (PdfOpenDialog::hasValidNotebookFolder(pdfPath, existingFolderPath)) {
+        // Found a valid notebook folder, open it directly without showing dialog
+        InkCanvas *canvas = currentCanvas();
+        if (!canvas) return;
+        
+        // Save current work if edited
+        if (canvas->isEdited()) {
+            saveCurrentPage();
+        }
+        
+        // Set the existing folder as save folder
+        canvas->setSaveFolder(existingFolderPath);
+        
+        // Load the PDF
+        canvas->loadPdf(pdfPath);
+        
+        // Update tab label and recent notebooks
+        updateTabLabel();
+        if (recentNotebooksManager) {
+            recentNotebooksManager->addRecentNotebook(existingFolderPath, canvas);
+        }
+        
+        // Switch to page 1 and update UI
+        switchPageWithDirection(1, 1);
+        pageInput->setValue(1);
+        updateZoom();
+        updatePanRange();
+        
+        return; // Exit early, no need to show dialog
+    }
+    
+    // No valid notebook folder found, show the dialog with options
     PdfOpenDialog dialog(pdfPath, this);
     dialog.exec();
     
@@ -4230,6 +4266,7 @@ void MainWindow::cycleZoomLevels() {
 void MainWindow::handleTouchZoomChange(int newZoom) {
     // Update zoom slider without triggering updateZoom again
     zoomSlider->blockSignals(true);
+    int oldZoom = zoomSlider->value();  // Get the old zoom value before updating the slider
     zoomSlider->setValue(newZoom);
     zoomSlider->blockSignals(false);
     
@@ -4245,10 +4282,14 @@ void MainWindow::handleTouchZoomChange(int newZoom) {
     // Update canvas zoom directly
     InkCanvas *canvas = currentCanvas();
     if (canvas) {
-        canvas->setZoom(newZoom);
+        // The canvas zoom has already been set by the gesture processing in InkCanvas::event()
+        // So we don't need to set it again, just update the last zoom level
         canvas->setLastZoomLevel(newZoom);
         updatePanRange();
-        // updateThickness(thicknessSlider->value()); // ✅ REMOVED: Don't reset thickness during touch zoom
+        
+        // ✅ FIXED: Add thickness adjustment for pinch-to-zoom gestures to maintain visual consistency
+        adjustThicknessForZoom(oldZoom, newZoom);
+        
         updateDialDisplay();
     }
 }
