@@ -38,7 +38,7 @@ _A lightweight, fast, and stylus-optimized note-taking app built for classic tab
 
 ### ✅ Requirements
 
-- Windows 7/8/10/11/Ubuntu amd64/Kali amd64/PostmarketOS arm64
+- Windows 7/8/10/11/Ubuntu/Debian/Fedora/RedHat/ArchLinux/AlpineLinux
 - Qt 5 or Qt 6 runtime (bundled in Windows releases)
 - Stylus input (Wacom recommended)
 
@@ -109,7 +109,7 @@ SpeedyNote supports controller input, ideal for tablet users:
 
 
 #### Linux
-
+##### Flatpak
 1. Run compile and package scripts
    
    ```bash
@@ -122,5 +122,7 @@ SpeedyNote supports controller input, ideal for tablet users:
    ```bash
    flatpak install ./speedynote.flatpak
    ```
-   
+##### Native Packages
+1. run `./compile.sh` and `./build-package.sh`
+2. Install the packages for your Linux distro. Note that the dependencies for Fedora and RedHat are not yet tested.`.deb`,`.pkg.tar.zst` and `.apk` are tested and working.
    
