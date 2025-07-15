@@ -6,7 +6,7 @@ _A lightweight, fast, and stylus-optimized note-taking app built for classic tab
 
 <a href="https://hellogithub.com/repository/alpha-liu-01/SpeedyNote" target="_blank"><img src="https://abroad.hellogithub.com/v1/widgets/recommend.svg?rid=e86680d007424ab59d68d5e787ad5c12&claim_uid=e5oCIWstjbEUv9D" alt="Featured｜HelloGitHub" style="width: 250px; height: 54px;" width="250" height="54" /></a>
 
-![cover](https://i.imgur.com/UTNNbnM.png)
+![cover](https://i.imgur.com/U161QSH.png)
 
 ---
 
@@ -19,6 +19,7 @@ _A lightweight, fast, and stylus-optimized note-taking app built for classic tab
 - 🎨 **Per-page background styles**: grid, lined, or blank (customizable)
 - 💾 **Portable `.snpkg` notebooks** for export/import & sharing
 - 🔎 **Zoom, pan, thickness, and color preset switching** via dial
+- 🗔 **Markdown sticky notes are supported** for text-based notes
 - 💡 **Designed for low-spec devices** (133Hz Sample Rate @ Intel Atom N450)
 - 🌏 **Supports multiple languages across the globe** (Covers half the global population)
 
@@ -41,13 +42,22 @@ _A lightweight, fast, and stylus-optimized note-taking app built for classic tab
 - Qt 5 or Qt 6 runtime (bundled in Windows releases)
 - Stylus input (Wacom recommended)
 
-### 🛠️ Usage
+🛠️ Usage
 
-1. Launch `NoteApp.exe`
-2. Click **Folder Icon** to select a working folder or **Import `.snpkg` Package**
-3. Start writing/drawing using your stylus
-4. Use the **MagicDial** or **Joy-Con** to change tools, zoom, scroll, or switch pages
-5. Notebooks can be exported as `.snpkg`
+1. Launch `SpeedyNote` shortcut on desktop
+2. Click **Folder Icon** to select a working folder or **Import `.snpkg` Package
+3. *(Optitonal)* Click the PDF button on the tool bar to import a PDF document
+4. Start writing/drawing using your stylus
+5. Use the **MagicDial** or **Joy-Con** to change tools, zoom, scroll, or switch pages
+6. Notebooks can be exported as `.snpkg`
+
+###### OR
+
+1. Right click a PDF file in File Explorer (or equivalent)  
+2. Click open with and select SpeedyNote  
+3. Create a folder for the directory of the current notebook  
+4. Next time when you double click a PDF with a working directory already created, step 3 will be skipped.  
+5. Start writing/drawing using your stylus
 
 ---
 
@@ -83,34 +93,34 @@ SpeedyNote supports controller input, ideal for tablet users:
 ## 📁 Building From Source
 
 
-1. Install **Qt 6** and **CMake**
-2. Clone this repository
-3. Run:
+#### Windows
 
-```bash
-rm -r build
-mkdir build
-# ✅ Update translation source files (ensure the .ts files exist already)
-& "C:\Qt\6.8.2\mingw_64\bin\lupdate.exe" . -ts ./resources/translations/app_fr.ts ./resources/translations/app_zh.ts ./resources/translations/app_es.ts
-& "C:\Qt\6.8.2\mingw_64\bin\linguist.exe" resources/translations/app_zh.ts
-& "C:\Qt\6.8.2\mingw_64\bin\linguist.exe" resources/translations/app_fr.ts
-& "C:\Qt\6.8.2\mingw_64\bin\linguist.exe" resources/translations/app_es.ts
-```
-4. (Optional) Modify translations in the GUI interface
-5. Run:
-```bash
-rm -r build
-mkdir build
-& "C:\Qt\6.8.2\mingw_64\bin\lrelease.exe" ./resources/translations/app_zh.ts ./resources/translations/app_fr.ts ./resources/translations/app_es.ts
+1. Run translation and compiling scripts
+  ```powershell
+  ./translate.ps1
+  ./compile.ps1
+  ```
 
-Copy-Item -Path "C:\Games\yourfolder\resources\translations\*.qm" -Destination "C:\Games\yourfolder\build" -Force
+(Dependency directories may need to be modified)
 
-cd .\build
-cmake -G "MinGW Makefiles" .. 
-cmake --build .  
-& "C:\Qt\6.8.2\mingw_64\bin\windeployqt.exe" "NoteApp.exe"
-Copy-Item -Path "C:\yourfolder\dllpack\*.dll" -Destination "C:\yourfolder\build" -Force
-Copy-Item -Path "C:\yourfolder\bsdtar.exe" -Destination "C:\yourfolder\build" -Force
-./NoteApp.exe
-cd ../
-```
+2. Install `InnoSetup` and open `packaging.iss` with it to pack SpeedyNote into an executable installer.
+3. Run `SpeedyNoteInstaller.exe` to install SpeedyNote to your PC. 
+
+
+
+#### Linux
+
+1. Run compile and package scripts
+   
+   ```bash
+   ./compile.sh
+   ./build-flatpak.sh
+   ```
+
+2. Install the flatpak package
+   
+   ```bash
+   flatpak install ./speedynote.flatpak
+   ```
+   
+   
