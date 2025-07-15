@@ -2,6 +2,8 @@
 
 _A lightweight, fast, and stylus-optimized note-taking app built for classic tablet PCs, low-resolution screens, and vintage hardware._
 
+如果您恰好不懂英文，请移步[中文README](https://github.com/alpha-liu-01/SpeedyNote/blob/main/speedynote_README_zh_CN.md)
+
 ![cover](https://i.imgur.com/UTNNbnM.png)
 
 ---
