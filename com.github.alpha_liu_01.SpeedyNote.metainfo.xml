@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.github.alpha_liu_01.SpeedyNote</id>
+  <name>SpeedyNote</name>
+  <summary>Fast note-taking application with PDF annotation support</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <description>
+    <p>
+      SpeedyNote is a powerful and intuitive note-taking application designed for speed and efficiency. 
+      It features pressure-sensitive inking, PDF background integration, and controller support for 
+      natural handwriting experiences.
+    </p>
+    <p>Key features include:</p>
+    <ul>
+      <li>Pressure-sensitive handwriting with stylus support</li>
+      <li>PDF background integration for annotation</li>
+      <li>Controller input support for enhanced interaction</li>
+      <li>Multiple drawing tools (pen, marker, eraser)</li>
+      <li>Markdown editing capabilities</li>
+      <li>Export to various formats</li>
+      <li>Multi-language support</li>
+    </ul>
+  </description>
+  <developer_name>alpha-liu-01</developer_name>
+  <url type="homepage">https://github.com/alpha-liu-01/SpeedyNote</url>
+  <url type="bugtracker">https://github.com/alpha-liu-01/SpeedyNote/issues</url>
+  <launchable type="desktop-id">com.github.alpha_liu_01.SpeedyNote.desktop</launchable>
+  <provides>
+    <binary>speedynote</binary>
+  </provides>
+  <categories>
+    <category>Office</category>
+    <category>Education</category>
+    <category>Graphics</category>
+  </categories>
+  <keywords>
+    <keyword>notes</keyword>
+    <keyword>pdf</keyword>
+    <keyword>annotation</keyword>
+    <keyword>writing</keyword>
+    <keyword>handwriting</keyword>
+    <keyword>stylus</keyword>
+    <keyword>controller</keyword>
+  </keywords>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://github.com/alpha-liu-01/SpeedyNote/raw/main/screenshots/main.png</image>
+    </screenshot>
+  </screenshots>
+  <releases>
+    <release version="0.6.1" date="2024-01-01">
+      <description>
+        <p>Latest release with improved stability and features</p>
+      </description>
+    </release>
+  </releases>
+  <content_rating type="oars-1.1" />
+</component> 

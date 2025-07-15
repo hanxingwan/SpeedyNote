@@ -3,12 +3,8 @@
 #endif
 
 #include <QApplication>
-#include <QGuiApplication>
-// #include <QQmlApplicationEngine>
-#include <QLoggingCategory>
-#include <QInputMethod>
 #include <QTranslator>
-#include <QLibraryInfo>
+#include <QLocale>
 #include "MainWindow.h"
 
 int main(int argc, char *argv[]) {
@@ -20,6 +16,7 @@ int main(int argc, char *argv[]) {
     freopen("CONOUT$", "w", stdout);
     freopen("CONOUT$", "w", stderr);
     */
+    
     
      // to show console for debugging
     
@@ -44,8 +41,14 @@ int main(int argc, char *argv[]) {
     
 
 
-    // qputenv("QT_IM_MODULE", QByteArray("qtvirtualkeyboard"));  // ✅ Enable Virtual Keyboard
+    // Enable Windows IME support for multi-language input
     QApplication app(argc, argv);
+    
+    // Ensure IME is properly enabled for Windows
+    #ifdef _WIN32
+    app.setAttribute(Qt::AA_EnableHighDpiScaling, true);
+    app.setAttribute(Qt::AA_UseHighDpiPixmaps, true);
+    #endif
 
     
     QTranslator translator;
@@ -66,7 +69,7 @@ int main(int argc, char *argv[]) {
     QString notebookFile;
     if (argc >= 2) {
         notebookFile = QString::fromLocal8Bit(argv[1]);
-        qDebug() << "Notebook file received:" << notebookFile;
+        // qDebug() << "Notebook file received:" << notebookFile;
     }
 
     MainWindow w;

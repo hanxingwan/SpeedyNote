@@ -1,0 +1,20 @@
+pkgbase = speedynote
+	pkgdesc = A fast note-taking application with PDF annotation support and controller input
+	pkgver = 0.6.1
+	pkgrel = 1
+	url = https://github.com/speedynote/speedynote
+	arch = x86_64
+	license = GPL3
+	makedepends = cmake
+	makedepends = qt6-tools
+	makedepends = pkgconf
+	depends = qt6-base
+	depends = qt6-multimedia
+	depends = poppler-qt6
+	depends = sdl2-compat
+	optdepends = qt6-wayland: Wayland support
+	optdepends = qt6-imageformats: Additional image format support
+	source = speedynote-0.6.1.tar.gz
+	sha256sums = SKIP
+
+pkgname = speedynote

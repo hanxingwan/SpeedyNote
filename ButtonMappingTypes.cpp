@@ -6,7 +6,7 @@ QString ButtonMappingHelper::dialModeToInternalKey(InternalDialMode mode) {
         case InternalDialMode::PageSwitching: return "page_switching";
         case InternalDialMode::ZoomControl: return "zoom_control";
         case InternalDialMode::ThicknessControl: return "thickness_control";
-        case InternalDialMode::ColorAdjustment: return "color_adjustment";
+
         case InternalDialMode::ToolSwitching: return "tool_switching";
         case InternalDialMode::PresetSelection: return "preset_selection";
         case InternalDialMode::PanAndPageScroll: return "pan_and_page_scroll";
@@ -40,6 +40,11 @@ QString ButtonMappingHelper::actionToInternalKey(InternalControllerAction action
         case InternalControllerAction::SetPenTool: return "set_pen_tool";
         case InternalControllerAction::SetMarkerTool: return "set_marker_tool";
         case InternalControllerAction::SetEraserTool: return "set_eraser_tool";
+        case InternalControllerAction::TogglePdfTextSelection: return "toggle_pdf_text_selection";
+        case InternalControllerAction::ToggleOutline: return "toggle_outline";
+        case InternalControllerAction::ToggleBookmarks: return "toggle_bookmarks";
+        case InternalControllerAction::AddBookmark: return "add_bookmark";
+        case InternalControllerAction::ToggleTouchGestures: return "toggle_touch_gestures";
     }
     return "none";
 }
@@ -49,7 +54,7 @@ InternalDialMode ButtonMappingHelper::internalKeyToDialMode(const QString &key) 
     if (key == "page_switching") return InternalDialMode::PageSwitching;
     if (key == "zoom_control") return InternalDialMode::ZoomControl;
     if (key == "thickness_control") return InternalDialMode::ThicknessControl;
-    if (key == "color_adjustment") return InternalDialMode::ColorAdjustment;
+
     if (key == "tool_switching") return InternalDialMode::ToolSwitching;
     if (key == "preset_selection") return InternalDialMode::PresetSelection;
     if (key == "pan_and_page_scroll") return InternalDialMode::PanAndPageScroll;
@@ -81,6 +86,11 @@ InternalControllerAction ButtonMappingHelper::internalKeyToAction(const QString 
     if (key == "set_pen_tool") return InternalControllerAction::SetPenTool;
     if (key == "set_marker_tool") return InternalControllerAction::SetMarkerTool;
     if (key == "set_eraser_tool") return InternalControllerAction::SetEraserTool;
+    if (key == "toggle_pdf_text_selection") return InternalControllerAction::TogglePdfTextSelection;
+    if (key == "toggle_outline") return InternalControllerAction::ToggleOutline;
+    if (key == "toggle_bookmarks") return InternalControllerAction::ToggleBookmarks;
+    if (key == "add_bookmark") return InternalControllerAction::AddBookmark;
+    if (key == "toggle_touch_gestures") return InternalControllerAction::ToggleTouchGestures;
     return InternalControllerAction::None;
 }
 
@@ -90,7 +100,7 @@ QStringList ButtonMappingHelper::getTranslatedDialModes() {
         tr("Page Switching"),
         tr("Zoom Control"),
         tr("Thickness Control"),
-        tr("Color Adjustment"),
+
         tr("Tool Switching"),
         tr("Preset Selection"),
         tr("Pan and Page Scroll")
@@ -122,7 +132,12 @@ QStringList ButtonMappingHelper::getTranslatedActions() {
         tr("Rope Tool"),
         tr("Set Pen Tool"),
         tr("Set Marker Tool"),
-        tr("Set Eraser Tool")
+        tr("Set Eraser Tool"),
+        tr("Toggle PDF Text Selection"),
+        tr("Toggle PDF Outline"),
+        tr("Toggle Bookmarks"),
+        tr("Add/Remove Bookmark"),
+        tr("Toggle Touch Gestures")
     };
 }
 
@@ -148,7 +163,7 @@ QStringList ButtonMappingHelper::getInternalDialModeKeys() {
         "page_switching",
         "zoom_control",
         "thickness_control",
-        "color_adjustment",
+
         "tool_switching",
         "preset_selection",
         "pan_and_page_scroll"
@@ -180,7 +195,12 @@ QStringList ButtonMappingHelper::getInternalActionKeys() {
         "rope_tool",
         "set_pen_tool",
         "set_marker_tool",
-        "set_eraser_tool"
+        "set_eraser_tool",
+        "toggle_pdf_text_selection",
+        "toggle_outline",
+        "toggle_bookmarks",
+        "add_bookmark",
+        "toggle_touch_gestures"
     };
 }
 

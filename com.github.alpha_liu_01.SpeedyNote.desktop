@@ -1,0 +1,14 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=SpeedyNote
+Comment=Fast note-taking application with PDF annotation support and controller input
+GenericName=Note-Taking App
+Exec=speedynote
+Icon=com.github.alpha_liu_01.SpeedyNote
+Terminal=false
+StartupNotify=true
+Categories=Office;
+Keywords=notes;pdf;annotation;writing;handwriting;stylus;controller;
+MimeType=application/pdf;text/plain;text/markdown;
+StartupWMClass=SpeedyNote 

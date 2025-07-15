@@ -10,10 +10,14 @@
 #include <QColor>
 #include <QTableWidget>
 #include <QHeaderView>
+#include <QCheckBox>
+#include <QLabel>
+#include <QLabel>
 
 #include "InkCanvas.h" // Needed for BackgroundStyle enum
 #include "MainWindow.h"
 #include "KeyCaptureDialog.h"
+#include "ControllerMappingDialog.h" // New: Include controller mapping dialog
 
 class ControlPanelDialog : public QDialog {
     Q_OBJECT
@@ -26,6 +30,8 @@ private slots:
     void chooseColor();
     void addKeyboardMapping();       // New: add keyboard shortcut
     void removeKeyboardMapping();    // New: remove keyboard shortcut
+    void openControllerMapping();    // New: open controller mapping dialog
+    void reconnectController();      // New: reconnect controller
 
 private:
     InkCanvas *canvas;
@@ -54,12 +60,15 @@ private:
     void createPerformanceTab();
 
     QWidget *controllerMappingTab;
+    QPushButton *reconnectButton;
+    QLabel *controllerStatusLabel;
 
     // Mapping comboboxes for hold and press
     QMap<QString, QComboBox*> holdMappingCombos;
     QMap<QString, QComboBox*> pressMappingCombos;
 
     void createButtonMappingTab();
+    void createControllerMappingTab(); // New: create controller mapping tab
     void createKeyboardMappingTab();  // New: keyboard mapping tab
 
     // Keyboard mapping widgets
@@ -67,6 +76,20 @@ private:
     QTableWidget *keyboardTable;
     QPushButton *addKeyboardMappingButton;
     QPushButton *removeKeyboardMappingButton;
+    
+    // Theme widgets
+    QWidget *themeTab;
+
+    QCheckBox *useCustomAccentCheckbox;
+    QPushButton *accentColorButton;
+    QColor selectedAccentColor;
+    
+    // Color palette widgets
+    QCheckBox *useBrighterPaletteCheckbox;
+    
+    void createThemeTab();
+    void chooseAccentColor();
+    void updateControllerStatus(); // Update controller connection status display
 };
 
 #endif // CONTROLPANELDIALOG_H

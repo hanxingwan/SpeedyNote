@@ -1,0 +1,67 @@
+app-id: com.github.alpha_liu_01.SpeedyNote
+runtime: org.kde.Platform
+runtime-version: '6.8'
+sdk: org.kde.Sdk
+command: speedynote
+
+build-options:
+  env:
+    - FLATPAK_BUILDER_DISABLE_APPSTREAM=1
+
+finish-args:
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --device=dri
+  - --filesystem=home
+  - --filesystem=xdg-documents
+  - --filesystem=xdg-download
+  - --talk-name=org.freedesktop.FileManager1
+  - --share=network
+
+modules:
+  - name: poppler
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DENABLE_BOOST=OFF
+      - -DENABLE_CPP=ON
+      - -DENABLE_GLIB=OFF
+      - -DENABLE_GOBJECT_INTROSPECTION=OFF
+      - -DENABLE_GTK_DOC=OFF
+      - -DENABLE_QT5=OFF
+      - -DENABLE_QT6=ON
+      - -DENABLE_UTILS=OFF
+    sources:
+      - type: archive
+        url: https://poppler.freedesktop.org/poppler-24.06.1.tar.xz
+        sha256: 1e629e8732286c745fbc0b15a3ee591443fb37a2210856e7f3ec38a0fb93ab13
+
+  - name: sdl2
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DSDL_STATIC=OFF
+      - -DSDL_SHARED=ON
+    builddir: true
+    sources:
+      - type: archive
+        url: https://github.com/libsdl-org/SDL/releases/download/release-2.30.6/SDL2-2.30.6.tar.gz
+        sha256: c6ef64ca18a19d13df6eb22df9aff19fb0db65610a74cc81dae33a82235cacd4
+
+  - name: speedynote
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DCMAKE_INSTALL_PREFIX=/app
+    sources:
+      - type: dir
+        path: .
+      - type: file
+        path: com.github.alpha_liu_01.SpeedyNote.desktop
+      - type: file
+        path: com.github.alpha_liu_01.SpeedyNote.metainfo.xml
+    post-install:
+      - install -Dm644 com.github.alpha_liu_01.SpeedyNote.desktop /app/share/applications/com.github.alpha_liu_01.SpeedyNote.desktop
+      - install -Dm644 com.github.alpha_liu_01.SpeedyNote.metainfo.xml /app/share/metainfo/com.github.alpha_liu_01.SpeedyNote.metainfo.xml
+      - desktop-file-validate /app/share/applications/com.github.alpha_liu_01.SpeedyNote.desktop 

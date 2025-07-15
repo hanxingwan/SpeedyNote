@@ -1,5 +1,7 @@
 #include "InkCanvas.h"
 #include "ToolType.h"
+#include "MarkdownWindowManager.h"
+#include "MarkdownWindow.h" // Include the full definition
 #include <QMouseEvent>
 #include <QScreen>
 #include <QGuiApplication>
@@ -21,6 +23,8 @@
 #include <QTouchEvent>
 #include <QtMath>
 #include <QPainterPath>
+#include <QTimer>
+#include <QAction>
 
 #include <QtConcurrent/QtConcurrentRun>
 #include <QFuture>
@@ -39,6 +43,12 @@
 
 InkCanvas::InkCanvas(QWidget *parent) 
     : QWidget(parent), drawing(false), penColor(Qt::black), penThickness(5.0), zoomFactor(100), panOffsetX(0), panOffsetY(0), currentTool(ToolType::Pen) {    
+    
+    // Set theme-aware default pen color
+    MainWindow *mainWindow = qobject_cast<MainWindow*>(parent);
+    if (mainWindow) {
+        penColor = mainWindow->getDefaultPenColor();
+    }    
     setAttribute(Qt::WA_StaticContents);
     setTabletTracking(true);
     setAttribute(Qt::WA_AcceptTouchEvents);  // Enable touch events
@@ -61,6 +71,28 @@ InkCanvas::InkCanvas(QWidget *parent)
     QCache<int, QPixmap> pdfCache(10);
     pdfCache.setMaxCost(10);  // ✅ Ensures the cache holds at most 5 pages
     // No need to set auto-delete, QCache will handle deletion automatically
+    
+    // Initialize PDF text selection throttling timer (60 FPS = ~16.67ms)
+    pdfTextSelectionTimer = new QTimer(this);
+    pdfTextSelectionTimer->setSingleShot(true);
+    pdfTextSelectionTimer->setInterval(16); // ~60 FPS
+    connect(pdfTextSelectionTimer, &QTimer::timeout, this, &InkCanvas::processPendingTextSelection);
+    
+    // Initialize PDF cache timer (will be created on-demand)
+    pdfCacheTimer = nullptr;
+    currentCachedPage = -1;
+    
+    // Initialize note page cache system
+    noteCache.setMaxCost(15); // Cache up to 15 note pages (more than PDF since they're smaller)
+    noteCacheTimer = nullptr;
+    currentCachedNotePage = -1;
+    
+    // Initialize markdown manager
+    markdownManager = new MarkdownWindowManager(this, this);
+    
+    // Connect pan/zoom signals to update markdown window positions
+    connect(this, &InkCanvas::panChanged, markdownManager, &MarkdownWindowManager::updateAllWindowPositions);
+    connect(this, &InkCanvas::zoomChanged, markdownManager, &MarkdownWindowManager::updateAllWindowPositions);
 }
 
 InkCanvas::~InkCanvas() {
@@ -75,7 +107,7 @@ void InkCanvas::initializeBuffer() {
 
     // Get logical screen size
     QSize logicalSize = screen ? screen->size() : QSize(1440, 900);
-    QSize pixelSize = logicalSize;
+    QSize pixelSize = logicalSize * dpr;
 
     buffer = QPixmap(pixelSize);
     buffer.fill(Qt::transparent);
@@ -86,6 +118,12 @@ void InkCanvas::initializeBuffer() {
 void InkCanvas::loadPdf(const QString &pdfPath) {
     pdfDocument = Poppler::Document::load(pdfPath);
     if (pdfDocument && !pdfDocument->isLocked()) {
+        // Enable anti-aliasing rendering hints for better text quality
+        pdfDocument->setRenderHint(Poppler::Document::Antialiasing, true);
+        pdfDocument->setRenderHint(Poppler::Document::TextAntialiasing, true);
+        pdfDocument->setRenderHint(Poppler::Document::TextHinting, true);
+        pdfDocument->setRenderHint(Poppler::Document::TextSlightHinting, true);
+        
         totalPdfPages = pdfDocument->numPages();
         isPdfLoaded = true;
         totalPdfPages = pdfDocument->numPages();
@@ -100,6 +138,8 @@ void InkCanvas::loadPdf(const QString &pdfPath) {
                 file.close();
             }
         }
+        // Emit signal that PDF was loaded
+        emit pdfLoaded();
     }
 }
 
@@ -109,6 +149,21 @@ void InkCanvas::clearPdf() {
     isPdfLoaded = false;
     totalPdfPages = 0;
     pdfCache.clear();
+    
+    // Reset cache system state
+    currentCachedPage = -1;
+    if (pdfCacheTimer && pdfCacheTimer->isActive()) {
+        pdfCacheTimer->stop();
+    }
+    
+    // Cancel and clean up any active PDF watchers
+    for (QFutureWatcher<void>* watcher : activePdfWatchers) {
+        if (watcher && !watcher->isFinished()) {
+            watcher->cancel();
+        }
+        watcher->deleteLater();
+    }
+    activePdfWatchers.clear();
 
     // ✅ Remove the PDF path file when clearing the PDF
     if (!saveFolder.isEmpty()) {
@@ -123,41 +178,58 @@ void InkCanvas::clearPdfNoDelete() {
     isPdfLoaded = false;
     totalPdfPages = 0;
     pdfCache.clear();
+    
+    // Reset cache system state
+    currentCachedPage = -1;
+    if (pdfCacheTimer && pdfCacheTimer->isActive()) {
+        pdfCacheTimer->stop();
+    }
+    
+    // Cancel and clean up any active PDF watchers
+    for (QFutureWatcher<void>* watcher : activePdfWatchers) {
+        if (watcher && !watcher->isFinished()) {
+            watcher->cancel();
+        }
+        watcher->deleteLater();
+    }
+    activePdfWatchers.clear();
 }
 
 void InkCanvas::loadPdfPage(int pageNumber) {
     if (!pdfDocument) return;
 
+    // Update current page tracker
+    currentCachedPage = pageNumber;
+
+    // Check if target page is already cached
     if (pdfCache.contains(pageNumber)) {
+        // Display the cached page immediately
         backgroundImage = *pdfCache.object(pageNumber);
         loadPage(pageNumber);  // Load annotations
+        loadPdfTextBoxes(pageNumber); // Load text boxes for PDF text selection
         update();
+        
+        // Check and cache adjacent pages after delay
+        checkAndCacheAdjacentPages(pageNumber);
         return;
     }
 
-    // ✅ Ensure the cache holds only 10 pages max
-    if (pdfCache.count() >= 10) {
-        auto oldestKey = pdfCache.keys().first();
-        pdfCache.remove(oldestKey);
-    }
-
-    // ✅ Render the page and store it in the cache
-    if (pageNumber >= 0 && pageNumber < pdfDocument->numPages()) {
-        std::unique_ptr<Poppler::Page> page(pdfDocument->page(pageNumber));
-        if (page) {
-            QImage pdfImage = page->renderToImage(pdfRenderDPI, pdfRenderDPI);
-            if (!pdfImage.isNull()) {
-                QPixmap cachedPixmap = QPixmap::fromImage(pdfImage);
-                pdfCache.insert(pageNumber, new QPixmap(cachedPixmap));
-
-                backgroundImage = cachedPixmap;
-            }
-        }
+    // Target page not in cache - render it immediately
+    renderPdfPageToCache(pageNumber);
+    
+    // Display the newly rendered page
+    if (pdfCache.contains(pageNumber)) {
+        backgroundImage = *pdfCache.object(pageNumber);
     } else {
-        backgroundImage = QPixmap();  // Clear background when out of range
+        backgroundImage = QPixmap();  // Clear background if rendering failed
     }
+    
     loadPage(pageNumber);  // Load existing canvas annotations
+    loadPdfTextBoxes(pageNumber); // Load text boxes for PDF text selection
     update();
+    
+    // Cache adjacent pages after delay
+    checkAndCacheAdjacentPages(pageNumber);
 }
 
 
@@ -179,6 +251,7 @@ void InkCanvas::loadPdfPreviewAsync(int pageNumber) {
         std::unique_ptr<Poppler::Page> page(pdfDocument->page(pageNumber));
         if (!page) return QPixmap();
 
+        // Render with document-level anti-aliasing settings
         QImage pdfImage = page->renderToImage(96, 96);
         if (pdfImage.isNull()) return QPixmap();
 
@@ -214,16 +287,10 @@ int InkCanvas::getProcessedRate() {
 
 
 void InkCanvas::resizeEvent(QResizeEvent *event) {
-    // Only resize the buffer if the new size is larger
-    if (event->size().width() > buffer.width() || event->size().height() > buffer.height()) {
-        QPixmap newBuffer(event->size());
-        newBuffer.fill(Qt::transparent);
-
-        QPainter painter(&newBuffer);
-        painter.drawPixmap(0, 0, buffer);
-        buffer = newBuffer;
-    }
-
+    // Don't resize the buffer when the widget resizes
+    // The buffer size should be determined by the PDF/document content, not the widget size
+    // The paintEvent will handle centering the buffer content within the widget
+    
     QWidget::resizeEvent(event);
 }
 
@@ -259,17 +326,19 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
 
     // Pan offset needs to be reversed because painter works in transformed coordinates
     painter.translate(-panOffsetX, -panOffsetY);
-    
+
     // Set clipping rectangle to canvas bounds to prevent painting outside
     painter.setClipRect(0, 0, buffer.width(), buffer.height());
 
-    // 🟨 Optional notebook-style background rendering
-    if (backgroundImage.isNull() && backgroundStyle != BackgroundStyle::None) {
-        // QPixmap bg(size());
+    // 🟨 Notebook-style background rendering
+    if (backgroundImage.isNull()) {
         painter.save();
-        painter.fillRect(QRectF(0, 0, buffer.width(), buffer.height()), backgroundColor);  // Default: Qt::white or Qt::transparent
+        
+        // Always apply background color regardless of style
+        painter.fillRect(QRectF(0, 0, buffer.width(), buffer.height()), backgroundColor);
 
-        // QPainter bgPainter(&bg);
+        // Only draw grid/lines if not "None" style
+        if (backgroundStyle != BackgroundStyle::None) {
         QPen linePen(QColor(100, 100, 100, 100));  // Subtle gray lines
         linePen.setWidthF(1.0);
         painter.setPen(linePen);
@@ -279,8 +348,6 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
         if (devicePixelRatioF() > 1.0)
             scaledDensity *= devicePixelRatioF();  // Optional DPI handling
 
-        // const int step = backgroundDensity;  // e.g., 40 px
-
         if (backgroundStyle == BackgroundStyle::Lines || backgroundStyle == BackgroundStyle::Grid) {
             for (int y = 0; y < buffer.height(); y += scaledDensity)
                 painter.drawLine(0, y, buffer.width(), y);
@@ -288,9 +355,9 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
         if (backgroundStyle == BackgroundStyle::Grid) {
             for (int x = 0; x < buffer.width(); x += scaledDensity)
             painter.drawLine(x, 0, x, buffer.height());
+            }
         }
 
-        // painter.drawPixmap(0, 0, buffer);
         painter.restore();
     }
 
@@ -350,8 +417,8 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
         painter.restore();
     }
 
-    // Draw selection rectangle if in rope tool mode and selecting or moving
-    if (ropeToolMode && (selectingWithRope || movingSelection)) {
+    // Draw selection rectangle if in rope tool mode and selecting, moving, or has a selection
+    if (ropeToolMode && (selectingWithRope || movingSelection || (!selectionBuffer.isNull() && !selectionRect.isEmpty()))) {
         painter.save(); // Save painter state for overlays
         painter.resetTransform(); // Reset transform to draw directly in logical widget coordinates
         
@@ -361,7 +428,7 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
             selectionPen.setWidthF(1.5); // Width in logical pixels
             painter.setPen(selectionPen);
             painter.drawPolygon(lassoPathPoints); // lassoPathPoints are logical widget coordinates
-        } else if (movingSelection && !selectionBuffer.isNull() && !selectionRect.isEmpty()) {
+        } else if (!selectionBuffer.isNull() && !selectionRect.isEmpty()) {
             // selectionRect is in logical widget coordinates.
             // selectionBuffer is in buffer coordinates, we need to handle scaling correctly
             QPixmap scaledBuffer = selectionBuffer;
@@ -398,6 +465,10 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
         painter.restore(); // Restore painter state to what it was for drawing the main buffer
     }
     
+
+    
+
+    
     // Restore the painter state
     painter.restore();
     
@@ -417,9 +488,136 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
     // Fill the outside region with the background color
     painter.setClipRegion(outsideRegion);
     painter.fillRect(widgetRect, palette().window().color());
+    
+    // Reset clipping for overlay elements that should appear on top
+    painter.setClipping(false);
+    
+    // Draw markdown selection overlay
+    if (markdownSelectionMode && markdownSelecting) {
+        painter.save();
+        QPen selectionPen(Qt::DashLine);
+        selectionPen.setColor(Qt::green);
+        selectionPen.setWidthF(2.0);
+        painter.setPen(selectionPen);
+        
+        QBrush selectionBrush(QColor(0, 255, 0, 30)); // Semi-transparent green
+        painter.setBrush(selectionBrush);
+        
+        QRect selectionRect = QRect(markdownSelectionStart, markdownSelectionEnd).normalized();
+        painter.drawRect(selectionRect);
+        painter.restore();
+    }
+    
+    // Draw PDF text selection overlay on top of everything
+    if (pdfTextSelectionEnabled && isPdfLoaded) {
+        painter.save(); // Save painter state for PDF text overlay
+        painter.resetTransform(); // Reset transform to draw directly in logical widget coordinates
+        
+        // Draw selection rectangle if actively selecting
+        if (pdfTextSelecting) {
+            QPen selectionPen(Qt::DashLine);
+            selectionPen.setColor(QColor(0, 120, 215)); // Blue selection rectangle
+            selectionPen.setWidthF(2.0); // Make it more visible
+            painter.setPen(selectionPen);
+            
+            QBrush selectionBrush(QColor(0, 120, 215, 30)); // Semi-transparent blue fill
+            painter.setBrush(selectionBrush);
+            
+            QRectF selectionRect(pdfSelectionStart, pdfSelectionEnd);
+            selectionRect = selectionRect.normalized();
+            painter.drawRect(selectionRect);
+        }
+        
+        // Draw highlights for selected text boxes
+        if (!selectedTextBoxes.isEmpty()) {
+            QColor highlightColor = QColor(255, 255, 0, 100); // Semi-transparent yellow
+            painter.setBrush(highlightColor);
+            painter.setPen(Qt::NoPen);
+            
+            // Draw highlight rectangles for selected text boxes
+            for (const Poppler::TextBox* textBox : selectedTextBoxes) {
+                if (textBox) {
+                    // Convert PDF coordinates to widget coordinates
+                    QRectF pdfRect = textBox->boundingBox();
+                    QPointF topLeft = mapPdfToWidgetCoordinates(pdfRect.topLeft());
+                    QPointF bottomRight = mapPdfToWidgetCoordinates(pdfRect.bottomRight());
+                    QRectF widgetRect(topLeft, bottomRight);
+                    widgetRect = widgetRect.normalized();
+                    
+                    painter.drawRect(widgetRect);
+                }
+            }
+        }
+        
+        painter.restore(); // Restore painter state
+    }
 }
 
 void InkCanvas::tabletEvent(QTabletEvent *event) {
+    // ✅ PRIORITY: Handle PDF text selection with stylus when enabled
+    // This redirects stylus input to text selection instead of drawing
+    if (pdfTextSelectionEnabled && isPdfLoaded) {
+        if (event->type() == QEvent::TabletPress) {
+            pdfTextSelecting = true;
+            pdfSelectionStart = event->position();
+            pdfSelectionEnd = pdfSelectionStart;
+            
+            // Clear any existing selected text boxes without resetting pdfTextSelecting
+            selectedTextBoxes.clear();
+            
+            setCursor(Qt::IBeamCursor); // Ensure cursor is correct
+            update(); // Refresh display
+            event->accept();
+            return;
+        } else if (event->type() == QEvent::TabletMove && pdfTextSelecting) {
+            pdfSelectionEnd = event->position();
+            
+            // Store pending selection for throttled processing (60 FPS throttling)
+            pendingSelectionStart = pdfSelectionStart;
+            pendingSelectionEnd = pdfSelectionEnd;
+            hasPendingSelection = true;
+            
+            // Start timer if not already running (throttled to 60 FPS)
+            if (!pdfTextSelectionTimer->isActive()) {
+                pdfTextSelectionTimer->start();
+            }
+            
+            // NOTE: No direct update() call here - let the timer handle updates at 60 FPS
+            event->accept();
+            return;
+        } else if (event->type() == QEvent::TabletRelease && pdfTextSelecting) {
+            pdfSelectionEnd = event->position();
+            
+            // Process any pending selection immediately on release
+            if (pdfTextSelectionTimer && pdfTextSelectionTimer->isActive()) {
+                pdfTextSelectionTimer->stop();
+                if (hasPendingSelection) {
+                    updatePdfTextSelection(pendingSelectionStart, pendingSelectionEnd);
+                    hasPendingSelection = false;
+                }
+            } else {
+                // Update selection with final position
+                updatePdfTextSelection(pdfSelectionStart, pdfSelectionEnd);
+            }
+            
+            pdfTextSelecting = false;
+            
+            // Check for link clicks if no text was selected
+            QString selectedText = getSelectedPdfText();
+            if (selectedText.isEmpty()) {
+                handlePdfLinkClick(event->position());
+            } else {
+                // Show context menu for text selection
+                QPoint globalPos = mapToGlobal(event->position().toPoint());
+                showPdfTextSelectionMenu(globalPos);
+            }
+            
+            event->accept();
+            return;
+        }
+    }
+    
+    // ✅ NORMAL STYLUS BEHAVIOR: Only reached when PDF text selection is OFF
     // Hardware eraser detection
     static bool hardwareEraserActive = false;
     bool wasUsingHardwareEraser = false;
@@ -452,17 +650,39 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
             straightLineStartPoint = lastPoint;
         }
         if (ropeToolMode) {
-            if (movingSelection && selectionRect.contains(lastPoint.toPoint())) { // lastPoint is QPointF
-                // Already moving, do nothing on press (movement handled by move events)
-                 lastMovePoint = lastPoint; // Update lastMovePoint
-            } else if (!selectionBuffer.isNull() && selectionRect.contains(lastPoint.toPoint())) {
-                // Start moving an existing selection
+            if (!selectionBuffer.isNull() && selectionRect.contains(lastPoint.toPoint())) {
+                // Start moving an existing selection (or continue if already moving)
                 movingSelection = true;
                 selectingWithRope = false;
                 lastMovePoint = lastPoint;
                 // Initialize the exact floating-point rect if it's empty
                 if (exactSelectionRectF.isEmpty()) {
                     exactSelectionRectF = QRectF(selectionRect);
+                }
+                
+                // If this selection was just copied, clear the area now that user is moving it
+                if (selectionJustCopied) {
+                    QPainter painter(&buffer);
+                    painter.setCompositionMode(QPainter::CompositionMode_Clear);
+                    QPointF bufferDest = mapLogicalWidgetToPhysicalBuffer(selectionRect.topLeft());
+                    QRect clearRect(bufferDest.toPoint(), selectionBuffer.size());
+                    // Only clear the part that's within buffer bounds
+                    QRect bufferBounds(0, 0, buffer.width(), buffer.height());
+                    QRect clippedClearRect = clearRect.intersected(bufferBounds);
+                    if (!clippedClearRect.isEmpty()) {
+                        painter.fillRect(clippedClearRect, Qt::transparent);
+                    }
+                    painter.end();
+                    selectionJustCopied = false; // Clear the flag
+                }
+                
+                // If the selection area hasn't been cleared from the buffer yet, clear it now
+                if (!selectionAreaCleared && !selectionMaskPath.isEmpty()) {
+                    QPainter painter(&buffer);
+                    painter.setCompositionMode(QPainter::CompositionMode_Clear);
+                    painter.fillPath(selectionMaskPath, Qt::transparent);
+                    painter.end();
+                    selectionAreaCleared = true;
                 }
                 // selectionBuffer already has the content.
                 // The original area in 'buffer' was already cleared when selection was made.
@@ -474,12 +694,20 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
                     lassoPathPoints.clear();
                     movingSelection = false;
                     selectingWithRope = false;
+                    selectionJustCopied = false;
+                    selectionAreaCleared = false;
+                    selectionMaskPath = QPainterPath();
+                    selectionBufferRect = QRectF();
                     update(); // Full update to remove old selection visuals
                     drawing = false; // Consumed this press for cancel
                     return;
                 }
                 selectingWithRope = true;
                 movingSelection = false;
+                selectionJustCopied = false;
+                selectionAreaCleared = false;
+                selectionMaskPath = QPainterPath();
+                selectionBufferRect = QRectF();
                 lassoPathPoints.clear();
                 lassoPathPoints << lastPoint; // Start the lasso path
                 selectionRect = QRect();
@@ -517,6 +745,8 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
                 lastMovePoint = event->posF();
                 if (!edited){
                     edited = true;
+                    // Invalidate cache for current page since it's been modified
+                    invalidateCurrentPageCache();
                 }
             }
         } else if (straightLineMode && !isErasing) {
@@ -606,6 +836,8 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
             update();
             if (!edited){
                 edited = true;
+                // Invalidate cache for current page since it's been modified
+                invalidateCurrentPageCache();
             }
         } else if (straightLineMode && isErasing) {
             // For erasing in straight line mode, most of the work is done during movement
@@ -619,6 +851,8 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
             update();
             if (!edited){
                 edited = true;
+                // Invalidate cache for current page since it's been modified
+                invalidateCurrentPageCache();
             }
         }
         
@@ -663,11 +897,14 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
                         selectionPainter.drawPixmap(0,0, originalPiece);
                         selectionPainter.end();
 
-                        // 7. Clear the selected area from the main buffer using the path
-                        QPainter mainBufferPainter(&buffer);
-                        mainBufferPainter.setCompositionMode(QPainter::CompositionMode_Clear);
-                        mainBufferPainter.fillPath(maskPath.translated(bufferPathBoundingRect.topLeft()), Qt::transparent);
-                        mainBufferPainter.end();
+                        // 7. DON'T clear the selected area from the main buffer yet
+                        // The area will only be cleared when the user actually starts moving the selection
+                        // This way, if the user cancels without moving, the original content remains
+                        selectionAreaCleared = false;
+                        
+                        // Store the mask path and buffer rect for later clearing when movement starts
+                        selectionMaskPath = maskPath.translated(bufferPathBoundingRect.topLeft());
+                        selectionBufferRect = bufferPathBoundingRect;
                         
                         // 8. Calculate the correct selectionRect in logical widget coordinates
                         QRectF logicalSelectionRect = mapRectBufferToWidgetLogical(bufferPathBoundingRect);
@@ -676,14 +913,26 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
                         
                         // Update the area of the selection on screen
                         update(logicalSelectionRect.adjusted(-2,-2,2,2).toRect());
+                        
+                        // Emit signal for context menu at the center of the selection with a delay
+                        // This allows the user to immediately start moving the selection if desired
+                        QPoint menuPosition = selectionRect.center();
+                        QTimer::singleShot(500, this, [this, menuPosition]() {
+                            // Only show menu if selection still exists and hasn't been moved
+                            if (!selectionBuffer.isNull() && !selectionRect.isEmpty() && !movingSelection) {
+                                emit ropeSelectionCompleted(menuPosition);
+                            }
+                        });
                     }
                 }
                 lassoPathPoints.clear(); // Ready for next selection, or move
-                selectingWithRope = false; 
+                selectingWithRope = false;
                 // Now, if the user presses inside selectionRect, movingSelection will become true.
             } else if (movingSelection) {
                 if (!selectionBuffer.isNull() && !selectionRect.isEmpty()) {
                     QPainter painter(&buffer);
+                    // Explicitly set composition mode to draw on top of existing content
+                    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
                     // Use exact floating-point position if available for more precise placement
                     QPointF topLeft = exactSelectionRectF.isEmpty() ? selectionRect.topLeft() : exactSelectionRectF.topLeft();
                     // Use proper coordinate transformation to get buffer coordinates
@@ -700,9 +949,15 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
                     selectionRect = QRect();
                     exactSelectionRectF = QRectF();
                     movingSelection = false;
+                    selectionJustCopied = false;
+                    selectionAreaCleared = false;
+                    selectionMaskPath = QPainterPath();
+                    selectionBufferRect = QRectF();
                 }
             }
         }
+        
+
     }
     event->accept();
 }
@@ -754,17 +1009,128 @@ QRectF InkCanvas::calculatePreviewRect(const QPointF &start, const QPointF &oldE
 }
 
 void InkCanvas::mousePressEvent(QMouseEvent *event) {
-    // Ignore mouse/touch input on canvas
+    // Handle markdown selection when enabled
+    if (markdownSelectionMode && event->button() == Qt::LeftButton) {
+        markdownSelecting = true;
+        markdownSelectionStart = event->pos();
+        markdownSelectionEnd = markdownSelectionStart;
+        event->accept();
+        return;
+    }
+    
+    // Handle PDF text selection when enabled (mouse/touch fallback - stylus handled in tabletEvent)
+    if (pdfTextSelectionEnabled && isPdfLoaded) {
+        if (event->button() == Qt::LeftButton) {
+            pdfTextSelecting = true;
+            pdfSelectionStart = event->position();
+            pdfSelectionEnd = pdfSelectionStart;
+            
+            // Clear any existing selected text boxes without resetting pdfTextSelecting
+            selectedTextBoxes.clear();
+            
+            setCursor(Qt::IBeamCursor); // Ensure cursor is correct
+            update(); // Refresh display
+            event->accept();
+            return;
+        }
+    }
+    
+    // Ignore mouse/touch input on canvas for drawing (drawing only works with tablet/stylus)
     event->ignore();
 }
 
 void InkCanvas::mouseMoveEvent(QMouseEvent *event) {
-    // Ignore mouse/touch input on canvas
+    // Handle markdown selection when enabled
+    if (markdownSelectionMode && markdownSelecting) {
+        markdownSelectionEnd = event->pos();
+        update(); // Refresh to show selection rectangle
+        event->accept();
+        return;
+    }
+    
+    // Handle PDF text selection when enabled (mouse/touch fallback - stylus handled in tabletEvent)
+    if (pdfTextSelectionEnabled && isPdfLoaded && pdfTextSelecting) {
+        pdfSelectionEnd = event->position();
+        
+        // Store pending selection for throttled processing
+        pendingSelectionStart = pdfSelectionStart;
+        pendingSelectionEnd = pdfSelectionEnd;
+        hasPendingSelection = true;
+        
+        // Start timer if not already running (throttled to 60 FPS)
+        if (!pdfTextSelectionTimer->isActive()) {
+            pdfTextSelectionTimer->start();
+        }
+        
+        event->accept();
+        return;
+    }
+    
+    // Update cursor based on mode when not actively selecting
+    if (pdfTextSelectionEnabled && isPdfLoaded && !pdfTextSelecting) {
+        setCursor(Qt::IBeamCursor);
+    }
+    
     event->ignore();
 }
 
 void InkCanvas::mouseReleaseEvent(QMouseEvent *event) {
-    // Ignore mouse/touch input on canvas
+    // Handle markdown selection when enabled
+    if (markdownSelectionMode && markdownSelecting && event->button() == Qt::LeftButton) {
+        markdownSelecting = false;
+        
+        // Create markdown window if selection is valid
+        QRect selectionRect = QRect(markdownSelectionStart, markdownSelectionEnd).normalized();
+        if (selectionRect.width() > 50 && selectionRect.height() > 50 && markdownManager) {
+            markdownManager->createMarkdownWindow(selectionRect);
+        }
+        
+        // Exit selection mode
+        setMarkdownSelectionMode(false);
+        
+        // Force screen update to clear the green selection overlay
+        update();
+        
+        event->accept();
+        return;
+    }
+    
+    // Handle PDF text selection when enabled (mouse/touch fallback - stylus handled in tabletEvent)
+    if (pdfTextSelectionEnabled && isPdfLoaded && pdfTextSelecting) {
+        if (event->button() == Qt::LeftButton) {
+            pdfSelectionEnd = event->position();
+            
+            // Process any pending selection immediately on release
+            if (pdfTextSelectionTimer && pdfTextSelectionTimer->isActive()) {
+                pdfTextSelectionTimer->stop();
+                if (hasPendingSelection) {
+                    updatePdfTextSelection(pendingSelectionStart, pendingSelectionEnd);
+                    hasPendingSelection = false;
+                }
+            } else {
+                // Update selection with final position
+                updatePdfTextSelection(pdfSelectionStart, pdfSelectionEnd);
+            }
+            
+            pdfTextSelecting = false;
+            
+            // Check for link clicks if no text was selected
+            QString selectedText = getSelectedPdfText();
+            if (selectedText.isEmpty()) {
+                handlePdfLinkClick(event->position());
+            } else {
+                // Show context menu for text selection
+                QPoint globalPos = mapToGlobal(event->position().toPoint());
+                showPdfTextSelectionMenu(globalPos);
+            }
+            
+            event->accept();
+            return;
+        }
+    }
+    
+
+    
     event->ignore();
 }
 
@@ -775,6 +1141,8 @@ void InkCanvas::drawStroke(const QPointF &start, const QPointF &end, qreal press
 
     if (!edited){
         edited = true;
+        // Invalidate cache for current page since it's been modified
+        invalidateCurrentPageCache();
     }
 
     QPainter painter(&buffer);
@@ -836,6 +1204,8 @@ void InkCanvas::eraseStroke(const QPointF &start, const QPointF &end, qreal pres
 
     if (!edited){
         edited = true;
+        // Invalidate cache for current page since it's been modified
+        invalidateCurrentPageCache();
     }
 
     QPainter painter(&buffer);
@@ -860,9 +1230,10 @@ void InkCanvas::eraseStroke(const QPointF &start, const QPointF &end, qreal pres
 
     painter.drawLine(bufferStart, bufferEnd);
 
+    qreal updatePadding = eraserThickness / 2.0 + 5.0; // Half the eraser thickness plus some extra padding
     QRectF updateRect = QRectF(bufferStart, bufferEnd)
                         .normalized()
-                        .adjusted(-10, -10, 10, 10);
+                        .adjusted(-updatePadding, -updatePadding, updatePadding, updatePadding);
 
     QRect scaledUpdateRect = QRect(
         ((updateRect.topLeft() - QPointF(panOffsetX, panOffsetY)) * (zoomFactor / 100.0) + QPointF(centerOffsetX, centerOffsetY)).toPoint(),
@@ -876,11 +1247,58 @@ void InkCanvas::setPenColor(const QColor &color) {
 }
 
 void InkCanvas::setPenThickness(qreal thickness) {
+    // Set thickness for the current tool
+    switch (currentTool) {
+        case ToolType::Pen:
+            penToolThickness = thickness;
+            break;
+        case ToolType::Marker:
+            markerToolThickness = thickness;
+            break;
+        case ToolType::Eraser:
+            eraserToolThickness = thickness;
+            break;
+    }
+    
+    // Update the current thickness for efficient drawing
     penThickness = thickness;
+}
+
+void InkCanvas::adjustAllToolThicknesses(qreal zoomRatio) {
+    // Adjust thickness for all tools to maintain visual consistency
+    penToolThickness *= zoomRatio;
+    markerToolThickness *= zoomRatio;
+    eraserToolThickness *= zoomRatio;
+    
+    // Update the current thickness based on the current tool
+    switch (currentTool) {
+        case ToolType::Pen:
+            penThickness = penToolThickness;
+            break;
+        case ToolType::Marker:
+            penThickness = markerToolThickness;
+            break;
+        case ToolType::Eraser:
+            penThickness = eraserToolThickness;
+            break;
+    }
 }
 
 void InkCanvas::setTool(ToolType tool) {
     currentTool = tool;
+    
+    // Switch to the thickness for the new tool
+    switch (currentTool) {
+        case ToolType::Pen:
+            penThickness = penToolThickness;
+            break;
+        case ToolType::Marker:
+            penThickness = markerToolThickness;
+            break;
+        case ToolType::Eraser:
+            penThickness = eraserToolThickness;
+            break;
+    }
 }
 
 void InkCanvas::setSaveFolder(const QString &folderPath) {
@@ -954,13 +1372,20 @@ void InkCanvas::saveToFile(int pageNumber) {
         return;
     }
 
-
     QImage image(buffer.size(), QImage::Format_ARGB32);
     image.fill(Qt::transparent);
     QPainter painter(&image);
     painter.drawPixmap(0, 0, buffer);
     image.save(filePath, "PNG");
     edited = false;
+    
+    // Save markdown windows for this page
+    if (markdownManager) {
+        markdownManager->saveWindowsForPage(pageNumber);
+    }
+    
+    // Update note cache with the saved buffer
+    noteCache.insert(pageNumber, new QPixmap(buffer));
 }
 
 void InkCanvas::saveAnnotated(int pageNumber) {
@@ -985,20 +1410,45 @@ void InkCanvas::saveAnnotated(int pageNumber) {
 void InkCanvas::loadPage(int pageNumber) {
     if (saveFolder.isEmpty()) return;
 
-    QString fileName = saveFolder + QString("/%1_%2.png").arg(notebookId).arg(pageNumber, 5, 10, QChar('0'));
+    // Hide any markdown windows from the previous page BEFORE loading the new page content.
+    // This ensures the correct repaint area and stops the transparency timer.
+    if (markdownManager) {
+        markdownManager->hideAllWindows();
+    }
 
+    // Update current note page tracker
+    currentCachedNotePage = pageNumber;
 
-    if (QFile::exists(fileName)) {
-        buffer.load(fileName);
+    // Check if note page is already cached
+    bool loadedFromCache = false;
+    if (noteCache.contains(pageNumber)) {
+        // Use cached note page immediately
+        buffer = *noteCache.object(pageNumber);
+        loadedFromCache = true;
+    } else {
+        // Load note page from disk and cache it
+        loadNotePageToCache(pageNumber);
+        
+        // Use the newly cached page or initialize buffer if loading failed
+        if (noteCache.contains(pageNumber)) {
+            buffer = *noteCache.object(pageNumber);
+            loadedFromCache = true;
     } else {
         initializeBuffer(); // Clear the canvas if no file exists
+        loadedFromCache = false;
     }
-    // Load PDF page as a background if applicable
+    }
+    
+    // Reset edited state when loading a new page
+    edited = false;
+    
+    // Handle background image loading (PDF or custom background)
     if (isPdfLoaded && pdfDocument && pageNumber >= 0 && pageNumber < pdfDocument->numPages()) {
-        // std::unique_ptr<Poppler::Page> pdfPage(pdfDocument->page(pageNumber));
-
+        // Use PDF as background (should already be cached by loadPdfPage)
+        if (pdfCache.contains(pageNumber)) {
         backgroundImage = *pdfCache.object(pageNumber);
-        // Resize canvas to match PDF page size
+            
+            // Resize canvas buffer to match PDF page size if needed
         if (backgroundImage.size() != buffer.size()) {
             QPixmap newBuffer(backgroundImage.size());
             newBuffer.fill(Qt::transparent);
@@ -1008,10 +1458,15 @@ void InkCanvas::loadPage(int pageNumber) {
             painter.drawPixmap(0, 0, buffer);
 
             buffer = newBuffer;
-            setMaximumSize(backgroundImage.width(), backgroundImage.height());
-        } 
+            // Don't constrain widget size - let it expand to fill available space
+            // The paintEvent will center the PDF content within the widget
         
+                // Update cache with resized buffer
+                noteCache.insert(pageNumber, new QPixmap(buffer));
+            }
+        }
     } else {
+        // Handle custom background images
         QString bgFileName = saveFolder + QString("/bg_%1_%2.png").arg(notebookId).arg(pageNumber, 5, 10, QChar('0'));
         QString metadataFile = saveFolder + QString("/.%1_bgsize_%2.txt").arg(notebookId).arg(pageNumber, 5, 10, QChar('0'));
 
@@ -1042,18 +1497,52 @@ void InkCanvas::loadPage(int pageNumber) {
                 // Assign the new buffer
                 buffer = newBuffer;
                 setMaximumSize(bgWidth, bgHeight);
+                
+                // Update cache with resized buffer
+                noteCache.insert(pageNumber, new QPixmap(buffer));
             }
         } else {
             backgroundImage = QPixmap(); // No background for this page
+            // Only apply device pixel ratio fix if buffer was NOT loaded from cache
+            // This prevents resizing cached buffers that might already be correctly sized
+            if (!loadedFromCache) {
+                QScreen *screen = QGuiApplication::primaryScreen();
+                qreal dpr = screen ? screen->devicePixelRatio() : 1.0;
+                QSize logicalSize = screen ? screen->size() : QSize(1440, 900);
+                QSize expectedPixelSize = logicalSize * dpr;
+                
+                if (buffer.size() != expectedPixelSize) {
+                    // Buffer is wrong size, need to resize it properly
+                    QPixmap newBuffer(expectedPixelSize);
+                    newBuffer.fill(Qt::transparent);
+                    
+                    // Copy existing drawings if buffer was smaller
+                    if (!buffer.isNull()) {
+                        QPainter painter(&newBuffer);
+                        painter.drawPixmap(0, 0, buffer);
+                    }
+                    
+                    buffer = newBuffer;
+                    setMaximumSize(expectedPixelSize);
+                }
+            }
         }
     }
 
-    // Check if a background exists for this page
-    
+    // Cache adjacent note pages after delay for faster navigation
+    checkAndCacheAdjacentNotePages(pageNumber);
 
     update();
     adjustSize();            // Force the widget to update its size
     parentWidget()->update();
+    
+    // Load markdown windows AFTER canvas is fully rendered and sized
+    // Use a single-shot timer to ensure the canvas is fully updated
+    QTimer::singleShot(0, this, [this, pageNumber]() {
+        if (markdownManager) {
+            markdownManager->loadWindowsForPage(pageNumber);
+        }
+    });
 }
 
 void InkCanvas::deletePage(int pageNumber) {
@@ -1072,6 +1561,14 @@ void InkCanvas::deletePage(int pageNumber) {
     QFile::remove(fileName);
     QFile::remove(bgFileName);
     QFile::remove(metadataFileName);
+
+    // Remove deleted page from note cache
+    noteCache.remove(pageNumber);
+
+    // Delete markdown windows for this page
+    if (markdownManager) {
+        markdownManager->deleteWindowsForPage(pageNumber);
+    }
 
     if (pdfDocument){
         loadPdfPage(pageNumber);
@@ -1139,9 +1636,13 @@ void InkCanvas::setBackground(const QString &filePath, int pageNumber) {
 }
 
 void InkCanvas::setZoom(int zoomLevel) {
-    zoomFactor = qMax(10, qMin(zoomLevel, 400)); // Limit zoom to 10%-400%
-    internalZoomFactor = zoomFactor; // Sync internal zoom
+    int newZoom = qMax(10, qMin(zoomLevel, 400)); // Limit zoom to 10%-400%
+    if (zoomFactor != newZoom) {
+        zoomFactor = newZoom;
+        internalZoomFactor = zoomFactor; // Sync internal zoom
     update();
+        emit zoomChanged(zoomFactor);
+    }
 }
 
 void InkCanvas::updatePanOffsets(int xOffset, int yOffset) {
@@ -1162,18 +1663,20 @@ int InkCanvas::getZoom() const {
     return zoomFactor;
 }
 
-QSize InkCanvas::getCanvasSize() const{
-    return buffer.size();
-}
-
 void InkCanvas::setPanX(int value) {
+    if (panOffsetX != value) {
     panOffsetX = value;
     update();
+        emit panChanged(panOffsetX, panOffsetY);
+    }
 }
 
 void InkCanvas::setPanY(int value) {
+    if (panOffsetY != value) {
     panOffsetY = value;
     update();
+        emit panChanged(panOffsetX, panOffsetY);
+    }
 }
 
 bool InkCanvas::isPdfLoadedFunc() const {
@@ -1182,6 +1685,10 @@ bool InkCanvas::isPdfLoadedFunc() const {
 
 int InkCanvas::getTotalPdfPages() const {
     return totalPdfPages;
+}
+
+Poppler::Document* InkCanvas::getPdfDocument() const {
+    return pdfDocument.get();
 }
 
 QString InkCanvas::getSaveFolder() const {
@@ -1586,3 +2093,813 @@ QRect InkCanvas::mapRectBufferToWidgetLogical(const QRectF& physicalBufferRect) 
     
     return widgetRect.toRect();
 }
+
+// Rope tool selection actions
+void InkCanvas::deleteRopeSelection() {
+    if (!selectionBuffer.isNull() && !selectionRect.isEmpty()) {
+        // If the selection area hasn't been cleared from the buffer yet, clear it now for deletion
+        if (!selectionAreaCleared && !selectionMaskPath.isEmpty()) {
+            QPainter painter(&buffer);
+            painter.setCompositionMode(QPainter::CompositionMode_Clear);
+            painter.fillPath(selectionMaskPath, Qt::transparent);
+            painter.end();
+        }
+        
+        // Clear the selection state
+        selectionBuffer = QPixmap();
+        selectionRect = QRect();
+        exactSelectionRectF = QRectF();
+        movingSelection = false;
+        selectingWithRope = false;
+        selectionJustCopied = false;
+        selectionAreaCleared = false;
+        selectionMaskPath = QPainterPath();
+        selectionBufferRect = QRectF();
+        
+        // Mark as edited since we deleted content
+        if (!edited) {
+            edited = true;
+            // Invalidate cache for current page since it's been modified
+            invalidateCurrentPageCache();
+        }
+        
+        // Update the entire canvas to remove selection visuals
+        update();
+    }
+}
+
+void InkCanvas::cancelRopeSelection() {
+    if (!selectionBuffer.isNull() && !selectionRect.isEmpty()) {
+        // Paste the selection back to its current location (where user moved it)
+        QPainter painter(&buffer);
+        // Explicitly set composition mode to draw on top of existing content
+        painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+        // Use the current selection position
+        QPointF currentTopLeft = exactSelectionRectF.isEmpty() ? selectionRect.topLeft() : exactSelectionRectF.topLeft();
+        QPointF bufferDest = mapLogicalWidgetToPhysicalBuffer(currentTopLeft);
+        painter.drawPixmap(bufferDest.toPoint(), selectionBuffer);
+        painter.end();
+        
+        // Store selection buffer size for update calculation before clearing it
+        QSize selectionSize = selectionBuffer.size();
+        QRect updateRect = QRect(currentTopLeft.toPoint(), selectionSize);
+        
+        // Clear the selection state
+        selectionBuffer = QPixmap();
+        selectionRect = QRect();
+        exactSelectionRectF = QRectF();
+        movingSelection = false;
+        selectingWithRope = false;
+        selectionJustCopied = false;
+        selectionAreaCleared = false;
+        selectionMaskPath = QPainterPath();
+        selectionBufferRect = QRectF();
+        
+        // Update the restored area
+        update(updateRect.adjusted(-5, -5, 5, 5));
+    }
+}
+
+void InkCanvas::copyRopeSelection() {
+    if (!selectionBuffer.isNull() && !selectionRect.isEmpty()) {
+        // Get current selection position
+        QPointF currentTopLeft = exactSelectionRectF.isEmpty() ? selectionRect.topLeft() : exactSelectionRectF.topLeft();
+        
+        // Calculate new position (right next to the original), but ensure it stays within canvas bounds
+        QPointF newTopLeft = currentTopLeft + QPointF(selectionRect.width() + 5, 0); // 5 pixels gap
+        
+        // Check if the new position would extend beyond buffer boundaries and adjust if needed
+        QPointF currentBufferDest = mapLogicalWidgetToPhysicalBuffer(currentTopLeft);
+        QPointF newBufferDest = mapLogicalWidgetToPhysicalBuffer(newTopLeft);
+        
+        // Ensure the copy stays within buffer bounds
+        if (newBufferDest.x() + selectionBuffer.width() > buffer.width()) {
+            // If it would extend beyond right edge, place it to the left of the original
+            newTopLeft = currentTopLeft - QPointF(selectionRect.width() + 5, 0);
+            newBufferDest = mapLogicalWidgetToPhysicalBuffer(newTopLeft);
+            
+            // If it still doesn't fit on the left, place it below the original
+            if (newBufferDest.x() < 0) {
+                newTopLeft = currentTopLeft + QPointF(0, selectionRect.height() + 5);
+                newBufferDest = mapLogicalWidgetToPhysicalBuffer(newTopLeft);
+                
+                // If it doesn't fit below either, place it above
+                if (newBufferDest.y() + selectionBuffer.height() > buffer.height()) {
+                    newTopLeft = currentTopLeft - QPointF(0, selectionRect.height() + 5);
+                    newBufferDest = mapLogicalWidgetToPhysicalBuffer(newTopLeft);
+                    
+                    // If none of the positions work, just offset slightly and let it extend
+                    if (newBufferDest.y() < 0) {
+                        newTopLeft = currentTopLeft + QPointF(10, 10);
+                        newBufferDest = mapLogicalWidgetToPhysicalBuffer(newTopLeft);
+                    }
+                }
+            }
+        }
+        if (newBufferDest.y() + selectionBuffer.height() > buffer.height()) {
+            // If it would extend beyond bottom edge, place it above the original
+            newTopLeft = currentTopLeft - QPointF(0, selectionRect.height() + 5);
+            newBufferDest = mapLogicalWidgetToPhysicalBuffer(newTopLeft);
+        }
+        
+        // First, paste the selection back to its current location to restore the original
+        QPainter painter(&buffer);
+        // Explicitly set composition mode to draw on top of existing content
+        painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+        painter.drawPixmap(currentBufferDest.toPoint(), selectionBuffer);
+        
+        // Then, paste the copy to the new location
+        // We need to handle the case where the copy extends beyond buffer boundaries
+        QRect targetRect(newBufferDest.toPoint(), selectionBuffer.size());
+        QRect bufferBounds(0, 0, buffer.width(), buffer.height());
+        QRect clippedRect = targetRect.intersected(bufferBounds);
+        
+        if (!clippedRect.isEmpty()) {
+            // Calculate which part of the selectionBuffer to draw
+            QRect sourceRect = QRect(
+                clippedRect.x() - targetRect.x(),
+                clippedRect.y() - targetRect.y(),
+                clippedRect.width(),
+                clippedRect.height()
+            );
+            
+            painter.drawPixmap(clippedRect, selectionBuffer, sourceRect);
+        }
+        
+        // For the selection buffer, we keep the FULL content, even if parts extend beyond canvas
+        // This way when the user drags it back, the full content is preserved
+        QPixmap newSelectionBuffer = selectionBuffer; // Keep the full original content
+        
+        // DON'T clear the copied area immediately - leave both original and copy on the canvas
+        // The copy will only be cleared when the user actually starts moving the selection
+        // This way, if the user cancels without moving, both original and copy remain permanently
+        painter.end();
+        
+        // Update the selection buffer and position
+        selectionBuffer = newSelectionBuffer;
+        selectionRect = QRect(newTopLeft.toPoint(), selectionRect.size());
+        exactSelectionRectF = QRectF(newTopLeft, selectionRect.size());
+        selectionJustCopied = true; // Mark that this selection was just copied
+        
+        // Mark as edited since we added content
+        if (!edited) {
+            edited = true;
+            // Invalidate cache for current page since it's been modified
+            invalidateCurrentPageCache();
+        }
+        
+        // Update the entire affected area (original + copy + gap)
+        QRect updateArea = QRect(currentTopLeft.toPoint(), selectionRect.size())
+                          .united(selectionRect)
+                          .adjusted(-10, -10, 10, 10);
+        update(updateArea);
+    }
+}
+
+// PDF text selection implementation
+void InkCanvas::clearPdfTextSelection() {
+    // Clear selection state
+    selectedTextBoxes.clear();
+    pdfTextSelecting = false;
+    
+    // Cancel any pending throttled updates
+    if (pdfTextSelectionTimer && pdfTextSelectionTimer->isActive()) {
+        pdfTextSelectionTimer->stop();
+    }
+    hasPendingSelection = false;
+    
+    // Refresh display
+    update();
+}
+
+QString InkCanvas::getSelectedPdfText() const {
+    if (selectedTextBoxes.isEmpty()) {
+        return QString();
+    }
+    
+    // Pre-allocate string with estimated size for efficiency
+    QString selectedText;
+    selectedText.reserve(selectedTextBoxes.size() * 20); // Estimate ~20 chars per text box
+    
+    // Build text with space separators
+    for (const Poppler::TextBox* textBox : selectedTextBoxes) {
+        if (textBox && !textBox->text().isEmpty()) {
+            if (!selectedText.isEmpty()) {
+                selectedText += " ";
+            }
+            selectedText += textBox->text();
+        }
+    }
+    
+    return selectedText;
+}
+
+void InkCanvas::loadPdfTextBoxes(int pageNumber) {
+    // Clear existing text boxes
+    qDeleteAll(currentPdfTextBoxes);
+    currentPdfTextBoxes.clear();
+    
+    if (!pdfDocument || pageNumber < 0 || pageNumber >= pdfDocument->numPages()) {
+        return;
+    }
+    
+    // Get the page for text operations
+    currentPdfPageForText = std::unique_ptr<Poppler::Page>(pdfDocument->page(pageNumber));
+    if (!currentPdfPageForText) {
+        return;
+    }
+    
+    // Load text boxes for the page
+    auto textBoxVector = currentPdfPageForText->textList();
+    currentPdfTextBoxes.clear();
+    for (auto& textBox : textBoxVector) {
+        currentPdfTextBoxes.append(textBox.release()); // Transfer ownership to QList
+    }
+}
+
+QPointF InkCanvas::mapWidgetToPdfCoordinates(const QPointF &widgetPoint) {
+    if (!currentPdfPageForText || backgroundImage.isNull()) {
+        return QPointF();
+    }
+    
+    // Use the same zoom factor as in paintEvent (internalZoomFactor for smooth animations)
+    qreal zoom = internalZoomFactor / 100.0;
+    
+    // Calculate the scaled canvas size (same as in paintEvent)
+    qreal scaledCanvasWidth = buffer.width() * zoom;
+    qreal scaledCanvasHeight = buffer.height() * zoom;
+    
+    // Calculate centering offsets (same as in paintEvent)
+    qreal centerOffsetX = 0;
+    qreal centerOffsetY = 0;
+    
+    // Center horizontally if canvas is smaller than widget
+    if (scaledCanvasWidth < width()) {
+        centerOffsetX = (width() - scaledCanvasWidth) / 2.0;
+    }
+    
+    // Center vertically if canvas is smaller than widget
+    if (scaledCanvasHeight < height()) {
+        centerOffsetY = (height() - scaledCanvasHeight) / 2.0;
+    }
+    
+    // Reverse the transformations applied in paintEvent
+    QPointF adjustedPoint = widgetPoint;
+    adjustedPoint -= QPointF(centerOffsetX, centerOffsetY);
+    adjustedPoint /= zoom;
+    adjustedPoint += QPointF(panOffsetX, panOffsetY);
+    
+    // Convert to PDF coordinates
+    // Since Poppler renders the PDF in Qt coordinate system (top-left origin),
+    // we don't need to flip the Y coordinate
+    QSizeF pdfPageSize = currentPdfPageForText->pageSizeF();
+    QSizeF imageSize = backgroundImage.size();
+    
+    // Scale from image coordinates to PDF coordinates
+    qreal scaleX = pdfPageSize.width() / imageSize.width();
+    qreal scaleY = pdfPageSize.height() / imageSize.height();
+    
+    QPointF pdfPoint;
+    pdfPoint.setX(adjustedPoint.x() * scaleX);
+    pdfPoint.setY(adjustedPoint.y() * scaleY); // No Y-axis flipping needed
+    
+    return pdfPoint;
+}
+
+QPointF InkCanvas::mapPdfToWidgetCoordinates(const QPointF &pdfPoint) {
+    if (!currentPdfPageForText || backgroundImage.isNull()) {
+        return QPointF();
+    }
+    
+    // Convert from PDF coordinates to image coordinates
+    QSizeF pdfPageSize = currentPdfPageForText->pageSizeF();
+    QSizeF imageSize = backgroundImage.size();
+    
+    // Scale from PDF coordinates to image coordinates
+    qreal scaleX = imageSize.width() / pdfPageSize.width();
+    qreal scaleY = imageSize.height() / pdfPageSize.height();
+    
+    QPointF imagePoint;
+    imagePoint.setX(pdfPoint.x() * scaleX);
+    imagePoint.setY(pdfPoint.y() * scaleY); // No Y-axis flipping needed
+    
+    // Use the same zoom factor as in paintEvent (internalZoomFactor for smooth animations)
+    qreal zoom = internalZoomFactor / 100.0;
+    
+    // Apply the same transformations as in paintEvent
+    QPointF widgetPoint = imagePoint;
+    widgetPoint -= QPointF(panOffsetX, panOffsetY);
+    widgetPoint *= zoom;
+    
+    // Calculate the scaled canvas size (same as in paintEvent)
+    qreal scaledCanvasWidth = buffer.width() * zoom;
+    qreal scaledCanvasHeight = buffer.height() * zoom;
+    
+    // Calculate centering offsets (same as in paintEvent)
+    qreal centerOffsetX = 0;
+    qreal centerOffsetY = 0;
+    
+    // Center horizontally if canvas is smaller than widget
+    if (scaledCanvasWidth < width()) {
+        centerOffsetX = (width() - scaledCanvasWidth) / 2.0;
+    }
+    
+    // Center vertically if canvas is smaller than widget
+    if (scaledCanvasHeight < height()) {
+        centerOffsetY = (height() - scaledCanvasHeight) / 2.0;
+    }
+    
+    widgetPoint += QPointF(centerOffsetX, centerOffsetY);
+    
+    return widgetPoint;
+}
+
+void InkCanvas::updatePdfTextSelection(const QPointF &start, const QPointF &end) {
+    // Early return if PDF is not loaded or no text boxes available
+    if (!isPdfLoaded || currentPdfTextBoxes.isEmpty()) {
+        return;
+    }
+    
+    // Clear previous selection efficiently
+    selectedTextBoxes.clear();
+    
+    // Create normalized selection rectangle in widget coordinates
+    QRectF widgetSelectionRect(start, end);
+    widgetSelectionRect = widgetSelectionRect.normalized();
+    
+    // Convert to PDF coordinate space
+    QPointF pdfTopLeft = mapWidgetToPdfCoordinates(widgetSelectionRect.topLeft());
+    QPointF pdfBottomRight = mapWidgetToPdfCoordinates(widgetSelectionRect.bottomRight());
+    QRectF pdfSelectionRect(pdfTopLeft, pdfBottomRight);
+    pdfSelectionRect = pdfSelectionRect.normalized();
+    
+    // Reserve space for efficiency if we expect many selections
+    selectedTextBoxes.reserve(qMin(currentPdfTextBoxes.size(), 50));
+    
+    // Find intersecting text boxes with optimized loop
+    for (const Poppler::TextBox* textBox : currentPdfTextBoxes) {
+        if (textBox && textBox->boundingBox().intersects(pdfSelectionRect)) {
+            selectedTextBoxes.append(const_cast<Poppler::TextBox*>(textBox));
+        }
+    }
+    
+    // Only emit signal and update if we have selected text
+    if (!selectedTextBoxes.isEmpty()) {
+        QString selectedText = getSelectedPdfText();
+        if (!selectedText.isEmpty()) {
+            emit pdfTextSelected(selectedText);
+        }
+    }
+    
+    // Trigger repaint to show selection
+    update();
+}
+
+QList<Poppler::TextBox*> InkCanvas::getTextBoxesInSelection(const QPointF &start, const QPointF &end) {
+    QList<Poppler::TextBox*> selectedBoxes;
+    
+    if (!currentPdfPageForText) {
+        // qDebug() << "PDF text selection: No current page for text";
+        return selectedBoxes;
+    }
+    
+    // Convert widget coordinates to PDF coordinates
+    QPointF pdfStart = mapWidgetToPdfCoordinates(start);
+    QPointF pdfEnd = mapWidgetToPdfCoordinates(end);
+    
+    // qDebug() << "PDF text selection: Widget coords" << start << "to" << end;
+    // qDebug() << "PDF text selection: PDF coords" << pdfStart << "to" << pdfEnd;
+    
+    // Create selection rectangle in PDF coordinates
+    QRectF selectionRect(pdfStart, pdfEnd);
+    selectionRect = selectionRect.normalized();
+    
+    // qDebug() << "PDF text selection: Selection rect in PDF coords:" << selectionRect;
+    
+    // Find text boxes that intersect with the selection
+    int intersectionCount = 0;
+    for (Poppler::TextBox* textBox : currentPdfTextBoxes) {
+        if (textBox) {
+            QRectF textBoxRect = textBox->boundingBox();
+            bool intersects = textBoxRect.intersects(selectionRect);
+            
+            if (intersects) {
+                selectedBoxes.append(textBox);
+                intersectionCount++;
+                // qDebug() << "PDF text selection: Text box intersects:" << textBox->text() 
+                //          << "at" << textBoxRect;
+            }
+        }
+    }
+    
+    // qDebug() << "PDF text selection: Found" << intersectionCount << "intersecting text boxes";
+    
+    return selectedBoxes;
+}
+
+void InkCanvas::handlePdfLinkClick(const QPointF &position) {
+    if (!isPdfLoaded || !currentPdfPageForText) {
+        return;
+    }
+    
+    // Convert widget coordinates to PDF coordinates
+    QPointF pdfPoint = mapWidgetToPdfCoordinates(position);
+    
+    // Get PDF page size for reference
+    QSizeF pdfPageSize = currentPdfPageForText->pageSizeF();
+    
+    // Convert to normalized coordinates (0.0 to 1.0) to match Poppler's link coordinate system
+    QPointF normalizedPoint(pdfPoint.x() / pdfPageSize.width(), pdfPoint.y() / pdfPageSize.height());
+    
+    // Get links for the current page
+    auto links = currentPdfPageForText->links();
+    
+    for (const auto& link : links) {
+        QRectF linkArea = link->linkArea();
+        
+        // Normalize the rectangle to handle negative width/height
+        QRectF normalizedLinkArea = linkArea.normalized();
+        
+        // Check if the normalized rectangle contains the normalized point
+        if (normalizedLinkArea.contains(normalizedPoint)) {
+            // Handle different types of links
+            if (link->linkType() == Poppler::Link::Goto) {
+                Poppler::LinkGoto* gotoLink = static_cast<Poppler::LinkGoto*>(link.get());
+                if (gotoLink && gotoLink->destination().pageNumber() >= 0) {
+                    int targetPage = gotoLink->destination().pageNumber() - 1; // Convert to 0-based
+                    emit pdfLinkClicked(targetPage);
+                    return;
+                }
+            }
+            // Add other link types as needed (URI, etc.)
+        }
+    }
+}
+
+void InkCanvas::showPdfTextSelectionMenu(const QPoint &position) {
+    QString selectedText = getSelectedPdfText();
+    if (selectedText.isEmpty()) {
+        return; // No text selected, don't show menu
+    }
+    
+    // Create context menu
+    QMenu *contextMenu = new QMenu(this);
+    contextMenu->setAttribute(Qt::WA_DeleteOnClose);
+    
+    // Add Copy action
+    QAction *copyAction = contextMenu->addAction(tr("Copy"));
+    copyAction->setIcon(QIcon(":/resources/icons/copy.png")); // You may need to add this icon
+    connect(copyAction, &QAction::triggered, this, [selectedText]() {
+        QClipboard *clipboard = QGuiApplication::clipboard();
+        clipboard->setText(selectedText);
+    });
+    
+    // Add separator
+    contextMenu->addSeparator();
+    
+    // Add Cancel action
+    QAction *cancelAction = contextMenu->addAction(tr("Cancel"));
+    cancelAction->setIcon(QIcon(":/resources/icons/cross.png"));
+    connect(cancelAction, &QAction::triggered, this, [this]() {
+        clearPdfTextSelection();
+    });
+    
+    // Show the menu at the specified position
+    contextMenu->popup(position);
+}
+
+void InkCanvas::processPendingTextSelection() {
+    if (!hasPendingSelection) {
+        return;
+    }
+    
+    // Process the pending selection update
+    updatePdfTextSelection(pendingSelectionStart, pendingSelectionEnd);
+    hasPendingSelection = false;
+}
+
+// Intelligent PDF Cache System Implementation
+
+bool InkCanvas::isValidPageNumber(int pageNumber) const {
+    return (pageNumber >= 0 && pageNumber < totalPdfPages);
+}
+
+void InkCanvas::renderPdfPageToCache(int pageNumber) {
+    if (!pdfDocument || !isValidPageNumber(pageNumber)) {
+        return;
+    }
+    
+    // Check if already cached
+    if (pdfCache.contains(pageNumber)) {
+        return;
+    }
+    
+    // Ensure the cache holds only 10 pages max
+    if (pdfCache.count() >= 10) {
+        auto oldestKey = pdfCache.keys().first();
+        pdfCache.remove(oldestKey);
+    }
+    
+    // Render the page and store it in the cache
+    std::unique_ptr<Poppler::Page> page(pdfDocument->page(pageNumber));
+    if (page) {
+        // Render with document-level anti-aliasing settings
+        QImage pdfImage = page->renderToImage(pdfRenderDPI, pdfRenderDPI);
+        if (!pdfImage.isNull()) {
+            QPixmap cachedPixmap = QPixmap::fromImage(pdfImage);
+            pdfCache.insert(pageNumber, new QPixmap(cachedPixmap));
+        }
+    }
+}
+
+void InkCanvas::checkAndCacheAdjacentPages(int targetPage) {
+    if (!pdfDocument || !isValidPageNumber(targetPage)) {
+        return;
+    }
+    
+    // Calculate adjacent pages
+    int prevPage = targetPage - 1;
+    int nextPage = targetPage + 1;
+    
+    // Check what needs to be cached
+    bool needPrevPage = isValidPageNumber(prevPage) && !pdfCache.contains(prevPage);
+    bool needCurrentPage = !pdfCache.contains(targetPage);
+    bool needNextPage = isValidPageNumber(nextPage) && !pdfCache.contains(nextPage);
+    
+    // If all pages are cached, nothing to do
+    if (!needPrevPage && !needCurrentPage && !needNextPage) {
+        return;
+    }
+    
+    // Stop any existing timer
+    if (pdfCacheTimer && pdfCacheTimer->isActive()) {
+        pdfCacheTimer->stop();
+    }
+    
+    // Create timer if it doesn't exist
+    if (!pdfCacheTimer) {
+        pdfCacheTimer = new QTimer(this);
+        pdfCacheTimer->setSingleShot(true);
+        connect(pdfCacheTimer, &QTimer::timeout, this, &InkCanvas::cacheAdjacentPages);
+    }
+    
+    // Store the target page for validation when timer fires
+    pendingCacheTargetPage = targetPage;
+    
+    // Start 1-second delay timer
+    pdfCacheTimer->start(1000);
+}
+
+void InkCanvas::cacheAdjacentPages() {
+    if (!pdfDocument || currentCachedPage < 0) {
+        return;
+    }
+    
+    // Check if the user has moved to a different page since the timer was started
+    // If so, skip caching adjacent pages as they're no longer relevant
+    if (pendingCacheTargetPage != currentCachedPage) {
+        return; // User switched pages, don't cache adjacent pages for old page
+    }
+    
+    int targetPage = currentCachedPage;
+    int prevPage = targetPage - 1;
+    int nextPage = targetPage + 1;
+    
+    // Create list of pages to cache asynchronously
+    QList<int> pagesToCache;
+    
+    // Add previous page if needed
+    if (isValidPageNumber(prevPage) && !pdfCache.contains(prevPage)) {
+        pagesToCache.append(prevPage);
+    }
+    
+    // Add next page if needed
+    if (isValidPageNumber(nextPage) && !pdfCache.contains(nextPage)) {
+        pagesToCache.append(nextPage);
+    }
+    
+    // Cache pages asynchronously
+    for (int pageNum : pagesToCache) {
+        QFutureWatcher<void> *watcher = new QFutureWatcher<void>(this);
+        
+        // Track the watcher for cleanup
+        activePdfWatchers.append(watcher);
+        
+        connect(watcher, &QFutureWatcher<void>::finished, this, [this, watcher]() {
+            // Remove from active list and delete
+            activePdfWatchers.removeOne(watcher);
+            watcher->deleteLater();
+        });
+        
+        // Capture pageNum by value to avoid issues with lambda capture
+        QFuture<void> future = QtConcurrent::run([this, pageNum]() {
+            renderPdfPageToCache(pageNum);
+        });
+        
+        watcher->setFuture(future);
+    }
+}
+
+// Intelligent Note Cache System Implementation
+
+QString InkCanvas::getNotePageFilePath(int pageNumber) const {
+    if (saveFolder.isEmpty() || notebookId.isEmpty()) {
+        return QString();
+    }
+    return saveFolder + QString("/%1_%2.png").arg(notebookId).arg(pageNumber, 5, 10, QChar('0'));
+}
+
+void InkCanvas::loadNotePageToCache(int pageNumber) {
+    // Check if already cached
+    if (noteCache.contains(pageNumber)) {
+        return;
+    }
+    
+    QString filePath = getNotePageFilePath(pageNumber);
+    if (filePath.isEmpty()) {
+        return;
+    }
+    
+    // Ensure the cache doesn't exceed its limit
+    if (noteCache.count() >= 15) {
+        // QCache will automatically remove least recently used items
+        // but we can be explicit about it
+        auto keys = noteCache.keys();
+        if (!keys.isEmpty()) {
+            noteCache.remove(keys.first());
+        }
+    }
+    
+    // Load note page from disk if it exists
+    if (QFile::exists(filePath)) {
+        QPixmap notePixmap;
+        if (notePixmap.load(filePath)) {
+            noteCache.insert(pageNumber, new QPixmap(notePixmap));
+        }
+    }
+    // If file doesn't exist, we don't cache anything - loadPage will handle initialization
+}
+
+void InkCanvas::checkAndCacheAdjacentNotePages(int targetPage) {
+    if (saveFolder.isEmpty()) {
+        return;
+    }
+    
+    // Calculate adjacent pages
+    int prevPage = targetPage - 1;
+    int nextPage = targetPage + 1;
+    
+    // Check what needs to be cached (we don't have a max page limit for notes)
+    bool needPrevPage = (prevPage >= 0) && !noteCache.contains(prevPage);
+    bool needCurrentPage = !noteCache.contains(targetPage);
+    bool needNextPage = !noteCache.contains(nextPage); // No upper limit check for notes
+    
+    // If all nearby pages are cached, nothing to do
+    if (!needPrevPage && !needCurrentPage && !needNextPage) {
+        return;
+    }
+    
+    // Stop any existing timer
+    if (noteCacheTimer && noteCacheTimer->isActive()) {
+        noteCacheTimer->stop();
+    }
+    
+    // Create timer if it doesn't exist
+    if (!noteCacheTimer) {
+        noteCacheTimer = new QTimer(this);
+        noteCacheTimer->setSingleShot(true);
+        connect(noteCacheTimer, &QTimer::timeout, this, &InkCanvas::cacheAdjacentNotePages);
+    }
+    
+    // Store the target page for validation when timer fires
+    pendingNoteCacheTargetPage = targetPage;
+    
+    // Start 1-second delay timer
+    noteCacheTimer->start(1000);
+}
+
+void InkCanvas::cacheAdjacentNotePages() {
+    if (saveFolder.isEmpty() || currentCachedNotePage < 0) {
+        return;
+    }
+    
+    // Check if the user has moved to a different page since the timer was started
+    // If so, skip caching adjacent pages as they're no longer relevant
+    if (pendingNoteCacheTargetPage != currentCachedNotePage) {
+        return; // User switched pages, don't cache adjacent pages for old page
+    }
+    
+    int targetPage = currentCachedNotePage;
+    int prevPage = targetPage - 1;
+    int nextPage = targetPage + 1;
+    
+    // Create list of note pages to cache asynchronously
+    QList<int> notePagesToCache;
+    
+    // Add previous page if needed (check for >= 0 since notes can start from page 0)
+    if (prevPage >= 0 && !noteCache.contains(prevPage)) {
+        notePagesToCache.append(prevPage);
+    }
+    
+    // Add next page if needed (no upper limit check for notes)
+    if (!noteCache.contains(nextPage)) {
+        notePagesToCache.append(nextPage);
+    }
+    
+    // Cache note pages asynchronously
+    for (int pageNum : notePagesToCache) {
+        QFutureWatcher<void> *watcher = new QFutureWatcher<void>(this);
+        
+        // Track the watcher for cleanup
+        activeNoteWatchers.append(watcher);
+        
+        connect(watcher, &QFutureWatcher<void>::finished, this, [this, watcher]() {
+            // Remove from active list and delete
+            activeNoteWatchers.removeOne(watcher);
+            watcher->deleteLater();
+        });
+        
+        // Capture pageNum by value to avoid issues with lambda capture
+        QFuture<void> future = QtConcurrent::run([this, pageNum]() {
+            loadNotePageToCache(pageNum);
+        });
+        
+        watcher->setFuture(future);
+    }
+}
+
+void InkCanvas::invalidateCurrentPageCache() {
+    if (currentCachedNotePage >= 0) {
+        noteCache.remove(currentCachedNotePage);
+    }
+}
+
+// Markdown integration methods
+void InkCanvas::setMarkdownSelectionMode(bool enabled) {
+    markdownSelectionMode = enabled;
+    
+    if (markdownManager) {
+        markdownManager->setSelectionMode(enabled);
+    }
+    
+    if (!enabled) {
+        markdownSelecting = false;
+    }
+    
+    // Update cursor
+    setCursor(enabled ? Qt::CrossCursor : Qt::ArrowCursor);
+    
+    // Notify signal
+    emit markdownSelectionModeChanged(enabled);
+}
+
+bool InkCanvas::isMarkdownSelectionMode() const {
+    return markdownSelectionMode;
+}
+
+// Canvas coordinate conversion methods
+QPointF InkCanvas::mapWidgetToCanvas(const QPointF &widgetPoint) const {
+    // Use the same coordinate transformation logic as mapLogicalWidgetToPhysicalBuffer
+    qreal scaledCanvasWidth = buffer.width() * (zoomFactor / 100.0);
+    qreal scaledCanvasHeight = buffer.height() * (zoomFactor / 100.0);
+    qreal centerOffsetX = (scaledCanvasWidth < width()) ? (width() - scaledCanvasWidth) / 2.0 : 0;
+    qreal centerOffsetY = (scaledCanvasHeight < height()) ? (height() - scaledCanvasHeight) / 2.0 : 0;
+    
+    // Convert widget position to canvas position
+    QPointF adjustedPoint = widgetPoint - QPointF(centerOffsetX, centerOffsetY);
+    QPointF canvasPoint = (adjustedPoint / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
+    
+    return canvasPoint;
+}
+
+QPointF InkCanvas::mapCanvasToWidget(const QPointF &canvasPoint) const {
+    // Reverse the transformation from mapWidgetToCanvas
+    qreal scaledCanvasWidth = buffer.width() * (zoomFactor / 100.0);
+    qreal scaledCanvasHeight = buffer.height() * (zoomFactor / 100.0);
+    qreal centerOffsetX = (scaledCanvasWidth < width()) ? (width() - scaledCanvasWidth) / 2.0 : 0;
+    qreal centerOffsetY = (scaledCanvasHeight < height()) ? (height() - scaledCanvasHeight) / 2.0 : 0;
+    
+    // Convert canvas position to widget position
+    QPointF widgetPoint = (canvasPoint - QPointF(panOffsetX, panOffsetY)) * (zoomFactor / 100.0) + QPointF(centerOffsetX, centerOffsetY);
+    
+    return widgetPoint;
+}
+
+QRect InkCanvas::mapWidgetToCanvas(const QRect &widgetRect) const {
+    QPointF topLeft = mapWidgetToCanvas(widgetRect.topLeft());
+    QPointF bottomRight = mapWidgetToCanvas(widgetRect.bottomRight());
+    
+    return QRect(topLeft.toPoint(), bottomRight.toPoint());
+}
+
+QRect InkCanvas::mapCanvasToWidget(const QRect &canvasRect) const {
+    QPointF topLeft = mapCanvasToWidget(canvasRect.topLeft());
+    QPointF bottomRight = mapCanvasToWidget(canvasRect.bottomRight());
+    
+    return QRect(topLeft.toPoint(), bottomRight.toPoint());
+}
+
+
+
+
+

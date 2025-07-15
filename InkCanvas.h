@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QTabletEvent>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPixmap>
 #include <QElapsedTimer>
 #include <deque>
@@ -13,6 +14,11 @@
 #include <poppler-qt6.h>
 #include <QCache>
 #include <QTimer>
+#include <QMenu>
+#include <QClipboard>
+#include <QFutureWatcher>
+
+class MarkdownWindowManager;
 
 enum class BackgroundStyle {
     None,
@@ -27,6 +33,11 @@ signals:
     void zoomChanged(int newZoom);
     void panChanged(int panX, int panY);
     void touchGestureEnded(); // Signal emitted when touch gestures end
+    void ropeSelectionCompleted(const QPoint &position); // Signal emitted when rope tool selection is completed
+    void pdfLinkClicked(int targetPage); // Signal emitted when a PDF link is clicked
+    void pdfTextSelected(const QString &text); // Signal emitted when PDF text is selected
+    void pdfLoaded(); // Signal emitted when a PDF is loaded
+    void markdownSelectionModeChanged(bool enabled); // Signal emitted when markdown selection mode changes
 
 public:
     explicit InkCanvas(QWidget *parent = nullptr);
@@ -37,6 +48,7 @@ public:
     int getProcessedRate();
     void setPenColor(const QColor &color); // Added function to set pen color
     void setPenThickness(qreal thickness); // Added function to set pen thickness
+    void adjustAllToolThicknesses(qreal zoomRatio); // Adjust all tool thicknesses for zoom changes
     void setTool(ToolType tool);
     void setSaveFolder(const QString &folderPath); // Function to set save folder
     void saveToFile(int pageNumber); // Function to save canvas to file
@@ -48,7 +60,6 @@ public:
 
     void setZoom(int zoomLevel);
     int getZoom() const;
-    QSize getCanvasSize() const;
     void updatePanOffsets(int xOffset, int yOffset);
 
     int getPanOffsetX() const;  // Getter for panOffsetX
@@ -62,6 +73,7 @@ public:
 
     bool isPdfLoadedFunc() const;
     int getTotalPdfPages() const;
+    Poppler::Document* getPdfDocument() const;
     
     void clearPdf();
     void clearPdfNoDelete();
@@ -104,6 +116,7 @@ public:
     void saveBackgroundMetadata();  // ✅ Save background metadata
 
     int getBufferWidth() const { return buffer.width(); }
+    QPixmap getBuffer() const { return buffer; } // Get buffer for concurrent saving
 
     void exportNotebook(const QString &destinationFile);
     void importNotebook(const QString &packageFile);
@@ -111,14 +124,78 @@ public:
     void importNotebookTo(const QString &packageFile, const QString &destFolder);
 
     bool isEdited() const { return edited; }  // ✅ Check if the canvas has been edited
+    void setEdited(bool state) { edited = state; }  // ✅ Set the edited state
 
     void setPDFRenderDPI(int dpi) { pdfRenderDPI = dpi; }  // ✅ Set PDF render DPI
 
     void clearPdfCache() { pdfCache.clear(); }
+    void clearNoteCache() { 
+        noteCache.clear(); 
+        currentCachedNotePage = -1;
+        if (noteCacheTimer && noteCacheTimer->isActive()) {
+            noteCacheTimer->stop();
+        }
+        
+        // Cancel and clean up any active note watchers
+        for (QFutureWatcher<void>* watcher : activeNoteWatchers) {
+            if (watcher && !watcher->isFinished()) {
+                watcher->cancel();
+            }
+            watcher->deleteLater();
+        }
+        activeNoteWatchers.clear();
+    }
 
     // Touch gesture support
     void setTouchGesturesEnabled(bool enabled) { touchGesturesEnabled = enabled; }
     bool areTouchGesturesEnabled() const { return touchGesturesEnabled; }
+
+    // Rope tool selection actions
+    void deleteRopeSelection(); // Delete the current rope tool selection
+    void cancelRopeSelection(); // Cancel the current rope tool selection
+    void copyRopeSelection(); // Copy the current rope tool selection
+    
+    // Markdown integration
+    MarkdownWindowManager* getMarkdownManager() const { return markdownManager; }
+    void setMarkdownSelectionMode(bool enabled);
+    bool isMarkdownSelectionMode() const;
+
+    // PDF text selection and link functionality
+    void setPdfTextSelectionEnabled(bool enabled) { 
+        pdfTextSelectionEnabled = enabled; 
+        
+        // Enable mouse tracking for PDF text selection
+        setMouseTracking(enabled);
+        
+        // Change cursor when entering/exiting text selection mode
+        if (enabled && isPdfLoaded) {
+            setCursor(Qt::IBeamCursor);
+        } else {
+            setCursor(Qt::ArrowCursor);
+        }
+        
+        // Clear any existing selection when disabling
+        if (!enabled) {
+            clearPdfTextSelection();
+        }
+        
+        update(); // Refresh the display
+    }
+    bool isPdfTextSelectionEnabled() const { return pdfTextSelectionEnabled; }
+    void clearPdfTextSelection(); // Clear current PDF text selection
+    QString getSelectedPdfText() const; // Get currently selected PDF text
+
+    // Canvas coordinate system support
+    QSize getCanvasSize() const { return buffer.size(); }
+    QRect getCanvasRect() const { return QRect(0, 0, buffer.width(), buffer.height()); }
+    qreal getZoomFactor() const { return zoomFactor / 100.0; }
+    QPointF getPanOffset() const { return QPointF(panOffsetX, panOffsetY); }
+    
+    // Coordinate conversion methods
+    QPointF mapWidgetToCanvas(const QPointF &widgetPoint) const;
+    QPointF mapCanvasToWidget(const QPointF &canvasPoint) const;
+    QRect mapWidgetToCanvas(const QRect &widgetRect) const;
+    QRect mapCanvasToWidget(const QRect &canvasRect) const;
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -144,6 +221,11 @@ private:
     qreal penThickness; // Added pen thickness property
     ToolType currentTool;
     ToolType previousTool; // To restore tool after erasing
+    
+    // Separate thickness values for each tool
+    qreal penToolThickness = 5.0;    // Default pen thickness
+    qreal markerToolThickness = 5.0; // Default marker thickness (will be scaled by 8x in drawing)
+    qreal eraserToolThickness = 5.0; // Default eraser thickness (will be scaled by 6x in drawing)
     QString saveFolder; // Folder to save images
     QPixmap backgroundImage;
     bool straightLineMode = false;  // Flag for straight line mode
@@ -154,6 +236,10 @@ private:
     QPolygonF lassoPathPoints; // Points of the lasso selection in LOGICAL WIDGET coordinates
     bool selectingWithRope = false; // True if currently drawing the lasso
     bool movingSelection = false; // True if currently moving the selection
+    bool selectionJustCopied = false; // True if selection was just copied and hasn't been moved yet
+    bool selectionAreaCleared = false; // True if the selection area has been cleared from the buffer
+    QPainterPath selectionMaskPath; // Path used to clear the selection area from buffer
+    QRectF selectionBufferRect; // Buffer rectangle for the selection area
     QPointF lastMovePoint; // Last point during selection movement (logical widget coordinates)
 
     int zoomFactor;     // Zoom percentage (100 = normal)
@@ -193,7 +279,7 @@ private:
     void loadNotebookId();
     void saveNotebookId();
 
-    int pdfRenderDPI = 288;  // Default to 288 DPI
+    int pdfRenderDPI = 192;  // Default to 288 DPI
 
     // Touch gesture support
     bool touchGesturesEnabled = false;
@@ -204,8 +290,69 @@ private:
 
     // Background style members
     BackgroundStyle backgroundStyle = BackgroundStyle::None;
-    QColor backgroundColor = Qt::transparent;
+    QColor backgroundColor = Qt::white;
     int backgroundDensity = 40;  // pixels between lines
+
+    bool pdfTextSelectionEnabled = false;
+    
+    // PDF text selection members
+    bool pdfTextSelecting = false; // True when actively selecting text
+    QPointF pdfSelectionStart; // Start point of text selection (logical widget coordinates)
+    QPointF pdfSelectionEnd; // End point of text selection (logical widget coordinates)
+    QList<Poppler::TextBox*> currentPdfTextBoxes; // Text boxes for current page
+    QList<Poppler::TextBox*> selectedTextBoxes; // Currently selected text boxes
+    std::unique_ptr<Poppler::Page> currentPdfPageForText; // Current PDF page for text operations
+    
+    // PDF text selection throttling (60 FPS)
+    QTimer* pdfTextSelectionTimer = nullptr; // Timer for throttling text selection updates
+    QPointF pendingSelectionStart; // Pending selection start point
+    QPointF pendingSelectionEnd; // Pending selection end point
+    bool hasPendingSelection = false; // True if there's a pending selection update
+    
+    // Intelligent PDF cache system
+    QTimer* pdfCacheTimer = nullptr; // Timer for delayed adjacent page caching
+    int currentCachedPage = -1; // Currently displayed page for cache management
+    int pendingCacheTargetPage = -1; // Target page for pending cache operation (to validate timer relevance)
+    QList<QFutureWatcher<void>*> activePdfWatchers; // Track active PDF cache watchers for cleanup
+    
+    // Intelligent note page cache system
+    QCache<int, QPixmap> noteCache; // Cache for note pages (PNG files)
+    QTimer* noteCacheTimer = nullptr; // Timer for delayed adjacent note page caching
+    int currentCachedNotePage = -1; // Currently displayed note page for cache management
+    int pendingNoteCacheTargetPage = -1; // Target page for pending note cache operation (to validate timer relevance)
+    QList<QFutureWatcher<void>*> activeNoteWatchers; // Track active note cache watchers for cleanup
+    
+    // Markdown integration
+    MarkdownWindowManager* markdownManager = nullptr;
+    bool markdownSelectionMode = false;
+    QPoint markdownSelectionStart;
+    QPoint markdownSelectionEnd;
+    bool markdownSelecting = false;
+    
+    // Helper methods for PDF text selection
+    void loadPdfTextBoxes(int pageNumber); // Load text boxes for a page
+    QPointF mapWidgetToPdfCoordinates(const QPointF &widgetPoint); // Map widget coordinates to PDF coordinates
+    QPointF mapPdfToWidgetCoordinates(const QPointF &pdfPoint); // Map PDF coordinates to widget coordinates
+    void updatePdfTextSelection(const QPointF &start, const QPointF &end); // Update text selection
+    void handlePdfLinkClick(const QPointF &clickPoint); // Handle PDF link clicks
+    void showPdfTextSelectionMenu(const QPoint &position); // Show context menu for PDF text selection
+    QList<Poppler::TextBox*> getTextBoxesInSelection(const QPointF &start, const QPointF &end); // Get text boxes in selection area
+    
+    // Intelligent PDF cache helper methods
+    void renderPdfPageToCache(int pageNumber); // Render a single page and add to cache
+    void checkAndCacheAdjacentPages(int targetPage); // Check and cache adjacent pages if needed
+    bool isValidPageNumber(int pageNumber) const; // Check if page number is valid
+    
+    // Intelligent note cache helper methods
+    void loadNotePageToCache(int pageNumber); // Load a single note page and add to cache
+    void checkAndCacheAdjacentNotePages(int targetPage); // Check and cache adjacent note pages if needed
+    QString getNotePageFilePath(int pageNumber) const; // Get file path for note page
+    void invalidateCurrentPageCache(); // Invalidate cache for current page when modified
+    
+private slots:
+    void processPendingTextSelection(); // Process pending text selection updates (throttled to 60 FPS)
+    void cacheAdjacentPages(); // Cache adjacent pages after delay
+    void cacheAdjacentNotePages(); // Cache adjacent note pages after delay
 };
 
 #endif // INKCANVAS_H

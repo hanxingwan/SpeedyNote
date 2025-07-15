@@ -87,7 +87,7 @@ void RecentNotebooksDialog::onNotebookClicked() {
                      mainWindowRef->saveCurrentPage(); // Use MainWindow's save method
                 }
                 canvas->setSaveFolder(notebookPath);
-                mainWindowRef->switchPage(1); // Use MainWindow's switchPage method
+                mainWindowRef->switchPageWithDirection(1, 1); // Use MainWindow's direction-aware switchPage method
                 mainWindowRef->pageInput->setValue(1); // Update pageInput in MainWindow
                 mainWindowRef->updateTabLabel(); // Update tab label in MainWindow
                 

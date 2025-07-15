@@ -14,6 +14,7 @@
 #include <QFileDialog>
 #include <QListWidget>
 #include <QStackedWidget>
+#include <QTreeWidget>
 #include <QDial>
 #include <QSoundEffect>
 #include <QFont>
@@ -25,6 +26,15 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QKeyEvent>
+#include <QTabletEvent>
+#include <QMenu>
+
+// Forward declarations
+class QTreeWidgetItem;
+namespace Poppler { 
+    class Document; 
+    class OutlineItem;
+}
 
 // #include "HandwritingLineEdit.h"
 
@@ -33,7 +43,6 @@ enum DialMode {
     PageSwitching,
     ZoomControl,
     ThicknessControl,
-    ColorAdjustment,
     ToolSwitching,
     PresetSelection,
     PanAndPageScroll
@@ -63,7 +72,12 @@ enum class ControllerAction {
     RopeTool,
     SetPenTool,
     SetMarkerTool,
-    SetEraserTool
+    SetEraserTool,
+    TogglePdfTextSelection,
+    ToggleOutline,
+    ToggleBookmarks,
+    AddBookmark,
+    ToggleTouchGestures
 };
 
 static QString actionToString(ControllerAction action) {
@@ -91,6 +105,11 @@ static QString actionToString(ControllerAction action) {
         case ControllerAction::SetPenTool: return "Set Pen Tool";
         case ControllerAction::SetMarkerTool: return "Set Marker Tool";
         case ControllerAction::SetEraserTool: return "Set Eraser Tool";
+        case ControllerAction::TogglePdfTextSelection: return "Toggle PDF Text Selection";
+        case ControllerAction::ToggleOutline: return "Toggle PDF Outline";
+        case ControllerAction::ToggleBookmarks: return "Toggle Bookmarks";
+        case ControllerAction::AddBookmark: return "Add/Remove Bookmark";
+        case ControllerAction::ToggleTouchGestures: return "Toggle Touch Gestures";
         default: return "None";
     }
 }
@@ -124,6 +143,11 @@ static ControllerAction stringToAction(const QString &str) {
         case InternalControllerAction::SetPenTool: return ControllerAction::SetPenTool;
         case InternalControllerAction::SetMarkerTool: return ControllerAction::SetMarkerTool;
         case InternalControllerAction::SetEraserTool: return ControllerAction::SetEraserTool;
+        case InternalControllerAction::TogglePdfTextSelection: return ControllerAction::TogglePdfTextSelection;
+        case InternalControllerAction::ToggleOutline: return ControllerAction::ToggleOutline;
+        case InternalControllerAction::ToggleBookmarks: return ControllerAction::ToggleBookmarks;
+        case InternalControllerAction::AddBookmark: return ControllerAction::AddBookmark;
+        case InternalControllerAction::ToggleTouchGestures: return ControllerAction::ToggleTouchGestures;
     }
     return ControllerAction::None;
 }
@@ -144,17 +168,33 @@ public:
     bool areBenchmarkControlsVisible() const;
     void setBenchmarkControlsVisible(bool visible);
 
-    bool colorButtonsVisible = true;
-    bool areColorButtonsVisible() const;
-    void setColorButtonsVisible(bool visible);
+    bool zoomButtonsVisible = true;
+    bool areZoomButtonsVisible() const;
+    void setZoomButtonsVisible(bool visible);
 
     bool scrollOnTopEnabled = false;
     bool isScrollOnTopEnabled() const;
     void setScrollOnTopEnabled(bool enabled);
 
-    bool touchGesturesEnabled = false;
+    bool touchGesturesEnabled = true;
     bool areTouchGesturesEnabled() const;
     void setTouchGesturesEnabled(bool enabled);
+
+    // Theme settings
+    QColor customAccentColor;
+    bool useCustomAccentColor = false;
+    
+    QColor getAccentColor() const;
+    QColor getCustomAccentColor() const { return customAccentColor; }
+    void setCustomAccentColor(const QColor &color);
+    bool isUsingCustomAccentColor() const { return useCustomAccentColor; }
+    void setUseCustomAccentColor(bool use);
+    
+    // Color palette settings for control panel
+    bool isUsingBrighterPalette() const { return useBrighterPalette; }
+    void setUseBrighterPalette(bool use);
+    
+    QColor getDefaultPenColor();
 
     SDLControllerManager *controllerManager = nullptr;
     QThread *controllerThread = nullptr;
@@ -177,27 +217,50 @@ public:
     // void loadUserSettings();  // New
     void savePdfDPI(int dpi); // New
 
-    // Migration functions for old button mappings
+    // Background settings persistence
+    void saveDefaultBackgroundSettings(BackgroundStyle style, QColor color, int density);
+    void loadDefaultBackgroundSettings(BackgroundStyle &style, QColor &color, int &density);
+    
+    void saveThemeSettings();
+    void loadThemeSettings();
+    void updateTheme(); // Apply current theme settings
+    
     void migrateOldButtonMappings();
     QString migrateOldDialModeString(const QString &oldString);
     QString migrateOldActionString(const QString &oldString);
-    
+
     InkCanvas* currentCanvas(); // Made public for RecentNotebooksDialog
     void saveCurrentPage(); // Made public for RecentNotebooksDialog
+    void saveCurrentPageConcurrent(); // Concurrent version for smooth page flipping
     void switchPage(int pageNumber); // Made public for RecentNotebooksDialog
+    void switchPageWithDirection(int pageNumber, int direction); // Enhanced page switching with direction tracking
     void updateTabLabel(); // Made public for RecentNotebooksDialog
     QSpinBox *pageInput; // Made public for RecentNotebooksDialog
+    QPushButton *prevPageButton; // Previous page button
+    QPushButton *nextPageButton; // Next page button
     
     // New: Keyboard mapping methods (made public for ControlPanelDialog)
     void addKeyboardMapping(const QString &keySequence, const QString &action);
     void removeKeyboardMapping(const QString &keySequence);
     QMap<QString, QString> getKeyboardMappings() const;
+    
+    // Controller access
+    SDLControllerManager* getControllerManager() const { return controllerManager; }
+    void reconnectControllerSignals(); // Reconnect controller signals after reconnection
+
+    void updateDialButtonState();     // Update dial button state when switching tabs
+    void updateFastForwardButtonState(); // Update fast forward button state when switching tabs
+    void updateToolButtonStates();   // Update tool button states when switching tabs
+    void handleColorButtonClick();    // Handle tool switching when color buttons are clicked
+    void updateThicknessSliderForCurrentTool(); // Update thickness slider to reflect current tool's thickness
+    void updatePdfTextSelectButtonState(); // Update PDF text selection button state when switching tabs
 
 private slots:
     void toggleBenchmark();
     void updateBenchmarkDisplay();
     void applyCustomColor(); // Added function for custom color input
     void updateThickness(int value); // New function for thickness control
+    void adjustThicknessForZoom(int oldZoom, int newZoom); // Adjust thickness when zoom changes
     void changeTool(int index);
     void selectFolder(); // Select save folder
     void saveCanvas(); // Save canvas to file
@@ -208,6 +271,7 @@ private slots:
     void clearPdf();
 
     void updateZoom();
+    void onZoomSliderChanged(int value); // Handle manual zoom slider changes
     void applyZoom();
     void updatePanRange();
     void updatePanX(int value);
@@ -224,8 +288,12 @@ private slots:
     void toggleThicknessSlider(); // Added function to toggle thickness slider
     void toggleFullscreen();
     void showJumpToPageDialog();
+    void goToPreviousPage(); // Go to previous page
+    void goToNextPage();     // Go to next page
+    void onPageInputChanged(int newPage); // Handle spinbox page changes with direction tracking
 
     void toggleDial();  // ✅ Show/Hide dial
+    void positionDialContainer(); // ✅ Position dial container intelligently
     void handleDialInput(int angle);  // ✅ Handle touch input
     void onDialReleased();
     // void processPageSwitch();
@@ -236,24 +304,24 @@ private slots:
     void handleDialThickness(int angle); // Added function to handle thickness control
     void onZoomReleased();
     void onThicknessReleased(); // Added function to handle thickness control
-    void handleDialColor(int angle); // Added function to handle color adjustment
-    void onColorReleased(); // Added function to handle color adjustment
     // void updateCustomColor();
-    void updateSelectedChannel(int index);
     void updateDialDisplay();
     // void handleModeSelection(int angle);
 
     void handleToolSelection(int angle);
     void onToolReleased();
-    void cycleColorChannel();
+
 
     void handlePresetSelection(int angle);
     void onPresetReleased();
     void addColorPreset();
+    void updateColorPalette(); // Update colors based on current palette mode
+    QColor getPaletteColor(const QString &colorName); // Get color based on current palette
     qreal getDevicePixelRatio(); 
 
     bool isDarkMode();
     QIcon loadThemedIcon(const QString& baseName);
+    QString createButtonStyle(bool darkMode);
 
     void handleDialPanScroll(int angle);  // Add missing function declaration
     void onPanScrollReleased();           // Add missing function declaration
@@ -268,13 +336,35 @@ private slots:
     void selectColorButton(QPushButton* selectedButton);
     void updateStraightLineButtonState();
     void updateRopeToolButtonState(); // New slot for rope tool button
-    void updateDialButtonState();     // New method for dial toggle button
-    void updateFastForwardButtonState(); // New method for fast forward toggle button
+    void updateMarkdownButtonState(); // New slot for markdown button
+
+    void setPenTool();               // Set pen tool
+    void setMarkerTool();            // Set marker tool
+    void setEraserTool();            // Set eraser tool
 
     QColor getContrastingTextColor(const QColor &backgroundColor);
     void updateCustomColorButtonStyle(const QColor &color);
-
+    
     void openRecentNotebooksDialog(); // Added slot
+    
+    void showPendingTooltip(); // Show tooltip with throttling
+    
+    void showRopeSelectionMenu(const QPoint &position); // Show context menu for rope tool selection
+    
+    // PDF Outline functionality
+    void toggleOutlineSidebar();     // Toggle PDF outline sidebar
+    void onOutlineItemClicked(QTreeWidgetItem *item, int column); // Handle outline item clicks
+    void loadPdfOutline();           // Load PDF outline/bookmarks
+    void addOutlineItem(const Poppler::OutlineItem& outlineItem, QTreeWidgetItem* parentItem); // Add outline item recursively
+    Poppler::Document* getPdfDocument(); // Get PDF document from current canvas
+    
+    // Bookmark sidebar functionality
+    void toggleBookmarksSidebar();   // Toggle bookmarks sidebar
+    void onBookmarkItemClicked(QTreeWidgetItem *item, int column); // Handle bookmark item clicks
+    void loadBookmarks();            // Load bookmarks from file
+    void saveBookmarks();            // Save bookmarks to file
+    void toggleCurrentPageBookmark(); // Add/remove current page from bookmarks
+    void updateBookmarkButtonState(); // Update bookmark toggle button state
 
 private:
     InkCanvas *canvas;
@@ -298,6 +388,9 @@ private:
     QSlider *thicknessSlider; // Added thickness slider
     QFrame *thicknessFrame; // Added thickness frame
     QComboBox *toolSelector;
+    QPushButton *penToolButton;    // Individual pen tool button
+    QPushButton *markerToolButton; // Individual marker tool button
+    QPushButton *eraserToolButton; // Individual eraser tool button
     QPushButton *deletePageButton;
     QPushButton *selectFolderButton; // Button to select folder
     QPushButton *saveButton; // Button to save file
@@ -308,6 +401,7 @@ private:
 
     QPushButton *loadPdfButton;
     QPushButton *clearPdfButton;
+    QPushButton *pdfTextSelectButton; // Button to toggle PDF text selection mode
     QPushButton *toggleTabBarButton;
 
     QMap<InkCanvas*, int> pageMap;
@@ -316,6 +410,7 @@ private:
     QPushButton *backgroundButton; // New button to set background
     QPushButton *straightLineToggleButton; // Button to toggle straight line mode
     QPushButton *ropeToolButton; // Button to toggle rope tool mode
+    QPushButton *markdownButton; // Button to toggle markdown mode
 
     QSlider *zoomSlider;
     QPushButton *zoomButton;
@@ -329,9 +424,25 @@ private:
     QScrollBar *panYSlider;
 
 
-    QListWidget *tabList;          // Sidebar for tabs
+    QListWidget *tabList;          // Horizontal tab bar
     QStackedWidget *canvasStack;   // Holds multiple InkCanvas instances
     QPushButton *addTabButton;     // Button to add tabs
+    QWidget *tabBarContainer;      // Container for horizontal tab bar
+    
+    // PDF Outline Sidebar
+    QWidget *outlineSidebar;       // Container for PDF outline
+    QTreeWidget *outlineTree;      // Tree widget for PDF bookmarks/outline
+    QPushButton *toggleOutlineButton; // Button to toggle outline sidebar
+    bool outlineSidebarVisible = false;
+    
+    // Bookmarks Sidebar
+    QWidget *bookmarksSidebar;     // Container for bookmarks
+    QTreeWidget *bookmarksTree;    // Tree widget for bookmarks
+    QPushButton *toggleBookmarksButton; // Button to toggle bookmarks sidebar
+    QPushButton *toggleBookmarkButton; // Button to add/remove current page bookmark
+    QPushButton *touchGesturesButton; // Touch gestures toggle button
+    bool bookmarksSidebarVisible = false;
+    QMap<int, QString> bookmarks;  // Map of page number to bookmark title
     QPushButton *jumpToPageButton; // Button to jump to a specific page
 
     QWidget *dialContainer = nullptr;  // ✅ Floating dial container
@@ -359,16 +470,14 @@ private:
     DialMode currentDialMode = PageSwitching; ✅ Default mode
 
     QComboBox *dialModeSelector; ✅ Mode selector
-    QComboBox *channelSelector; ✅ Channel selector
-    int selectedChannel = 0; ✅ Default channel
+
     */
     
     DialMode currentDialMode = PanAndPageScroll; // ✅ Default mode
     DialMode temporaryDialMode = None;
 
     QComboBox *dialModeSelector; // ✅ Mode selector
-    QComboBox *channelSelector; // ✅ Channel selector
-    int selectedChannel = 0; // ✅ Default channel
+
     QPushButton *colorPreview; // ✅ Color preview
 
     QLabel *dialDisplay = nullptr; // ✅ Display for dial mode
@@ -382,7 +491,7 @@ private:
     QPushButton *btnPageSwitch;
     QPushButton *btnZoom;
     QPushButton *btnThickness;
-    QPushButton *btnColor;
+
     QPushButton *btnTool;
     QPushButton *btnPresets;
     QPushButton *btnPannScroll;
@@ -394,6 +503,9 @@ private:
     QPushButton *addPresetButton; // ✅ Button to add current color to queue
     int currentPresetIndex = 0; // ✅ Track selected preset
 
+    // Color palette mode (independent of UI theme)
+    bool useBrighterPalette = false; // false = darker colors, true = brighter colors
+
     qreal initialDpr = 1.0; // Will be set in constructor
 
     QWidget *sidebarContainer;  // Container for sidebar
@@ -404,6 +516,7 @@ private:
 
     bool controlBarVisible = true;  // Track controlBar visibility state
     void toggleControlBar();        // Function to toggle controlBar visibility
+    void cycleZoomLevels();         // Function to cycle through 0.5x, 1x, 2x zoom levels
     bool sidebarWasVisibleBeforeFullscreen = true;  // Track sidebar state before fullscreen
 
     int accumulatedRotationAfterLimit = 0; 
@@ -414,11 +527,15 @@ private:
     QMap<QString, QString> buttonHoldMapping;
     QMap<QString, QString> buttonPressMapping;
     QMap<QString, ControllerAction> buttonPressActionMapping;
-    
+
     // New: Keyboard mapping support
     QMap<QString, QString> keyboardMappings;  // keySequence -> action internal key
     QMap<QString, ControllerAction> keyboardActionMapping;  // keySequence -> action enum
 
+    // Tooltip handling for pen input
+    QTimer *tooltipTimer;
+    QWidget *lastHoveredWidget;
+    QPoint pendingTooltipPos;
 
     void handleButtonHeld(const QString &buttonName);
     void handleButtonReleased(const QString &buttonName);
@@ -434,7 +551,7 @@ private:
 
     RecentNotebooksManager *recentNotebooksManager; // Added manager instance
 
-    int pdfRenderDPI = 288;  // Default to 288 DPI
+    int pdfRenderDPI = 192;  // Default to 288 DPI
 
     void setupUi();
 
@@ -462,6 +579,9 @@ private:
     void createSingleRowLayout();
     void createTwoRowLayout();
     
+    // Helper function for tab text eliding
+    QString elideTabText(const QString &text, int maxWidth);
+    
     // Add timer for delayed layout updates
     QTimer *layoutUpdateTimer = nullptr;
     
@@ -471,6 +591,11 @@ private:
 protected:
     void resizeEvent(QResizeEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;  // New: Handle keyboard shortcuts
+    void tabletEvent(QTabletEvent *event) override; // Handle pen hover for tooltips
+    
+    // IME support for multi-language input
+    void inputMethodEvent(QInputMethodEvent *event) override;
+    QVariant inputMethodQuery(Qt::InputMethodQuery query) const override;
 };
 
 #endif // MAINWINDOW_H

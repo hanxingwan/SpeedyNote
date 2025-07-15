@@ -1,15 +1,19 @@
 #include "ControlPanelDialog.h"
 #include "ButtonMappingTypes.h"
+#include "SDLControllerManager.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QCheckBox>
+#include <QSpacerItem>
 #include <QTableWidget>
 #include <QPushButton>
 #include <QColorDialog>
 #include <QInputDialog>
 #include <QMessageBox>
+#include <QApplication>
+#include <QMetaObject>
 
 ControlPanelDialog::ControlPanelDialog(MainWindow *mainWindow, InkCanvas *targetCanvas, QWidget *parent)
     : QDialog(parent), canvas(targetCanvas), selectedColor(canvas->getBackgroundColor()), mainWindowRef(mainWindow) {
@@ -28,7 +32,9 @@ ControlPanelDialog::ControlPanelDialog(MainWindow *mainWindow, InkCanvas *target
         createToolbarTab();
     }
     createButtonMappingTab();
+    createControllerMappingTab();
     createKeyboardMappingTab();
+    createThemeTab();
     // === Buttons ===
     applyButton = new QPushButton(tr("Apply"));
     okButton = new QPushButton(tr("OK"));
@@ -107,6 +113,11 @@ void ControlPanelDialog::applyChanges() {
     canvas->update();
     canvas->saveBackgroundMetadata();
 
+    // ✅ Save these settings as defaults for new tabs
+    if (mainWindowRef) {
+        mainWindowRef->saveDefaultBackgroundSettings(style, selectedColor, densitySpin->value());
+    }
+
     // ✅ Apply button mappings back to MainWindow with internal keys
     if (mainWindowRef) {
         for (const QString &buttonKey : holdMappingCombos.keys()) {
@@ -122,6 +133,15 @@ void ControlPanelDialog::applyChanges() {
 
         // ✅ Save to persistent settings
         mainWindowRef->saveButtonMappings();
+        
+        // ✅ Apply theme settings
+        mainWindowRef->setUseCustomAccentColor(useCustomAccentCheckbox->isChecked());
+        if (selectedAccentColor.isValid()) {
+            mainWindowRef->setCustomAccentColor(selectedAccentColor);
+        }
+        
+        // ✅ Apply color palette setting
+        mainWindowRef->setUseBrighterPalette(useBrighterPaletteCheckbox->isChecked());
     }
 }
 
@@ -146,6 +166,18 @@ void ControlPanelDialog::loadFromCanvas() {
             int index = pressMappingCombos[buttonKey]->findText(displayString);
             if (index >= 0) pressMappingCombos[buttonKey]->setCurrentIndex(index);
         }
+        
+        // Load theme settings
+        useCustomAccentCheckbox->setChecked(mainWindowRef->isUsingCustomAccentColor());
+        
+        // Get the stored custom accent color
+        selectedAccentColor = mainWindowRef->getCustomAccentColor();
+        
+        accentColorButton->setStyleSheet(QString("background-color: %1").arg(selectedAccentColor.name()));
+        accentColorButton->setEnabled(useCustomAccentCheckbox->isChecked());
+        
+        // Load color palette setting
+        useBrighterPaletteCheckbox->setChecked(mainWindowRef->isUsingBrighterPalette());
     }
 }
 
@@ -201,14 +233,14 @@ void ControlPanelDialog::createToolbarTab(){
     benchmarkNote->setStyleSheet("color: gray; font-size: 10px;");
     toolbarLayout->addWidget(benchmarkNote);
 
-    // ✅ Checkbox to show/hide color buttons
-    QCheckBox *colorButtonsVisibilityCheckbox = new QCheckBox(tr("Show Color Buttons"), toolbarTab);
-    colorButtonsVisibilityCheckbox->setChecked(mainWindowRef->areColorButtonsVisible());
-    toolbarLayout->addWidget(colorButtonsVisibilityCheckbox);
-    QLabel *colorButtonsNote = new QLabel(tr("This will show/hide the color buttons on the toolbar"));
-    colorButtonsNote->setWordWrap(true);
-    colorButtonsNote->setStyleSheet("color: gray; font-size: 10px;");
-    toolbarLayout->addWidget(colorButtonsNote);
+    // ✅ Checkbox to show/hide zoom buttons
+    QCheckBox *zoomButtonsVisibilityCheckbox = new QCheckBox(tr("Show Zoom Buttons"), toolbarTab);
+    zoomButtonsVisibilityCheckbox->setChecked(mainWindowRef->areZoomButtonsVisible());
+    toolbarLayout->addWidget(zoomButtonsVisibilityCheckbox);
+    QLabel *zoomButtonsNote = new QLabel(tr("This will show/hide the 0.5x, 1x, and 2x zoom buttons on the toolbar"));
+    zoomButtonsNote->setWordWrap(true);
+    zoomButtonsNote->setStyleSheet("color: gray; font-size: 10px;");
+    toolbarLayout->addWidget(zoomButtonsNote);
 
     QCheckBox *scrollOnTopCheckBox = new QCheckBox(tr("Scroll on Top after Page Switching"), toolbarTab);
     scrollOnTopCheckBox->setChecked(mainWindowRef->isScrollOnTopEnabled());
@@ -218,15 +250,6 @@ void ControlPanelDialog::createToolbarTab(){
     scrollNote->setStyleSheet("color: gray; font-size: 10px;");
     toolbarLayout->addWidget(scrollNote);
     
-    // ✅ Checkbox to enable/disable touch gestures
-    QCheckBox *touchGesturesCheckbox = new QCheckBox(tr("Enable Touch Gestures"), toolbarTab);
-    touchGesturesCheckbox->setChecked(mainWindowRef->areTouchGesturesEnabled());
-    toolbarLayout->addWidget(touchGesturesCheckbox);
-    QLabel *touchGesturesNote = new QLabel(tr("Enable pinch to zoom and touch panning on the canvas. When disabled, only pen input is accepted."));
-    touchGesturesNote->setWordWrap(true);
-    touchGesturesNote->setStyleSheet("color: gray; font-size: 10px;");
-    toolbarLayout->addWidget(touchGesturesNote);
-    
     toolbarLayout->addStretch();
     toolbarTab->setLayout(toolbarLayout);
     tabWidget->addTab(toolbarTab, tr("Features"));
@@ -234,9 +257,8 @@ void ControlPanelDialog::createToolbarTab(){
 
     // Connect the checkbox
     connect(benchmarkVisibilityCheckbox, &QCheckBox::toggled, mainWindowRef, &MainWindow::setBenchmarkControlsVisible);
-    connect(colorButtonsVisibilityCheckbox, &QCheckBox::toggled, mainWindowRef, &MainWindow::setColorButtonsVisible);
+    connect(zoomButtonsVisibilityCheckbox, &QCheckBox::toggled, mainWindowRef, &MainWindow::setZoomButtonsVisible);
     connect(scrollOnTopCheckBox, &QCheckBox::toggled, mainWindowRef, &MainWindow::setScrollOnTopEnabled);
-    connect(touchGesturesCheckbox, &QCheckBox::toggled, mainWindowRef, &MainWindow::setTouchGesturesEnabled);
 }
 
 
@@ -324,6 +346,56 @@ void ControlPanelDialog::createKeyboardMappingTab() {
     tabWidget->addTab(keyboardTab, tr("Keyboard Shortcuts"));
 }
 
+void ControlPanelDialog::createThemeTab() {
+    themeTab = new QWidget(this);
+    QVBoxLayout *layout = new QVBoxLayout(themeTab);
+    
+    // Custom accent color
+    useCustomAccentCheckbox = new QCheckBox(tr("Use Custom Accent Color"), themeTab);
+    layout->addWidget(useCustomAccentCheckbox);
+    
+    QLabel *accentColorLabel = new QLabel(tr("Accent Color:"), themeTab);
+    accentColorButton = new QPushButton(themeTab);
+    accentColorButton->setFixedSize(100, 30);
+    connect(accentColorButton, &QPushButton::clicked, this, &ControlPanelDialog::chooseAccentColor);
+    
+    QHBoxLayout *accentColorLayout = new QHBoxLayout();
+    accentColorLayout->addWidget(accentColorLabel);
+    accentColorLayout->addWidget(accentColorButton);
+    accentColorLayout->addStretch();
+    layout->addLayout(accentColorLayout);
+    
+    QLabel *accentColorNote = new QLabel(tr("When enabled, use a custom accent color instead of the system accent color for the toolbar, dial, and tab selection."));
+    accentColorNote->setWordWrap(true);
+    accentColorNote->setStyleSheet("color: gray; font-size: 10px;");
+    layout->addWidget(accentColorNote);
+    
+    // Enable/disable accent color button based on checkbox
+    connect(useCustomAccentCheckbox, &QCheckBox::toggled, accentColorButton, &QPushButton::setEnabled);
+    connect(useCustomAccentCheckbox, &QCheckBox::toggled, accentColorLabel, &QLabel::setEnabled);
+    
+    // Color palette preference
+    useBrighterPaletteCheckbox = new QCheckBox(tr("Use Brighter Color Palette"), themeTab);
+    layout->addWidget(useBrighterPaletteCheckbox);
+    
+    QLabel *paletteNote = new QLabel(tr("When enabled, use brighter colors (good for dark PDF backgrounds). When disabled, use darker colors (good for light PDF backgrounds). This setting is independent of the UI theme."));
+    paletteNote->setWordWrap(true);
+    paletteNote->setStyleSheet("color: gray; font-size: 10px;");
+    layout->addWidget(paletteNote);
+    
+    layout->addStretch();
+    
+    tabWidget->addTab(themeTab, tr("Theme"));
+}
+
+void ControlPanelDialog::chooseAccentColor() {
+    QColor chosen = QColorDialog::getColor(selectedAccentColor, this, tr("Select Accent Color"));
+    if (chosen.isValid()) {
+        selectedAccentColor = chosen;
+        accentColorButton->setStyleSheet(QString("background-color: %1").arg(selectedAccentColor.name()));
+    }
+}
+
 void ControlPanelDialog::addKeyboardMapping() {
     // Step 1: Capture key sequence
     KeyCaptureDialog captureDialog(this);
@@ -394,5 +466,129 @@ void ControlPanelDialog::removeKeyboardMapping() {
         
         // Remove from table
         keyboardTable->removeRow(currentRow);
+    }
+}
+
+void ControlPanelDialog::createControllerMappingTab() {
+    controllerMappingTab = new QWidget(this);
+    QVBoxLayout *layout = new QVBoxLayout(controllerMappingTab);
+    
+    // Instructions
+    QLabel *instructionLabel = new QLabel(tr("Configure physical controller button mappings for your Joy-Con or other controller:"), controllerMappingTab);
+    instructionLabel->setWordWrap(true);
+    layout->addWidget(instructionLabel);
+    
+    QLabel *noteLabel = new QLabel(tr("Note: This maps your physical controller buttons to the logical Joy-Con functions used by the application. "
+                                     "After setting up the physical mapping, you can configure what actions each logical button performs in the 'Button Mapping' tab."), controllerMappingTab);
+    noteLabel->setWordWrap(true);
+    noteLabel->setStyleSheet("color: gray; font-size: 10px; margin-bottom: 10px;");
+    layout->addWidget(noteLabel);
+    
+    // Button to open controller mapping dialog
+    QPushButton *openMappingButton = new QPushButton(tr("Configure Controller Mapping"), controllerMappingTab);
+    openMappingButton->setMinimumHeight(40);
+    connect(openMappingButton, &QPushButton::clicked, this, &ControlPanelDialog::openControllerMapping);
+    layout->addWidget(openMappingButton);
+    
+    // Button to reconnect controller
+    reconnectButton = new QPushButton(tr("Reconnect Controller"), controllerMappingTab);
+    reconnectButton->setMinimumHeight(40);
+    reconnectButton->setStyleSheet("QPushButton { background-color: #4CAF50; color: white; font-weight: bold; }");
+    connect(reconnectButton, &QPushButton::clicked, this, &ControlPanelDialog::reconnectController);
+    layout->addWidget(reconnectButton);
+    
+    // Status information
+    QLabel *statusLabel = new QLabel(tr("Current controller status:"), controllerMappingTab);
+    statusLabel->setStyleSheet("font-weight: bold; margin-top: 20px;");
+    layout->addWidget(statusLabel);
+    
+    // Dynamic status label
+    controllerStatusLabel = new QLabel(controllerMappingTab);
+    updateControllerStatus();
+    layout->addWidget(controllerStatusLabel);
+    
+    layout->addStretch();
+    
+    tabWidget->addTab(controllerMappingTab, tr("Controller Mapping"));
+}
+
+void ControlPanelDialog::openControllerMapping() {
+    if (!mainWindowRef) {
+        QMessageBox::warning(this, tr("Error"), tr("MainWindow reference not available."));
+        return;
+    }
+    
+    SDLControllerManager *controllerManager = mainWindowRef->getControllerManager();
+    if (!controllerManager) {
+        QMessageBox::warning(this, tr("Controller Not Available"), 
+            tr("Controller manager is not available. Please ensure a controller is connected and restart the application."));
+        return;
+    }
+    
+    if (!controllerManager->getJoystick()) {
+        QMessageBox::warning(this, tr("No Controller Detected"), 
+            tr("No controller is currently connected. Please connect your controller and restart the application."));
+        return;
+    }
+    
+    ControllerMappingDialog dialog(controllerManager, this);
+    dialog.exec();
+}
+
+void ControlPanelDialog::reconnectController() {
+    if (!mainWindowRef) {
+        QMessageBox::warning(this, tr("Error"), tr("MainWindow reference not available."));
+        return;
+    }
+    
+    SDLControllerManager *controllerManager = mainWindowRef->getControllerManager();
+    if (!controllerManager) {
+        QMessageBox::warning(this, tr("Controller Not Available"), 
+            tr("Controller manager is not available."));
+        return;
+    }
+    
+    // Show reconnecting message
+    controllerStatusLabel->setText(tr("🔄 Reconnecting..."));
+    controllerStatusLabel->setStyleSheet("color: orange;");
+    
+    // Force the UI to update immediately
+    QApplication::processEvents();
+    
+    // Attempt to reconnect using thread-safe method
+    QMetaObject::invokeMethod(controllerManager, "reconnect", Qt::BlockingQueuedConnection);
+    
+    // Update status after reconnection attempt
+    updateControllerStatus();
+    
+    // Show result message
+    if (controllerManager->getJoystick()) {
+        // Reconnect the controller signals in MainWindow
+        mainWindowRef->reconnectControllerSignals();
+        
+        QMessageBox::information(this, tr("Reconnection Successful"), 
+            tr("Controller has been successfully reconnected!"));
+    } else {
+        QMessageBox::warning(this, tr("Reconnection Failed"), 
+            tr("Failed to reconnect controller. Please ensure your controller is powered on and in pairing mode, then try again."));
+    }
+}
+
+void ControlPanelDialog::updateControllerStatus() {
+    if (!mainWindowRef || !controllerStatusLabel) return;
+    
+    SDLControllerManager *controllerManager = mainWindowRef->getControllerManager();
+    if (!controllerManager) {
+        controllerStatusLabel->setText(tr("✗ Controller manager not available"));
+        controllerStatusLabel->setStyleSheet("color: red;");
+        return;
+    }
+    
+    if (controllerManager->getJoystick()) {
+        controllerStatusLabel->setText(tr("✓ Controller connected"));
+        controllerStatusLabel->setStyleSheet("color: green; font-weight: bold;");
+    } else {
+        controllerStatusLabel->setText(tr("✗ No controller detected"));
+        controllerStatusLabel->setStyleSheet("color: red; font-weight: bold;");
     }
 }

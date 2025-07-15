@@ -2,7 +2,7 @@
 
 _A lightweight, fast, and stylus-optimized note-taking app built for classic tablet PCs, low-resolution screens, and vintage hardware._
 
-![cover](https://i.imgur.com/qENmB5x.png)
+![cover](https://i.imgur.com/UTNNbnM.png)
 
 ---
 
@@ -78,30 +78,35 @@ SpeedyNote supports controller input, ideal for tablet users:
 
 ## 📁 Building From Source
 
-**Qt6** amd **CMake** is required
 
-1. Clone this repository
+1. Install **Qt 6** and **CMake**
+2. Clone this repository
+3. Run:
+
 ```bash
-git clone https://github.com/alpha-liu-01/SpeedyNote.git
-cd SpeedNote
+rm -r build
+mkdir build
+# ✅ Update translation source files (ensure the .ts files exist already)
+& "C:\Qt\6.8.2\mingw_64\bin\lupdate.exe" . -ts ./resources/translations/app_fr.ts ./resources/translations/app_zh.ts ./resources/translations/app_es.ts
+& "C:\Qt\6.8.2\mingw_64\bin\linguist.exe" resources/translations/app_zh.ts
+& "C:\Qt\6.8.2\mingw_64\bin\linguist.exe" resources/translations/app_fr.ts
+& "C:\Qt\6.8.2\mingw_64\bin\linguist.exe" resources/translations/app_es.ts
 ```
-
-2. (Optional) Modify translations
+4. (Optional) Modify translations in the GUI interface
+5. Run:
 ```bash
-lupdate . -ts ./resources/translations/app_fr.ts ./resources/translations/app_zh.ts ./resources/translations/app_es.ts
-linguist resources/translations/app_zh.ts
-linguist resources/translations/app_fr.ts
-linguist resources/translations/app_es.ts
+rm -r build
+mkdir build
+& "C:\Qt\6.8.2\mingw_64\bin\lrelease.exe" ./resources/translations/app_zh.ts ./resources/translations/app_fr.ts ./resources/translations/app_es.ts
+
+Copy-Item -Path "C:\Games\yourfolder\resources\translations\*.qm" -Destination "C:\Games\yourfolder\build" -Force
+
+cd .\build
+cmake -G "MinGW Makefiles" .. 
+cmake --build .  
+& "C:\Qt\6.8.2\mingw_64\bin\windeployqt.exe" "NoteApp.exe"
+Copy-Item -Path "C:\yourfolder\dllpack\*.dll" -Destination "C:\yourfolder\build" -Force
+Copy-Item -Path "C:\yourfolder\bsdtar.exe" -Destination "C:\yourfolder\build" -Force
+./NoteApp.exe
+cd ../
 ```
-
-3. Build
-```bash
-lrelease resources/translations/app_zh.ts \
-  resources/translations/app_fr.ts \
-  resources/translations/app_es.ts
-
-cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build build
-```
-
-4. The compiled files will appear in ./build
