@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
 
-# SpeedyNote Packaging Automation Script
-# This script automates the entire process of creating an Arch Linux package
+# SpeedyNote Multi-Distribution Packaging Script
+# This script automates the process of creating packages for multiple Linux distributions
 
 # Colors for output
 RED='\033[0;31m'
@@ -16,10 +16,117 @@ NC='\033[0m' # No Color
 PKGNAME="speedynote"
 PKGVER="0.6.1"
 PKGREL="1"
+MAINTAINER="SpeedyNote Team"
+DESCRIPTION="A fast note-taking application with PDF annotation support and controller input"
+URL="https://github.com/alpha-liu-01/SpeedyNote"
+LICENSE="MIT"
 
-echo -e "${BLUE}SpeedyNote Packaging Automation Script${NC}"
-echo "=========================================="
+# Default values
+DISTRO=""
+PACKAGE_FORMATS=()
+AUTO_DETECT=true
+
+# Function to show usage
+show_usage() {
+    echo "Usage: $0 [OPTIONS]"
+    echo "Options:"
+    echo "  --deb, -deb       Create .deb package for Debian/Ubuntu"
+    echo "  --rpm, -rpm       Create .rpm package for Red Hat/Fedora/SUSE"
+    echo "  --arch, -arch     Create .pkg.tar.zst package for Arch Linux"
+    echo "  --apk, -apk       Create .apk package for Alpine Linux"
+    echo "  --all             Create packages for all supported distributions"
+    echo "  --help, -h        Show this help message"
+    echo
+    echo "You can specify multiple formats: $0 --deb --rpm --arch"
+    echo "If no option is specified, the script will auto-detect the distribution."
+}
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --deb|-deb)
+            PACKAGE_FORMATS+=("deb")
+            AUTO_DETECT=false
+            shift
+            ;;
+        --rpm|-rpm)
+            PACKAGE_FORMATS+=("rpm")
+            AUTO_DETECT=false
+            shift
+            ;;
+        --arch|-arch)
+            PACKAGE_FORMATS+=("arch")
+            AUTO_DETECT=false
+            shift
+            ;;
+        --apk|-apk)
+            PACKAGE_FORMATS+=("apk")
+            AUTO_DETECT=false
+            shift
+            ;;
+        --all)
+            PACKAGE_FORMATS=("deb" "rpm" "arch" "apk")
+            AUTO_DETECT=false
+            shift
+            ;;
+        --help|-h)
+            show_usage
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            show_usage
+            exit 1
+            ;;
+    esac
+done
+
+echo -e "${BLUE}SpeedyNote Multi-Distribution Packaging Script${NC}"
+echo "=============================================="
 echo
+
+# Function to detect distribution
+detect_distribution() {
+    if [[ -f /etc/os-release ]]; then
+        . /etc/os-release
+        case $ID in
+            ubuntu|debian|linuxmint|pop)
+                echo "deb"
+                ;;
+            fedora|rhel|centos|rocky|almalinux)
+                echo "rpm"
+                ;;
+            opensuse*|sles)
+                echo "rpm"
+                ;;
+            arch|manjaro|endeavouros|garuda)
+                echo "arch"
+                ;;
+            alpine)
+                echo "apk"
+                ;;
+            *)
+                echo "unknown"
+                ;;
+        esac
+    else
+        echo "unknown"
+    fi
+}
+
+# Auto-detect distribution if not specified
+if [[ $AUTO_DETECT == true ]]; then
+    DETECTED_DISTRO=$(detect_distribution)
+    if [[ $DETECTED_DISTRO == "unknown" ]]; then
+        echo -e "${RED}Unable to detect distribution. Please specify manually.${NC}"
+        show_usage
+        exit 1
+    fi
+    PACKAGE_FORMATS=("$DETECTED_DISTRO")
+    echo -e "${YELLOW}Auto-detected distribution: $DETECTED_DISTRO${NC}"
+else
+    echo -e "${YELLOW}Target package formats: ${PACKAGE_FORMATS[*]}${NC}"
+fi
 
 # Function to check if a command exists
 command_exists() {
@@ -35,96 +142,250 @@ check_project_directory() {
     fi
 }
 
-# Function to check for required packaging tools
+# Function to get dependencies for each distribution
+get_dependencies() {
+    local format=$1
+    case $format in
+        deb)
+            echo "libqt6core6t64, libqt6gui6t64, libqt6widgets6t64, libqt6multimedia6, libpoppler-qt6-3t64, libsdl2-2.0-0"
+            ;;
+        rpm)
+            echo "qt6-qtbase, qt6-qtmultimedia, poppler-qt6, SDL2"
+            ;;
+        arch)
+            echo "qt6-base, qt6-multimedia, poppler-qt6, sdl2-compat"
+            ;;
+        apk)
+            echo "qt6-qtbase, qt6-qtmultimedia, poppler-qt6, sdl2"
+            ;;
+    esac
+}
+
+# Function to get build dependencies for each distribution
+get_build_dependencies() {
+    local format=$1
+    case $format in
+        deb)
+            echo "cmake, make, pkg-config, qt6-base-dev, libqt6gui6t64, libqt6widgets6t64, qt6-multimedia-dev, qt6-tools-dev, libpoppler-qt6-dev, libsdl2-dev"
+            ;;
+        rpm)
+            echo "cmake, make, pkgconf, qt6-qtbase-devel, qt6-qtmultimedia-devel, qt6-qttools-devel, poppler-qt6-devel, SDL2-devel"
+            ;;
+        arch)
+            echo "cmake, make, pkgconf, qt6-base, qt6-multimedia, qt6-tools, poppler-qt6, sdl2-compat"
+            ;;
+        apk)
+            echo "cmake, make, pkgconf, qt6-qtbase-dev, qt6-qtmultimedia-dev, qt6-qttools-dev, poppler-qt5-dev, sdl2-dev"
+            ;;
+    esac
+}
+
+# Function to check packaging dependencies
 check_packaging_dependencies() {
-    echo -e "${YELLOW}Checking packaging dependencies...${NC}"
+    local format=$1
+    echo -e "${YELLOW}Checking packaging dependencies for $format...${NC}"
     
     MISSING_DEPS=()
     
-    if ! command_exists makepkg; then
-        MISSING_DEPS+=("base-devel")
-    fi
-    
-    if ! command_exists cmake; then
-        MISSING_DEPS+=("cmake")
-    fi
+    case $format in
+        deb)
+            if ! command_exists dpkg-deb; then
+                MISSING_DEPS+=("dpkg-dev")
+            fi
+            if ! command_exists debuild; then
+                MISSING_DEPS+=("devscripts")
+            fi
+            ;;
+        rpm)
+            if ! command_exists rpmbuild; then
+                MISSING_DEPS+=("rpm-build")
+            fi
+            if ! command_exists rpmspec; then
+                MISSING_DEPS+=("rpm-devel")
+            fi
+            ;;
+        arch)
+            if ! command_exists makepkg; then
+                MISSING_DEPS+=("base-devel")
+            fi
+            ;;
+        apk)
+            if ! command_exists abuild; then
+                MISSING_DEPS+=("alpine-sdk")
+            fi
+            if ! command_exists abuild-sign; then
+                MISSING_DEPS+=("abuild")
+            fi
+            ;;
+    esac
     
     if [[ ${#MISSING_DEPS[@]} -ne 0 ]]; then
-        echo -e "${RED}Missing packaging dependencies:${NC}"
+        echo -e "${RED}Missing packaging dependencies for $format:${NC}"
         for dep in "${MISSING_DEPS[@]}"; do
             echo "  - $dep"
         done
         echo
-        echo -e "${YELLOW}Install with: sudo pacman -S ${MISSING_DEPS[*]}${NC}"
+        case $format in
+            deb)
+                echo -e "${YELLOW}Install with: sudo apt-get install ${MISSING_DEPS[*]}${NC}"
+                ;;
+            rpm)
+                echo -e "${YELLOW}Install with: sudo dnf install ${MISSING_DEPS[*]}${NC}"
+                ;;
+            arch)
+                echo -e "${YELLOW}Install with: sudo pacman -S ${MISSING_DEPS[*]}${NC}"
+                ;;
+            apk)
+                echo -e "${YELLOW}Install with: sudo apk add ${MISSING_DEPS[*]}${NC}"
+                ;;
+        esac
+        return 1
+    fi
+    
+    echo -e "${GREEN}All packaging dependencies are available for $format!${NC}"
+    return 0
+}
+
+# Function to build the project
+build_project() {
+    echo -e "${YELLOW}Building SpeedyNote...${NC}"
+    
+    # Clean and create build directory
+    rm -rf build
+    mkdir -p build
+    
+    # Compile translations if lrelease is available
+    if command_exists lrelease; then
+        echo -e "${YELLOW}Compiling translation files...${NC}"
+        lrelease ./resources/translations/app_zh.ts ./resources/translations/app_fr.ts ./resources/translations/app_es.ts
+        cp resources/translations/*.qm build/ 2>/dev/null || true
+    fi
+    
+    cd build
+    
+    # Configure and build
+    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr ..
+    make -j$(nproc)
+    
+    if [[ ! -f "NoteApp" ]]; then
+        echo -e "${RED}Build failed: NoteApp executable not found${NC}"
         exit 1
     fi
     
-    echo -e "${GREEN}All packaging dependencies are available!${NC}"
+    cd ..
+    echo -e "${GREEN}Build successful!${NC}"
 }
 
-# Function to create/update PKGBUILD
-create_pkgbuild() {
-    echo -e "${YELLOW}Creating PKGBUILD...${NC}"
+# Function to create DEB package
+create_deb_package() {
+    echo -e "${YELLOW}Creating DEB package...${NC}"
     
-    cat > PKGBUILD << EOF
-# Maintainer: SpeedyNote Team
-pkgname=${PKGNAME}
-pkgver=${PKGVER}
-pkgrel=${PKGREL}
-pkgdesc="A fast note-taking application with PDF annotation support and controller input"
-arch=('x86_64')
-url="https://github.com/speedynote/speedynote"
-license=('GPL3')
-depends=(
-    'qt6-base'
-    'qt6-multimedia'
-    'poppler-qt6'
-    'sdl2-compat'
-)
-makedepends=(
-    'cmake'
-    'qt6-tools'
-    'pkgconf'
-)
-optdepends=(
-    'qt6-wayland: Wayland support'
-    'qt6-imageformats: Additional image format support'
-)
-source=("\${pkgname}-\${pkgver}.tar.gz")
-sha256sums=('SKIP')
-
-build() {
-    cd "\$srcdir"
+    PKG_DIR="debian-pkg"
+    rm -rf "$PKG_DIR"
+    mkdir -p "$PKG_DIR/DEBIAN"
+    mkdir -p "$PKG_DIR/usr/bin"
+    mkdir -p "$PKG_DIR/usr/share/applications"
+    mkdir -p "$PKG_DIR/usr/share/pixmaps"
+    mkdir -p "$PKG_DIR/usr/share/doc/$PKGNAME"
     
-    # Create build directory
-    cmake -B build -S . \\
-        -DCMAKE_BUILD_TYPE=Release \\
-        -DCMAKE_INSTALL_PREFIX=/usr
+    # Create control file
+    cat > "$PKG_DIR/DEBIAN/control" << EOF
+Package: $PKGNAME
+Version: $PKGVER-$PKGREL
+Architecture: amd64
+Maintainer: $MAINTAINER
+Depends: $(get_dependencies deb)
+Section: editors
+Priority: optional
+Homepage: $URL
+Description: $DESCRIPTION
+ SpeedyNote is a fast and efficient note-taking application with PDF annotation
+ support and controller input capabilities.
+EOF
     
-    # Build the project
-    cmake --build build --parallel
-}
-
-check() {
-    cd "\$srcdir"
+    # Install files
+    cp build/NoteApp "$PKG_DIR/usr/bin/speedynote"
+    cp resources/icons/mainicon.png "$PKG_DIR/usr/share/pixmaps/speedynote.png"
+    cp README.md "$PKG_DIR/usr/share/doc/$PKGNAME/"
     
-    # Basic check to ensure executable was built
-    test -f "build/NoteApp"
-}
-
-package() {
-    cd "\$srcdir"
-    
-    # Install the main executable
-    install -Dm755 "build/NoteApp" "\$pkgdir/usr/bin/speedynote"
-    
-    # Install desktop file
-    install -Dm644 /dev/stdin "\$pkgdir/usr/share/applications/speedynote.desktop" << EOFDESKTOP
+    # Create desktop file
+    cat > "$PKG_DIR/usr/share/applications/speedynote.desktop" << EOF
 [Desktop Entry]
 Version=1.0
 Type=Application
 Name=SpeedyNote
-Comment=Fast note-taking application with PDF annotation support
+Comment=$DESCRIPTION
+Exec=speedynote
+Icon=speedynote
+Terminal=false
+StartupNotify=true
+Categories=Office;Education;
+Keywords=notes;pdf;annotation;writing;
+EOF
+    
+    # Build package
+    dpkg-deb --build "$PKG_DIR" "${PKGNAME}_${PKGVER}-${PKGREL}_amd64.deb"
+    
+    echo -e "${GREEN}DEB package created: ${PKGNAME}_${PKGVER}-${PKGREL}_amd64.deb${NC}"
+}
+
+# Function to create RPM package
+create_rpm_package() {
+    echo -e "${YELLOW}Creating RPM package...${NC}"
+    
+    # Setup RPM build environment
+    mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+    
+    # Create source tarball
+    tar -czf ~/rpmbuild/SOURCES/${PKGNAME}-${PKGVER}.tar.gz \
+        --exclude=build \
+        --exclude=.git* \
+        --exclude="*.rpm" \
+        --exclude="*.deb" \
+        --exclude="*.pkg.tar.zst" \
+        --exclude="*.apk" \
+        .
+    
+    # Create spec file
+    cat > ~/rpmbuild/SPECS/${PKGNAME}.spec << EOF
+Name:           $PKGNAME
+Version:        $PKGVER
+Release:        $PKGREL%{?dist}
+Summary:        $DESCRIPTION
+License:        $LICENSE
+URL:            $URL
+Source0:        %{name}-%{version}.tar.gz
+BuildRequires:  $(get_build_dependencies rpm)
+Requires:       $(get_dependencies rpm)
+
+%description
+SpeedyNote is a fast and efficient note-taking application with PDF annotation
+support and controller input capabilities.
+
+%prep
+%setup -q
+
+%build
+%cmake -DCMAKE_BUILD_TYPE=Release
+%cmake_build
+
+%install
+rm -rf %{buildroot}
+mkdir -p %{buildroot}/usr/bin
+mkdir -p %{buildroot}/usr/share/applications
+mkdir -p %{buildroot}/usr/share/pixmaps
+mkdir -p %{buildroot}/usr/share/doc/%{name}
+
+install -m755 %{_vpath_builddir}/NoteApp %{buildroot}/usr/bin/speedynote
+install -m644 resources/icons/mainicon.png %{buildroot}/usr/share/pixmaps/speedynote.png
+install -m644 README.md %{buildroot}/usr/share/doc/%{name}/
+
+cat > %{buildroot}/usr/share/applications/speedynote.desktop << EOFDESKTOP
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=SpeedyNote
+Comment=$DESCRIPTION
 Exec=speedynote
 Icon=speedynote
 Terminal=false
@@ -133,36 +394,31 @@ Categories=Office;Education;
 Keywords=notes;pdf;annotation;writing;
 EOFDESKTOP
 
-    # Install icon (using the main icon from resources)
-    install -Dm644 "resources/icons/mainicon.png" "\$pkgdir/usr/share/pixmaps/speedynote.png"
-    
-    # Install translation files if they exist
-    if [ -d "build" ] && [ "\$(ls -A build/*.qm 2>/dev/null)" ]; then
-        install -dm755 "\$pkgdir/usr/share/speedynote/translations"
-        install -m644 build/*.qm "\$pkgdir/usr/share/speedynote/translations/"
-    fi
-    
-    # Install documentation
-    install -Dm644 README.md "\$pkgdir/usr/share/doc/\$pkgname/README.md"
-    if [ -f "README-Linux.md" ]; then
-        install -Dm644 README-Linux.md "\$pkgdir/usr/share/doc/\$pkgname/README-Linux.md"
-    fi
-    install -Dm644 LICENSE "\$pkgdir/usr/share/licenses/\$pkgname/LICENSE"
-}
+%files
+/usr/bin/speedynote
+/usr/share/applications/speedynote.desktop
+/usr/share/pixmaps/speedynote.png
+/usr/share/doc/%{name}/README.md
+
+%changelog
+* $(date '+%a %b %d %Y') $MAINTAINER - $PKGVER-$PKGREL
+- Initial package
 EOF
     
-    echo -e "${GREEN}PKGBUILD created successfully${NC}"
+    # Build RPM
+    rpmbuild -ba ~/rpmbuild/SPECS/${PKGNAME}.spec
+    
+    # Copy to current directory
+    cp ~/rpmbuild/RPMS/x86_64/${PKGNAME}-${PKGVER}-${PKGREL}.*.rpm .
+    
+    echo -e "${GREEN}RPM package created: ${PKGNAME}-${PKGVER}-${PKGREL}.*.rpm${NC}"
 }
 
-# Function to create source tarball
-create_source_tarball() {
-    echo -e "${YELLOW}Creating source tarball...${NC}"
+# Function to create Arch package
+create_arch_package() {
+    echo -e "${YELLOW}Creating Arch package...${NC}"
     
-    # Clean any existing build artifacts
-    rm -rf build
-    rm -f "${PKGNAME}-${PKGVER}.tar.gz"
-    
-    # Create the tarball excluding unnecessary files
+    # Create source tarball
     tar -czf "${PKGNAME}-${PKGVER}.tar.gz" \
         --exclude=build \
         --exclude=.git* \
@@ -172,82 +428,125 @@ create_source_tarball() {
         --exclude=src \
         .
     
-    echo -e "${GREEN}Source tarball created: ${PKGNAME}-${PKGVER}.tar.gz${NC}"
+    # Create PKGBUILD
+    cat > PKGBUILD << EOF
+# Maintainer: $MAINTAINER
+pkgname=$PKGNAME
+pkgver=$PKGVER
+pkgrel=$PKGREL
+pkgdesc="$DESCRIPTION"
+arch=('x86_64')
+url="$URL"
+license=('MIT')
+depends=($(get_dependencies arch | tr ',' ' '))
+makedepends=($(get_build_dependencies arch | tr ',' ' '))
+source=("\${pkgname}-\${pkgver}.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    cd "\$srcdir"
+    cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+    cmake --build build --parallel
 }
 
-# Function to generate .SRCINFO
-generate_srcinfo() {
-    echo -e "${YELLOW}Generating .SRCINFO...${NC}"
-    makepkg --printsrcinfo > .SRCINFO
-    echo -e "${GREEN}.SRCINFO generated successfully${NC}"
-}
-
-# Function to build package
-build_package() {
-    echo -e "${YELLOW}Building package with makepkg...${NC}"
+package() {
+    cd "\$srcdir"
+    install -Dm755 "build/NoteApp" "\$pkgdir/usr/bin/speedynote"
+    install -Dm644 "resources/icons/mainicon.png" "\$pkgdir/usr/share/pixmaps/speedynote.png"
+    install -Dm644 README.md "\$pkgdir/usr/share/doc/\$pkgname/README.md"
     
-    # Build the package
+    install -Dm644 /dev/stdin "\$pkgdir/usr/share/applications/speedynote.desktop" << EOFDESKTOP
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=SpeedyNote
+Comment=$DESCRIPTION
+Exec=speedynote
+Icon=speedynote
+Terminal=false
+StartupNotify=true
+Categories=Office;Education;
+Keywords=notes;pdf;annotation;writing;
+EOFDESKTOP
+}
+EOF
+    
+    # Build package
     makepkg -f
     
-    if [[ $? -eq 0 ]]; then
-        echo -e "${GREEN}Package built successfully!${NC}"
-        
-        # Find the created package
-        PACKAGE_FILE=$(ls ${PKGNAME}-${PKGVER}-${PKGREL}-*.pkg.tar.zst 2>/dev/null | head -1)
-        if [[ -n "$PACKAGE_FILE" ]]; then
-            echo -e "${CYAN}Package file: $PACKAGE_FILE${NC}"
-            echo -e "${CYAN}Package size: $(du -h "$PACKAGE_FILE" | cut -f1)${NC}"
-        fi
-    else
-        echo -e "${RED}Package build failed!${NC}"
-        exit 1
-    fi
+    echo -e "${GREEN}Arch package created: ${PKGNAME}-${PKGVER}-${PKGREL}-x86_64.pkg.tar.zst${NC}"
 }
 
-# Function to test package installation
-test_package() {
-    PACKAGE_FILE=$(ls ${PKGNAME}-${PKGVER}-${PKGREL}-*.pkg.tar.zst 2>/dev/null | head -1)
+# Function to create Alpine package
+create_apk_package() {
+    echo -e "${YELLOW}Creating Alpine package...${NC}"
     
-    if [[ -z "$PACKAGE_FILE" ]]; then
-        echo -e "${RED}No package file found to test${NC}"
-        return 1
-    fi
+    # Create Alpine package structure
+    mkdir -p alpine-pkg
+    cd alpine-pkg
     
-    echo -e "${YELLOW}Testing package installation...${NC}"
-    echo -e "${CYAN}Package: $PACKAGE_FILE${NC}"
+    # Create APKBUILD
+    cat > APKBUILD << EOF
+# Maintainer: $MAINTAINER
+pkgname=$PKGNAME
+pkgver=$PKGVER
+pkgrel=$PKGREL
+pkgdesc="$DESCRIPTION"
+url="$URL"
+arch="aarch64"
+license="MIT"
+depends="$(get_dependencies apk)"
+makedepends="$(get_build_dependencies apk)"
+source="\$pkgname-\$pkgver.tar.gz"
+builddir="\$srcdir"
+
+build() {
+    cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+    cmake --build build --parallel
+}
+
+package() {
+    install -Dm755 "build/NoteApp" "\$pkgdir/usr/bin/speedynote"
+    install -Dm644 "resources/icons/mainicon.png" "\$pkgdir/usr/share/pixmaps/speedynote.png"
+    install -Dm644 README.md "\$pkgdir/usr/share/doc/\$pkgname/README.md"
     
-    # Check if package is already installed
-    if pacman -Qi "$PKGNAME" >/dev/null 2>&1; then
-        echo -e "${YELLOW}$PKGNAME is already installed. Remove it first? (y/N)${NC}"
-        read -r response
-        if [[ "$response" =~ ^[Yy]$ ]]; then
-            sudo pacman -R "$PKGNAME"
-        else
-            echo -e "${YELLOW}Skipping installation test${NC}"
-            return 0
-        fi
-    fi
+    install -Dm644 /dev/stdin "\$pkgdir/usr/share/applications/speedynote.desktop" << EOFDESKTOP
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=SpeedyNote
+Comment=$DESCRIPTION
+Exec=speedynote
+Icon=speedynote
+Terminal=false
+StartupNotify=true
+Categories=Office;Education;
+Keywords=notes;pdf;annotation;writing;
+EOFDESKTOP
+}
+EOF
     
-    echo -e "${YELLOW}Installing package...${NC}"
-    sudo pacman -U "$PACKAGE_FILE"
+    # Create source tarball
+    cd ..
+    tar -czf "alpine-pkg/${PKGNAME}-${PKGVER}.tar.gz" \
+        --exclude=build \
+        --exclude=.git* \
+        --exclude=alpine-pkg \
+        .
     
-    if [[ $? -eq 0 ]]; then
-        echo -e "${GREEN}Package installed successfully!${NC}"
-        echo
-        echo -e "${CYAN}Verifying installation:${NC}"
-        echo -e "Executable: $(which speedynote 2>/dev/null || echo 'NOT FOUND')"
-        echo -e "Desktop file: $([[ -f /usr/share/applications/speedynote.desktop ]] && echo 'FOUND' || echo 'NOT FOUND')"
-        echo -e "Icon: $([[ -f /usr/share/pixmaps/speedynote.png ]] && echo 'FOUND' || echo 'NOT FOUND')"
-    else
-        echo -e "${RED}Package installation failed!${NC}"
-        return 1
-    fi
+    cd alpine-pkg
+    
+    # Build package
+    abuild -r
+    
+    echo -e "${GREEN}Alpine package created in ~/packages/alpine-pkg/${PKGNAME}/${PKGNAME}-${PKGVER}-r${PKGREL}.apk${NC}"
 }
 
 # Function to clean up
 cleanup() {
     echo -e "${YELLOW}Cleaning up build artifacts...${NC}"
-    rm -rf pkg src
+    rm -rf build debian-pkg alpine-pkg
+    rm -f "${PKGNAME}-${PKGVER}.tar.gz"
     echo -e "${GREEN}Cleanup complete${NC}"
 }
 
@@ -257,47 +556,76 @@ show_package_info() {
     echo -e "${CYAN}=== Package Information ===${NC}"
     echo -e "Package name: ${PKGNAME}"
     echo -e "Version: ${PKGVER}-${PKGREL}"
-    echo -e "Architecture: x86_64"
-    
-    PACKAGE_FILE=$(ls ${PKGNAME}-${PKGVER}-${PKGREL}-*.pkg.tar.zst 2>/dev/null | head -1)
-    if [[ -n "$PACKAGE_FILE" ]]; then
-        echo -e "Package file: $PACKAGE_FILE"
-        echo -e "Package size: $(du -h "$PACKAGE_FILE" | cut -f1)"
-    fi
-    
+    echo -e "Formats created: ${PACKAGE_FORMATS[*]}"
     echo
-    echo -e "${CYAN}=== Installation Commands ===${NC}"
-    echo -e "Install package: ${YELLOW}sudo pacman -U $PACKAGE_FILE${NC}"
-    echo -e "Remove package: ${YELLOW}sudo pacman -R $PKGNAME${NC}"
-    echo
-    echo -e "${CYAN}=== For AUR Distribution ===${NC}"
-    echo -e "1. Upload PKGBUILD and .SRCINFO to AUR repository"
-    echo -e "2. Users can then install with: ${YELLOW}yay -S $PKGNAME${NC}"
+    
+    echo -e "${CYAN}=== Created Packages ===${NC}"
+    for format in "${PACKAGE_FORMATS[@]}"; do
+        case $format in
+            deb)
+                if [[ -f "${PKGNAME}_${PKGVER}-${PKGREL}_amd64.deb" ]]; then
+                    echo -e "DEB: ${PKGNAME}_${PKGVER}-${PKGREL}_amd64.deb ($(du -h "${PKGNAME}_${PKGVER}-${PKGREL}_amd64.deb" | cut -f1))"
+                fi
+                ;;
+            rpm)
+                RPM_FILE=$(ls ${PKGNAME}-${PKGVER}-${PKGREL}.*.rpm 2>/dev/null | head -1)
+                if [[ -n "$RPM_FILE" ]]; then
+                    echo -e "RPM: $RPM_FILE ($(du -h "$RPM_FILE" | cut -f1))"
+                fi
+                ;;
+            arch)
+                if [[ -f "${PKGNAME}-${PKGVER}-${PKGREL}-x86_64.pkg.tar.zst" ]]; then
+                    echo -e "Arch: ${PKGNAME}-${PKGVER}-${PKGREL}-x86_64.pkg.tar.zst ($(du -h "${PKGNAME}-${PKGVER}-${PKGREL}-x86_64.pkg.tar.zst" | cut -f1))"
+                fi
+                ;;
+            apk)
+                echo -e "Alpine: Check ~/packages/alpine-pkg/${PKGNAME}/ for .apk file"
+                ;;
+        esac
+    done
 }
 
 # Main execution
 main() {
-    echo -e "${BLUE}Starting packaging process...${NC}"
+    echo -e "${BLUE}Starting multi-distribution packaging process...${NC}"
     
     # Step 1: Verify environment
     check_project_directory
-    check_packaging_dependencies
     
-    # Step 2: Create packaging files
-    create_pkgbuild
-    create_source_tarball
-    generate_srcinfo
+    # Step 2: Check packaging dependencies for each format
+    FAILED_FORMATS=()
+    for format in "${PACKAGE_FORMATS[@]}"; do
+        if ! check_packaging_dependencies "$format"; then
+            FAILED_FORMATS+=("$format")
+        fi
+    done
     
-    # Step 3: Build package
-    build_package
-    
-    # Step 4: Ask about testing
-    echo
-    read -p "Do you want to test the package installation? (y/N): " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        test_package
+    if [[ ${#FAILED_FORMATS[@]} -gt 0 ]]; then
+        echo -e "${RED}Cannot continue with formats: ${FAILED_FORMATS[*]}${NC}"
+        echo -e "${YELLOW}Please install missing dependencies and try again.${NC}"
+        exit 1
     fi
+    
+    # Step 3: Build project
+    build_project
+    
+    # Step 4: Create packages
+    for format in "${PACKAGE_FORMATS[@]}"; do
+        case $format in
+            deb)
+                create_deb_package
+                ;;
+            rpm)
+                create_rpm_package
+                ;;
+            arch)
+                create_arch_package
+                ;;
+            apk)
+                create_apk_package
+                ;;
+        esac
+    done
     
     # Step 5: Cleanup
     cleanup
@@ -306,7 +634,7 @@ main() {
     show_package_info
     
     echo
-    echo -e "${GREEN}Packaging process completed successfully!${NC}"
+    echo -e "${GREEN}Multi-distribution packaging process completed successfully!${NC}"
 }
 
 # Run main function

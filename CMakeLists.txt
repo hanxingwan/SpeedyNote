@@ -160,7 +160,7 @@ endif()
 
 # ✅ Set output name for Linux
 if(UNIX)
-    set_target_properties(NoteApp PROPERTIES OUTPUT_NAME speedynote)
+    set_target_properties(NoteApp PROPERTIES OUTPUT_NAME NoteApp)
 endif()
 
 # ✅ Install targets for Linux/Flatpak
