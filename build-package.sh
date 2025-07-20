@@ -336,7 +336,9 @@ create_rpm_package() {
     # Setup RPM build environment
     mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
     
-    # Create source tarball
+    # Create source tarball with proper directory structure
+    CURRENT_DIR=$(basename "$PWD")
+    cd ..
     tar -czf ~/rpmbuild/SOURCES/${PKGNAME}-${PKGVER}.tar.gz \
         --exclude=build \
         --exclude=.git* \
@@ -344,7 +346,9 @@ create_rpm_package() {
         --exclude="*.deb" \
         --exclude="*.pkg.tar.zst" \
         --exclude="*.apk" \
-        .
+        --transform "s|^${CURRENT_DIR}|${PKGNAME}-${PKGVER}|" \
+        "${CURRENT_DIR}/"
+    cd "${CURRENT_DIR}"
     
     # Create spec file
     cat > ~/rpmbuild/SPECS/${PKGNAME}.spec << EOF
