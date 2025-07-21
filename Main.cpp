@@ -86,9 +86,9 @@ int main(int argc, char *argv[]) {
         } else {
             // Unknown file type, just show the application
             w.show();
-        }
+    }
     } else {
-        w.show();
+    w.show();
     }
     return app.exec();
 }
