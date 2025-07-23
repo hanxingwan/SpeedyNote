@@ -135,7 +135,7 @@ command_exists() {
 
 # Function to check if we're in the right directory
 check_project_directory() {
-    if [[ ! -f "CMakeLists.txt" ]] || [[ ! -f "Main.cpp" ]]; then
+    if [[ ! -f "CMakeLists.txt" ]]; then
         echo -e "${RED}Error: This doesn't appear to be the SpeedyNote project directory${NC}"
         echo "Please run this script from the SpeedyNote project root directory"
         exit 1
