@@ -1,5 +1,5 @@
 #include "MarkdownWindow.h"
-#include "markdown/qmarkdowntextedit.h"
+#include "../markdown/qmarkdowntextedit.h"
 #include "InkCanvas.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
