@@ -1,6 +1,7 @@
 ﻿# 📝 SpeedyNote
 
-_A lightweight, fast, and stylus-optimized note-taking app built for classic tablet PCs, low-resolution screens, and vintage hardware._
+_A lightweight, fast, and stylus-optimized note-taking app built for classic tablet PCs, low-resolution screens, and
+vintage hardware._
 
 如果您恰好不懂英文，请移步[中文README](./readme/zh_Hans.md)
 
@@ -27,10 +28,9 @@ _A lightweight, fast, and stylus-optimized note-taking app built for classic tab
 
 ## 📸 Screenshots
 
-| Drawing | Dial UI / Joycon Controls | Overlay Grid Options |
-|----------------|------------------------|-----------------------|
+| Drawing                                  | Dial UI / Joycon Controls               | Overlay Grid Options                     |
+|------------------------------------------|-----------------------------------------|------------------------------------------|
 | ![draw](https://i.imgur.com/iARL6Vo.gif) | ![pdf](https://i.imgur.com/NnrqOQQ.gif) | ![grid](https://i.imgur.com/YaEdx1p.gif) |
-
 
 ---
 
@@ -53,10 +53,10 @@ _A lightweight, fast, and stylus-optimized note-taking app built for classic tab
 
 ###### OR
 
-1. Right click a PDF file in File Explorer (or equivalent)  
-2. Click open with and select SpeedyNote  
-3. Create a folder for the directory of the current notebook  
-4. Next time when you double click a PDF with a working directory already created, step 3 will be skipped.  
+1. Right click a PDF file in File Explorer (or equivalent)
+2. Click open with and select SpeedyNote
+3. Create a folder for the directory of the current notebook
+4. Next time when you double click a PDF with a working directory already created, step 3 will be skipped.
 5. Start writing/drawing using your stylus
 
 ---
@@ -64,12 +64,12 @@ _A lightweight, fast, and stylus-optimized note-taking app built for classic tab
 ## 📦 Notebook Format
 
 - Can be saved as:
-  - 📁 A **folder** with `.png` pages + metadata
-  - 🗜️ A **`.snpkg` archive** for portability (non-compressed `.tar`)
+    - 📁 A **folder** with `.png` pages + metadata
+    - 🗜️ A **`.snpkg` archive** for portability (non-compressed `.tar`)
 - Each notebook may contain:
-  - Annotated page images (`annotated_XXXX.png`)
-  - Optional background images from PDF (`XXXX.png`)
-  - Metadata: background style, density, color, and PDF path
+    - Annotated page images (`annotated_XXXX.png`)
+    - Optional background images from PDF (`XXXX.png`)
+    - Metadata: background style, density, color, and PDF path
 
 ---
 
@@ -80,11 +80,11 @@ SpeedyNote supports controller input, ideal for tablet users:
 - ✅ **Left Joy-Con supported**
 - 🎛️ Analog stick → Dial control
 - 🔘 Buttons can be mapped to:
-  - Control the dial with multiple features
-  - Toggle fullscreen
-  - Change color / thickness
-  - Open control panel
-  - Create/delete pages
+    - Control the dial with multiple features
+    - Toggle fullscreen
+    - Change color / thickness
+    - Open control panel
+    - Create/delete pages
 
 > Long press + turn = hold-and-turn mappings
 
@@ -92,37 +92,62 @@ SpeedyNote supports controller input, ideal for tablet users:
 
 ## 📁 Building From Source
 
-
 #### Windows
 
-1. Run translation and compiling scripts
-  ```powershell
-  ./translate.ps1
-  ./compile.ps1
-  ```
+1. Install dependent.
 
-(Dependency directories may need to be modified)
+    - QT6
+    - DSL2
+    - Poppler
+    - Compiler(e.g. Mingw GCC/Mingw llvm clang, or MSVC(Visual Studio))
+    - CMake
+    - Ninja (Optional)
 
-2. Install `InnoSetup` and open `packaging.iss` with it to pack SpeedyNote into an executable installer.
-3. Run `SpeedyNoteInstaller.exe` to install SpeedyNote to your PC. 
+2. Move resource.
+    
+    ```PowerShell
+    Copy-Item -Path \
+   ".\resources\translations\*.qm" -Destination ".\build"
+    ```
+    If failed, try to use `--Force` argument.
 
+3. Build.
+    
+    ```PowerShell
+    cmake -B build  \
+    -DQT_PATH="D:/Your/Qt/Path" \
+    -DSDL2_ROOT="E:/Your/SDL2" \
+    -DPOPPLER_PATH="F:/Your/Poppler"
+    cmake -G Ninja # If installed ninja. 
+    cmake --build build
+   ```
 
+4. Run.
+
+    The compilation product is usually in `./build/NoteApp.exe`
+
+5. If you want to make a Installer, try to use `InnerSetup`
 
 #### Linux
+
 ##### Flatpak
+
 1. Run compile and package scripts
-   
+
    ```bash
    ./compile.sh
    ./build-flatpak.sh
    ```
 
 2. Install the flatpak package
-   
+
    ```bash
    flatpak install ./speedynote.flatpak
    ```
+
 ##### Native Packages
+
 1. run `./compile.sh` and `./build-package.sh`
-2. Install the packages for your Linux distro. Note that the dependencies for Fedora and RedHat are not yet tested.`.deb`,`.pkg.tar.zst` and `.apk` are tested and working.
+2. Install the packages for your Linux distro. Note that the dependencies for Fedora and RedHat are not yet tested.
+   `.deb`,`.pkg.tar.zst` and `.apk` are tested and working.
    
