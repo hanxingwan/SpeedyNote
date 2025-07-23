@@ -18,7 +18,8 @@
 
 - 支持加载PDF，在其上做注释，1000页PDF高速加载，很难卡顿
 
-- 支持Windows 7, 8, 10, 11， MacOS，大多数Linux发行版。可轻松打包为`.deb`, `.rpm`,`.pkg.tar.zst`,`.apk`， 同时提供Flatpak，支持x86-64和aarch64，几乎所有设备均可运行
+- 支持Windows 7, 8, 10, 11， MacOS，大多数Linux发行版。可轻松打包为`.deb`, `.rpm`,`.pkg.tar.zst`,`.apk`，
+  同时提供Flatpak，支持x86-64和aarch64，几乎所有设备均可运行
 
 - Markdown即时贴，即使用户没有电磁笔，文字笔记也可以非常便捷高效
 
@@ -36,15 +37,17 @@ SpeedyNote 有一个项目官网 [SpeedyNote](https://alpha-liu-01.up.railway.ap
 
 #### Windows
 
-直接安装自解压程序即可。Windows 7/8 用户请使用Legacy版本 [Release Version 0.4.13 - Legacy Release for Windows 7 / 8 · alpha-liu-01/SpeedyNote · GitHub](https://github.com/alpha-liu-01/SpeedyNote/releases/tag/v0.4.13-1)
+直接安装自解压程序即可。Windows 7/8
+用户请使用Legacy版本 [Release Version 0.4.13 - Legacy Release for Windows 7 / 8 · alpha-liu-01/SpeedyNote · GitHub](https://github.com/alpha-liu-01/SpeedyNote/releases/tag/v0.4.13-1)
 
 #### Mac OS
 
-从 [这里](https://github.com/alpha-liu-01/SpeedyNote/releases/download/v0.6.1/SpeedyNote-0.6.1.dmg) 下载Mac版本的SpeedyNote运行dmg文件夹中的installation script即可完成安装。
+从 [这里](https://github.com/alpha-liu-01/SpeedyNote/releases/download/v0.6.1/SpeedyNote-0.6.1.dmg)
+下载Mac版本的SpeedyNote运行dmg文件夹中的installation script即可完成安装。
 
 #### Linux
 
-运行 `flatpak install ./speedynote.flatpak` 
+运行 `flatpak install ./speedynote.flatpak`
 
 # 图片
 
@@ -53,8 +56,6 @@ SpeedyNote 有一个项目官网 [SpeedyNote](https://alpha-liu-01.up.railway.ap
 ![main](https://i.imgur.com/2jQjw1b.png)
 
 ![postmarketOS](https://i.imgur.com/uFWtM7z.jpeg)
-
-
 
 # 已知特性和缺陷
 
@@ -74,8 +75,6 @@ SpeedyNote 有一个项目官网 [SpeedyNote](https://alpha-liu-01.up.railway.ap
 
 - 套索选中的区域无法跨页面复制粘贴
 
-
-
 # 翻译
 
 --- 
@@ -90,13 +89,11 @@ SpeedyNote 有一个项目官网 [SpeedyNote](https://alpha-liu-01.up.railway.ap
 
 - 西班牙语 （<35%）（机翻）
 
-
-
 # 开源许可证
 
 --- 
 
-SpeedyNote有一个MIT License。也就意味着大家其实可以随意折腾随意玩坏。我不是很在乎这件事。  
+SpeedyNote有一个MIT License。也就意味着大家其实可以随意折腾随意玩坏。我不是很在乎这件事。
 
 ```
 MIT License
@@ -130,46 +127,62 @@ SOFTWARE.
 
 > SpeedyNote 问题反馈和开发者交流 QQ 744918470
 
-
-
-
-
 # 构建
 
 ---
 
 #### Windows
 
-1. 运行翻译和构建脚本
+1. 安装依赖
 
-```powershell
-./translate.ps1
-./compile.ps1
-```
+    - QT6
+    - DSL2
+    - Poppler
+    - Compiler(e.g. Mingw GCC/Mingw llvm clang, or MSVC(Visual Studio))
+    - CMake
+    - Ninja (Optional)
 
-依赖的路径可能需要更改
+2. 移动资源文件
 
-2. 安装 `InnoSetup` 后用其打开 `packaging.iss` 来将SpeedyNote打包成一个可执行安装包
+    ```PowerShell
+    Copy-Item -Path \
+   ".\resources\translations\*.qm" -Destination ".\build"
+    ```
+   如果失败了，尝试使用强制参数 `--Force` 重试.
 
-3. 运行 `SpeedyNoteInstaller.exe` 来往你的PC上安装SpeedyNote。
+3. 编译
 
+    ```PowerShell
+    cmake -B build  \
+    -DQT_PATH="D:/Your/Qt/Path" \
+    -DSDL2_ROOT="E:/Your/SDL2" \
+    -DPOPPLER_PATH="F:/Your/Poppler"
+    cmake -G Ninja # If installed ninja. 
+    cmake --build build
+   ```
 
+4. 运行
+
+   通常情况下，编译产物可能在 `./build/NoteApp.exe`
+
+5. 要是想做成安装程序，考虑使用 `InnerSetup`
 
 #### Linux
 
 1. 运行构建和打包脚本
-   
+
    ```bash
    ./compile.sh
    ./build-flatpak.sh
    ```
 
 2. 安装打包好的flatpak
-   
+
    ```bash
    flatpak install ./speedynote.flatpak
    ```
-   
-   
 
+##### 本地软件包
 
+1. 运行 `./compile.sh` 以及 `./build-package.sh`
+2. 安装适用您 Linux 发行版的软件包。（注：Fedora系和RedHat系Linux软件包未经测试）
