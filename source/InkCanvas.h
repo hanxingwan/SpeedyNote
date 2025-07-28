@@ -43,6 +43,7 @@ signals:
     void pdfTextSelected(const QString &text); // Signal emitted when PDF text is selected
     void pdfLoaded(); // Signal emitted when a PDF is loaded
     void markdownSelectionModeChanged(bool enabled); // Signal emitted when markdown selection mode changes
+    void annotatedImageSaved(const QString &filePath); // ✅ Signal emitted when annotated image is saved
 
 public:
     explicit InkCanvas(QWidget *parent = nullptr);
@@ -125,10 +126,7 @@ public:
     int getBufferWidth() const { return buffer.width(); }
     QPixmap getBuffer() const { return buffer; } // Get buffer for concurrent saving
 
-    void exportNotebook(const QString &destinationFile);
-    void importNotebook(const QString &packageFile);
 
-    void importNotebookTo(const QString &packageFile, const QString &destFolder);
 
     bool isEdited() const { return edited; }  // ✅ Check if the canvas has been edited
     void setEdited(bool state) { edited = state; }  // ✅ Set the edited state

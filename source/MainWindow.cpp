@@ -40,10 +40,13 @@
 #include "PdfOpenDialog.h" // Added for PDF file association
 #include <poppler-qt6.h> // For PDF outline parsing
 
-MainWindow::MainWindow(QWidget *parent) 
-    : QMainWindow(parent), benchmarking(false) {
+// Static member definition for single instance
+QSharedMemory *MainWindow::sharedMemory = nullptr;
 
-    setWindowTitle(tr("SpeedyNote Beta 0.7.0"));
+MainWindow::MainWindow(QWidget *parent) 
+    : QMainWindow(parent), benchmarking(false), localServer(nullptr) {
+
+    setWindowTitle(tr("SpeedyNote Beta 0.7.1"));
 
     // Enable IME support for multi-language input
     setAttribute(Qt::WA_InputMethodEnabled, true);
@@ -1132,6 +1135,9 @@ void MainWindow::setupUi() {
 
     addNewTab();
 
+    // Setup single instance server
+    setupSingleInstanceServer();
+
     // Initialize responsive toolbar layout
     createSingleRowLayout();  // Start with single row layout
     
@@ -1144,6 +1150,18 @@ MainWindow::~MainWindow() {
 
     saveButtonMappings();  // ✅ Save on exit, as backup
     delete canvas;
+    
+    // Cleanup single instance resources
+    if (localServer) {
+        localServer->close();
+        QLocalServer::removeServer("SpeedyNote_SingleInstance");
+    }
+    
+    if (sharedMemory) {
+        sharedMemory->detach();
+        delete sharedMemory;
+        sharedMemory = nullptr;
+    }
 }
 
 void MainWindow::toggleBenchmark() {
@@ -1681,6 +1699,11 @@ void MainWindow::loadPdf() {
     QString filePath = QFileDialog::getOpenFileName(this, tr("Select PDF"), "", "PDF Files (*.pdf)");
     if (!filePath.isEmpty()) {
         currentCanvas()->loadPdf(filePath);
+        
+        // ✅ Load the current page to display the PDF immediately
+        int currentPage = getCurrentPageForCanvas(currentCanvas());
+        currentCanvas()->loadPdfPage(currentPage);
+        
         updateTabLabel(); // ✅ Update the tab name after assigning a PDF
         updateZoom(); // ✅ Update zoom and pan range after PDF is loaded
         
@@ -1688,6 +1711,9 @@ void MainWindow::loadPdf() {
         if (outlineSidebarVisible) {
             loadPdfOutline();
         }
+        
+        // ✅ Refresh the canvas to show the PDF immediately
+        currentCanvas()->update();
     }
 }
 
@@ -1696,7 +1722,19 @@ void MainWindow::clearPdf() {
     if (!canvas) return;
     
     canvas->clearPdf();
+    
+    // ✅ Update the tab label to reflect PDF removal
+    updateTabLabel();
+    
+    // ✅ Refresh the canvas to show the cleared state immediately
+    canvas->update();
+    
     updateZoom(); // ✅ Update zoom and pan range after PDF is cleared
+    
+    // ✅ Clear PDF outline if sidebar is visible
+    if (outlineSidebarVisible) {
+        loadPdfOutline(); // This will clear the outline since no PDF is loaded
+    }
 }
 
 
@@ -1815,14 +1853,6 @@ void MainWindow::addNewTab() {
     // ✅ Handle tab closing when the button is clicked
     connect(closeButton, &QPushButton::clicked, this, [=]() { // newCanvas is now captured
 
-        // Prevent closing if it's the last remaining tab
-        if (tabList->count() <= 1) {
-            // Optional: show a message or do nothing silently
-            QMessageBox::information(this, tr("Notice"), tr("At least one tab must remain open."));
-
-            return;
-        }
-
         // Find the index of the tab associated with this button's parent (tabWidget)
         int indexToRemove = -1;
         // newCanvas is captured by the lambda, representing the canvas of the tab being closed.
@@ -1873,8 +1903,16 @@ void MainWindow::addNewTab() {
             saveBookmarks();
         }
 
-        // 1. Ensure the notebook has a unique save folder if it's temporary/edited
-        ensureTabHasUniqueSaveFolder(newCanvas); // Pass the specific canvas
+        // ✅ 1. PRIORITY: Handle saving first - user can cancel here
+        if (!ensureTabHasUniqueSaveFolder(newCanvas)) {
+            return; // User cancelled saving, don't close tab
+        }
+
+        // ✅ 2. ONLY AFTER SAVING: Check if it's the last remaining tab
+        if (tabList->count() <= 1) {
+            QMessageBox::information(this, tr("Notice"), tr("At least one tab must remain open."));
+            return;
+        }
 
         // 2. Get the final save folder path
         QString folderPath = newCanvas->getSaveFolder();
@@ -1954,6 +1992,7 @@ void MainWindow::addNewTab() {
         }
     });
     connect(newCanvas, &InkCanvas::markdownSelectionModeChanged, this, &MainWindow::updateMarkdownButtonState);
+    connect(newCanvas, &InkCanvas::annotatedImageSaved, this, &MainWindow::onAnnotatedImageSaved);
     
     // Install event filter to detect mouse movement for scrollbar visibility
     newCanvas->setMouseTracking(true);
@@ -2053,10 +2092,10 @@ void MainWindow::removeTabAt(int index) {
     // }
 }
 
-void MainWindow::ensureTabHasUniqueSaveFolder(InkCanvas* canvas) {
-    if (!canvas) return;
+bool MainWindow::ensureTabHasUniqueSaveFolder(InkCanvas* canvas) {
+    if (!canvas) return true; // No canvas to save, allow closure
 
-    if (canvasStack->count() == 0) return;
+    if (canvasStack->count() == 0) return true; // No tabs, allow closure
 
     QString currentFolder = canvas->getSaveFolder();
     QString tempFolder = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/temp_session";
@@ -2066,40 +2105,57 @@ void MainWindow::ensureTabHasUniqueSaveFolder(InkCanvas* canvas) {
         QDir sourceDir(tempFolder);
         QStringList pageFiles = sourceDir.entryList(QStringList() << "*.png", QDir::Files);
 
-        // No pages to save → skip prompting
+        // No pages to save → allow closure without prompting
         if (pageFiles.isEmpty()) {
-            return;
+            return true;
         }
 
-        QMessageBox::warning(this, tr("Unsaved Notebook"),
-                             tr("This notebook is still using a temporary session folder.\nPlease select a permanent folder to avoid data loss."));
+        QMessageBox::StandardButton reply = QMessageBox::question(this, 
+            tr("Save Notebook"), 
+            tr("This notebook contains unsaved work.\n\n"
+               "Would you like to save it as a SpeedyNote Package (.spn) file before closing?"),
+            QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
+            QMessageBox::Save);
 
-        QString selectedFolder = QFileDialog::getExistingDirectory(this, tr("Select Save Folder"));
-        if (selectedFolder.isEmpty()) return;
-
-        QDir destDir(selectedFolder);
-        if (!destDir.exists()) {
-            QDir().mkpath(selectedFolder);
+        if (reply == QMessageBox::Cancel) {
+            return false; // User cancelled, don't close tab
+        }
+        
+        if (reply == QMessageBox::Discard) {
+            return true; // User chose to discard, allow closure
         }
 
-        // Copy contents from temp to selected folder
-        for (const QString &file : sourceDir.entryList(QDir::Files)) {
-            QString srcFilePath = tempFolder + "/" + file;
-            QString dstFilePath = selectedFolder + "/" + file;
-
-            // If file already exists at destination, remove it to avoid rename failure
-            if (QFile::exists(dstFilePath)) {
-                QFile::remove(dstFilePath);
-            }
-
-            QFile::rename(srcFilePath, dstFilePath);  // This moves the file
+        // User chose Save - prompt for .spn file location
+        QString suggestedName = "MyNotebook.spn";
+        QString selectedSpnPath = QFileDialog::getSaveFileName(this, 
+            tr("Save SpeedyNote Package"), 
+            suggestedName, 
+            "SpeedyNote Package (*.spn)");
+            
+        if (selectedSpnPath.isEmpty()) {
+            return false; // User cancelled save dialog, don't close tab
         }
 
-        canvas->setSaveFolder(selectedFolder);
-        // updateTabLabel(); // No longer needed here, handled by the close button lambda
+        // Ensure .spn extension
+        if (!selectedSpnPath.toLower().endsWith(".spn")) {
+            selectedSpnPath += ".spn";
+        }
+
+        // Create .spn package from temp folder contents
+        if (!SpnPackageManager::convertFolderToSpnPath(tempFolder, selectedSpnPath)) {
+            QMessageBox::critical(this, tr("Save Failed"), 
+                tr("Failed to save the notebook as a SpeedyNote Package.\nPlease try again or choose a different location."));
+            return false; // Save failed, don't close tab
+        }
+
+        // Update canvas to use the new .spn package
+        canvas->setSaveFolder(selectedSpnPath);
+        
+        QMessageBox::information(this, tr("Saved Successfully"), 
+            tr("Notebook saved as: %1").arg(QFileInfo(selectedSpnPath).fileName()));
     }
 
-    return;
+    return true; // Success, allow tab closure
 }
 
 
@@ -2117,7 +2173,7 @@ void MainWindow::updateTabLabel() {
     InkCanvas *canvas = currentCanvas();
     if (!canvas) return;
 
-    QString folderPath = canvas->getSaveFolder(); // ✅ Get save folder
+    QString folderPath = canvas->getDisplayPath(); // ✅ Get display path (shows .spn filename instead of temp dir)
     if (folderPath.isEmpty()) return;
 
     QString tabName;
@@ -2132,10 +2188,17 @@ void MainWindow::updateTabLabel() {
         }
     }
 
-    // ✅ If no PDF, use the folder name
+    // ✅ If no PDF, use appropriate fallback
     if (tabName.isEmpty()) {
-        QFileInfo folderInfo(folderPath);
-        tabName = elideTabText(folderInfo.fileName(), 90); // e.g., "MyNotebook" (elided)
+        if (folderPath.toLower().endsWith(".spn")) {
+            // For .spn packages, use the .spn filename
+            QFileInfo spnInfo(folderPath);
+            tabName = elideTabText(spnInfo.fileName(), 90); // e.g., "MyNotebook.spn" (elided)
+        } else {
+            // For regular folders, use the folder name
+            QFileInfo folderInfo(folderPath);
+            tabName = elideTabText(folderInfo.fileName(), 90); // e.g., "MyNotebook" (elided)
+        }
     }
 
     QListWidgetItem *tabItem = tabList->item(index);
@@ -4084,6 +4147,9 @@ void MainWindow::openPdfFile(const QString &pdfPath) {
         // Set the new folder as save folder
         canvas->setSaveFolder(selectedFolder);
         
+        // ✅ Apply default background settings to new PDF notebook
+        applyDefaultBackgroundToCanvas(canvas);
+        
         // Load the PDF
         canvas->loadPdf(pdfPath);
         
@@ -4527,6 +4593,18 @@ void MainWindow::updateMarkdownButtonState() {
         markdownButton->style()->unpolish(markdownButton);
         markdownButton->style()->polish(markdownButton);
     }
+}
+
+void MainWindow::onAnnotatedImageSaved(const QString &filePath) {
+    // ✅ Show success message to user
+    QFileInfo fileInfo(filePath);
+    QString fileName = fileInfo.fileName();
+    QString dirPath = fileInfo.absolutePath();
+    
+    QMessageBox::information(this, tr("Annotated Image Saved"), 
+        tr("Annotated page saved successfully!\n\n"
+           "File: %1\n"
+           "Location: %2").arg(fileName, dirPath));
 }
 
 void MainWindow::updateDialButtonState() {
@@ -5282,6 +5360,21 @@ void MainWindow::loadDefaultBackgroundSettings(BackgroundStyle &style, QColor &c
     if (density > 200) density = 200;
 }
 
+void MainWindow::applyDefaultBackgroundToCanvas(InkCanvas *canvas) {
+    if (!canvas) return;
+    
+    BackgroundStyle defaultStyle;
+    QColor defaultColor;
+    int defaultDensity;
+    loadDefaultBackgroundSettings(defaultStyle, defaultColor, defaultDensity);
+    
+    canvas->setBackgroundStyle(defaultStyle);
+    canvas->setBackgroundColor(defaultColor);
+    canvas->setBackgroundDensity(defaultDensity);
+    canvas->saveBackgroundMetadata(); // Save the settings
+    canvas->update(); // Refresh the display
+}
+
 void MainWindow::showRopeSelectionMenu(const QPoint &position) {
     // Create context menu for rope tool selection
     QMenu *contextMenu = new QMenu(this);
@@ -5773,5 +5866,183 @@ void MainWindow::openSpnPackage(const QString &spnPath)
                 recentNotebooksManager->addRecentNotebook(spnPath, canvasPtr.data());
             }
         });
+    }
+}
+
+void MainWindow::createNewSpnPackage(const QString &spnPath)
+{
+    // Check if file already exists
+    if (QFile::exists(spnPath)) {
+        QMessageBox::warning(this, tr("File Exists"), 
+            tr("A file with this name already exists. Please choose a different name."));
+        return;
+    }
+    
+    // Get the base name for the notebook (without .spn extension)
+    QFileInfo fileInfo(spnPath);
+    QString notebookName = fileInfo.baseName();
+    
+    // Create the new .spn package
+    if (!SpnPackageManager::createSpnPackage(spnPath, notebookName)) {
+        QMessageBox::critical(this, tr("Creation Failed"), 
+            tr("Failed to create the SpeedyNote package. Please check file permissions."));
+        return;
+    }
+    
+    // Get current canvas and save any existing work
+    InkCanvas *canvas = currentCanvas();
+    if (!canvas) return;
+    
+    if (canvas->isEdited()) {
+        saveCurrentPage();
+    }
+    
+    // Open the newly created package
+    canvas->setSaveFolder(spnPath);
+    
+    // ✅ Apply default background settings to new package
+    applyDefaultBackgroundToCanvas(canvas);
+    
+    // Update UI
+    updateTabLabel();
+    updateBookmarkButtonState();
+    
+    // Start from page 1 (no last accessed page for new packages)
+    switchPageWithDirection(1, 1);
+    pageInput->setValue(1);
+    updateZoom();
+    updatePanRange();
+    
+    // Add to recent notebooks
+    if (recentNotebooksManager) {
+        QPointer<InkCanvas> canvasPtr(canvas);
+        QTimer::singleShot(100, this, [this, spnPath, canvasPtr]() {
+            if (recentNotebooksManager && canvasPtr && !canvasPtr.isNull()) {
+                recentNotebooksManager->addRecentNotebook(spnPath, canvasPtr.data());
+            }
+        });
+    }
+    
+    // Show success message
+    QMessageBox::information(this, tr("Package Created"), 
+        tr("New SpeedyNote package '%1' has been created successfully!").arg(notebookName));
+}
+
+// ========================================
+// Single Instance Implementation
+// ========================================
+
+bool MainWindow::isInstanceRunning()
+{
+    if (!sharedMemory) {
+        sharedMemory = new QSharedMemory("SpeedyNote_SingleInstance");
+    }
+    
+    // Try to create shared memory segment
+    if (sharedMemory->create(1)) {
+        // Successfully created, we're the first instance
+        return false;
+    } else {
+        // Failed to create, another instance is running
+        return true;
+    }
+}
+
+bool MainWindow::sendToExistingInstance(const QString &filePath)
+{
+    QLocalSocket socket;
+    socket.connectToServer("SpeedyNote_SingleInstance");
+    
+    if (!socket.waitForConnected(3000)) {
+        return false; // Failed to connect to existing instance
+    }
+    
+    // Send the file path to the existing instance
+    QByteArray data = filePath.toUtf8();
+    socket.write(data);
+    socket.waitForBytesWritten(3000);
+    socket.disconnectFromServer();
+    
+    return true;
+}
+
+void MainWindow::setupSingleInstanceServer()
+{
+    localServer = new QLocalServer(this);
+    
+    // Remove any existing server (in case of improper shutdown)
+    QLocalServer::removeServer("SpeedyNote_SingleInstance");
+    
+    // Start listening for new connections
+    if (!localServer->listen("SpeedyNote_SingleInstance")) {
+        qWarning() << "Failed to start single instance server:" << localServer->errorString();
+        return;
+    }
+    
+    // Connect to handle new connections
+    connect(localServer, &QLocalServer::newConnection, this, &MainWindow::onNewConnection);
+}
+
+void MainWindow::onNewConnection()
+{
+    QLocalSocket *clientSocket = localServer->nextPendingConnection();
+    if (!clientSocket) return;
+    
+    // Set up the socket to auto-delete when disconnected
+    clientSocket->setParent(this); // Ensure proper cleanup
+    
+    // Use QPointer for safe access in lambdas
+    QPointer<QLocalSocket> socketPtr(clientSocket);
+    
+    // Handle data reception
+    connect(clientSocket, &QLocalSocket::readyRead, this, [this, socketPtr]() {
+        if (!socketPtr) return; // Socket was already deleted
+        
+        QByteArray data = socketPtr->readAll();
+        QString command = QString::fromUtf8(data);
+        
+        if (!command.isEmpty()) {
+            // Bring window to front and focus (already on main thread)
+            raise();
+            activateWindow();
+            
+            // Parse command
+            if (command.startsWith("--create-new|")) {
+                // Handle create new package command
+                QString filePath = command.mid(13); // Remove "--create-new|" prefix
+                createNewSpnPackage(filePath);
+            } else {
+                // Regular file opening
+                openFileInNewTab(command);
+            }
+        }
+        
+        // Close the connection after processing
+        if (socketPtr) {
+            socketPtr->disconnectFromServer();
+        }
+    });
+    
+    // Clean up when disconnected
+    connect(clientSocket, &QLocalSocket::disconnected, clientSocket, &QLocalSocket::deleteLater);
+    
+    // Set a reasonable timeout (3 seconds) with safe pointer
+    QTimer::singleShot(3000, this, [socketPtr]() {
+        if (socketPtr && socketPtr->state() != QLocalSocket::UnconnectedState) {
+            socketPtr->disconnectFromServer();
+        }
+    });
+}
+
+void MainWindow::openFileInNewTab(const QString &filePath)
+{
+    // Create a new tab first
+    addNewTab();
+    
+    // Open the file in the new tab
+    if (filePath.toLower().endsWith(".pdf")) {
+        openPdfFile(filePath);
+    } else if (filePath.toLower().endsWith(".spn")) {
+        openSpnPackage(filePath);
     }
 }

@@ -1,4 +1,5 @@
 #include "SpnPackageManager.h"
+#include "InkCanvas.h" // For BackgroundStyle enum
 #include <QDir>
 #include <QFileInfo>
 #include <QStandardPaths>
@@ -101,6 +102,23 @@ bool SpnPackageManager::convertFolderToSpn(const QString &folderPath, QString &s
     return true;
 }
 
+bool SpnPackageManager::convertFolderToSpnPath(const QString &folderPath, const QString &targetSpnPath)
+{
+    QFileInfo folderInfo(folderPath);
+    if (!folderInfo.exists() || !folderInfo.isDir()) {
+        return false;
+    }
+    
+    // Check if target .spn already exists
+    if (QFile::exists(targetSpnPath)) {
+        qWarning() << "Target SPN package already exists:" << targetSpnPath;
+        return false;
+    }
+    
+    // Pack folder into .spn file at target path
+    return packDirectoryToSpn(folderPath, targetSpnPath);
+}
+
 bool SpnPackageManager::createSpnPackage(const QString &spnPath, const QString &notebookName)
 {
     if (QFile::exists(spnPath)) {
@@ -115,6 +133,35 @@ bool SpnPackageManager::createSpnPackage(const QString &spnPath, const QString &
     
     // Create basic .speedynote_metadata.json
     QJsonObject metadata = createSpnHeader(notebookName);
+    QJsonDocument doc(metadata);
+    
+    QFile metaFile(tempDir.path() + "/.speedynote_metadata.json");
+    if (metaFile.open(QIODevice::WriteOnly)) {
+        metaFile.write(doc.toJson());
+        metaFile.close();
+    }
+    
+    // Pack the temp directory into .spn file
+    return packDirectoryToSpn(tempDir.path(), spnPath);
+}
+
+bool SpnPackageManager::createSpnPackageWithBackground(const QString &spnPath, const QString &notebookName,
+                                                       BackgroundStyle style, const QColor &color, int density)
+{
+    if (QFile::exists(spnPath)) {
+        return false; // Already exists
+    }
+    
+    // Create a temporary directory with basic structure
+    QTemporaryDir tempDir;
+    if (!tempDir.isValid()) {
+        return false;
+    }
+    
+    // Create .speedynote_metadata.json with custom background settings
+    QString styleStr = backgroundStyleToString(style);
+    QString colorStr = color.isValid() ? color.name() : "#ffffff";
+    QJsonObject metadata = createSpnHeader(notebookName, styleStr, colorStr, density);
     QJsonDocument doc(metadata);
     
     QFile metaFile(tempDir.path() + "/.speedynote_metadata.json");
@@ -287,7 +334,10 @@ bool SpnPackageManager::unpackSpnToDirectory(const QString &spnPath, const QStri
     return true;
 }
 
-QJsonObject SpnPackageManager::createSpnHeader(const QString &notebookName)
+QJsonObject SpnPackageManager::createSpnHeader(const QString &notebookName,
+                                               const QString &backgroundStyle,
+                                               const QString &backgroundColor, 
+                                               int backgroundDensity)
 {
     QJsonObject metadata;
     metadata["notebook_id"] = QUuid::createUuid().toString(QUuid::WithoutBraces).replace("-", "");
@@ -299,13 +349,23 @@ QJsonObject SpnPackageManager::createSpnHeader(const QString &notebookName)
         metadata["name"] = notebookName;
     }
     
-    // Default values
+    // Use provided background settings instead of hardcoded defaults
     metadata["pdf_path"] = "";
     metadata["last_accessed_page"] = 0;
-    metadata["background_style"] = "None";
-    metadata["background_color"] = "#ffffff";
-    metadata["background_density"] = 20;
+    metadata["background_style"] = backgroundStyle;
+    metadata["background_color"] = backgroundColor;
+    metadata["background_density"] = backgroundDensity;
     metadata["bookmarks"] = QJsonArray();
     
     return metadata;
-} 
+}
+
+QString SpnPackageManager::backgroundStyleToString(BackgroundStyle style)
+{
+    switch (style) {
+        case BackgroundStyle::None: return "None";
+        case BackgroundStyle::Grid: return "Grid";
+        case BackgroundStyle::Lines: return "Lines";
+        default: return "None";
+    }
+}
