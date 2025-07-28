@@ -17,6 +17,11 @@
 #include <QMenu>
 #include <QClipboard>
 #include <QFutureWatcher>
+#include "MarkdownWindowManager.h"
+#include "ToolType.h"
+#include "ButtonMappingTypes.h"
+#include "SpnPackageManager.h"
+#include "PdfRelinkDialog.h"
 
 class MarkdownWindowManager;
 
@@ -78,7 +83,9 @@ public:
     void clearPdf();
     void clearPdfNoDelete();
 
-    QString getSaveFolder() const;
+    QString getSaveFolder() const { return saveFolder; }
+    QString getDisplayPath() const; // ✅ Get display path (.spn package or folder)
+    void syncSpnPackage(); // ✅ Sync changes back to .spn file
 
     void setLastActivePage(int page) { lastActivePage = page; }
     int getLastActivePage() const { return lastActivePage; }
@@ -113,7 +120,7 @@ public:
     QColor getBackgroundColor() const { return backgroundColor; }
     int getBackgroundDensity() const { return backgroundDensity; }
 
-    void saveBackgroundMetadata();  // ✅ Save background metadata
+    // saveBackgroundMetadata moved to unified JSON metadata section
 
     int getBufferWidth() const { return buffer.width(); }
     QPixmap getBuffer() const { return buffer; } // Get buffer for concurrent saving
@@ -226,7 +233,11 @@ private:
     qreal penToolThickness = 5.0;    // Default pen thickness
     qreal markerToolThickness = 5.0; // Default marker thickness (will be scaled by 8x in drawing)
     qreal eraserToolThickness = 5.0; // Default eraser thickness (will be scaled by 6x in drawing)
-    QString saveFolder; // Folder to save images
+    QString saveFolder;
+    QString actualPackagePath; // ✅ Store .spn package path for display purposes
+    QString tempWorkingDir; // ✅ Temporary directory for .spn packages
+    bool isSpnPackage = false; // ✅ Flag to indicate if working with .spn package
+    QString notebookId;
     QPixmap backgroundImage;
     bool straightLineMode = false;  // Flag for straight line mode
     bool ropeToolMode = false; // Flag for rope tool mode
@@ -274,10 +285,38 @@ private:
     std::deque<qint64> processedTimestamps;
     QElapsedTimer benchmarkTimer;
 
-    QString notebookId;
+    // ✅ Unified JSON metadata
+    QString pdfPath;
+    int lastAccessedPage = 0;
+    BackgroundStyle backgroundStyle = BackgroundStyle::None;
+    QColor backgroundColor = Qt::white;
+    int backgroundDensity = 20;
+    QStringList bookmarks; // ✅ Add bookmarks to JSON metadata
 
+public:
+    // ✅ Metadata management
     void loadNotebookId();
     void saveNotebookId();
+    void saveBackgroundMetadata();
+    
+    // ✅ New unified JSON metadata system
+    void loadNotebookMetadata();
+    void saveNotebookMetadata();
+    void setLastAccessedPage(int pageNumber);
+    int getLastAccessedPage() const;
+    QString getPdfPath() const; // ✅ Get PDF path from JSON metadata
+    QString getNotebookId() const; // ✅ Get notebook ID from JSON metadata
+    bool handleMissingPdf(QWidget *parent = nullptr); // ✅ Handle missing PDF file
+    
+    // ✅ Bookmark management through JSON
+    void addBookmark(const QString &bookmark);
+    void removeBookmark(const QString &bookmark);
+    QStringList getBookmarks() const;
+    void setBookmarks(const QStringList &bookmarkList);
+    
+private:
+    // ✅ Migration from old txt files to JSON
+    void migrateOldMetadataFiles();
 
     int pdfRenderDPI = 192;  // Default to 288 DPI
 
@@ -288,10 +327,7 @@ private:
     bool isPanning = false;
     int activeTouchPoints = 0;
 
-    // Background style members
-    BackgroundStyle backgroundStyle = BackgroundStyle::None;
-    QColor backgroundColor = Qt::white;
-    int backgroundDensity = 40;  // pixels between lines
+    // Background style members (moved to unified JSON metadata section above)
 
     bool pdfTextSelectionEnabled = false;
     

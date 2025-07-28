@@ -118,6 +118,8 @@ add_executable(${PROJECT_NAME}
         source/MarkdownWindow.cpp
         source/MarkdownWindowManager.cpp
         source/PdfOpenDialog.cpp
+	  source/PdfRelinkDialog.cpp
+    	  source/SpnPackageManager.cpp
         ${QRCC_FILES}
         ${QMARKDOWNTEXTEDIT_SOURCES}
         ${QMARKDOWNTEXTEDIT_UI_HEADERS}

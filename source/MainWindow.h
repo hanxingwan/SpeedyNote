@@ -28,6 +28,10 @@
 #include <QKeyEvent>
 #include <QTabletEvent>
 #include <QMenu>
+#include <QCloseEvent>
+#include "ControlPanelDialog.h"
+#include "MarkdownWindowManager.h"
+#include "SpnPackageManager.h"
 
 // Forward declarations
 class QTreeWidgetItem;
@@ -210,7 +214,9 @@ public:
     DialMode dialModeFromString(const QString &mode);
 
     void importNotebookFromFile(const QString &packageFile);
-    void openPdfFile(const QString &pdfPath);
+    void openPdfFile(const QString &pdfPath); // ✅ Open PDF file directly
+    void openSpnPackage(const QString &spnPath); // ✅ Open .spn package directly
+    bool showLastAccessedPageDialog(InkCanvas *canvas); // ✅ Show dialog for last accessed page
 
     int getPdfDPI() const { return pdfRenderDPI; }
     void setPdfDPI(int dpi);
@@ -255,6 +261,7 @@ public:
     void handleColorButtonClick();    // Handle tool switching when color buttons are clicked
     void updateThicknessSliderForCurrentTool(); // Update thickness slider to reflect current tool's thickness
     void updatePdfTextSelectButtonState(); // Update PDF text selection button state when switching tabs
+    void updateBookmarkButtonState(); // Update bookmark toggle button state
 
 private slots:
     void toggleBenchmark();
@@ -365,7 +372,7 @@ private slots:
     void loadBookmarks();            // Load bookmarks from file
     void saveBookmarks();            // Save bookmarks to file
     void toggleCurrentPageBookmark(); // Add/remove current page from bookmarks
-    void updateBookmarkButtonState(); // Update bookmark toggle button state
+    
 
 private:
     InkCanvas *canvas;
@@ -593,6 +600,7 @@ protected:
     void resizeEvent(QResizeEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;  // New: Handle keyboard shortcuts
     void tabletEvent(QTabletEvent *event) override; // Handle pen hover for tooltips
+    void closeEvent(QCloseEvent *event) override; // ✅ Add auto-save on program close
     
     // IME support for multi-language input
     void inputMethodEvent(QInputMethodEvent *event) override;

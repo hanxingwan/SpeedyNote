@@ -1,4 +1,5 @@
 #include "ControlPanelDialog.h"
+#include "MainWindow.h"
 #include "ButtonMappingTypes.h"
 #include "SDLControllerManager.h"
 

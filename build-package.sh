@@ -276,7 +276,7 @@ build_project() {
     echo -e "${GREEN}Build successful!${NC}"
 }
 
-# Function to create desktop file with PDF MIME type association
+# Function to create desktop file with PDF and SPN MIME type association
 create_desktop_file() {
     local desktop_file="$1"
     cat > "$desktop_file" << EOF
@@ -290,8 +290,29 @@ Icon=speedynote
 Terminal=false
 StartupNotify=true
 Categories=Office;Education;
-Keywords=notes;pdf;annotation;writing;
-MimeType=application/pdf;
+Keywords=notes;pdf;annotation;writing;package;
+MimeType=application/pdf;application/x-speedynote-package;
+EOF
+}
+
+# Function to create MIME type definition for .spn files
+create_mime_xml() {
+    local mime_file="$1"
+    cat > "$mime_file" << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+    <mime-type type="application/x-speedynote-package">
+        <comment>SpeedyNote Package</comment>
+        <comment xml:lang="es">Paquete de SpeedyNote</comment>
+        <comment xml:lang="fr">Package SpeedyNote</comment>
+        <comment xml:lang="zh">SpeedyNote 包</comment>
+        <icon name="speedynote"/>
+        <glob pattern="*.spn"/>
+        <magic priority="50">
+            <match type="string" offset="0" value="Contents"/>
+        </magic>
+    </mime-type>
+</mime-info>
 EOF
 }
 
@@ -372,6 +393,9 @@ EOF
     # Create desktop file with PDF association
     create_desktop_file "$PKG_DIR/usr/share/applications/speedynote.desktop"
     
+    # Create MIME type definition for .spn files
+    create_mime_xml "$PKG_DIR/usr/share/mime/packages/application-x-speedynote-package.xml"
+    
     # Build package
     dpkg-deb --build "$PKG_DIR" "${PKGNAME}_${PKGVER}-${PKGREL}_amd64.deb"
     
@@ -428,6 +452,7 @@ mkdir -p %{buildroot}/usr/bin
 mkdir -p %{buildroot}/usr/share/applications
 mkdir -p %{buildroot}/usr/share/pixmaps
 mkdir -p %{buildroot}/usr/share/doc/%{name}
+mkdir -p %{buildroot}/usr/share/mime/packages
 
 install -m755 %{_vpath_builddir}/NoteApp %{buildroot}/usr/bin/speedynote
 install -m644 resources/icons/mainicon.png %{buildroot}/usr/share/pixmaps/speedynote.png
@@ -444,9 +469,26 @@ Icon=speedynote
 Terminal=false
 StartupNotify=true
 Categories=Office;Education;
-Keywords=notes;pdf;annotation;writing;
-MimeType=application/pdf;
+Keywords=notes;pdf;annotation;writing;package;
+MimeType=application/pdf;application/x-speedynote-package;
 EOFDESKTOP
+
+cat > %{buildroot}/usr/share/mime/packages/application-x-speedynote-package.xml << EOFMIME
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+    <mime-type type="application/x-speedynote-package">
+        <comment>SpeedyNote Package</comment>
+        <comment xml:lang="es">Paquete de SpeedyNote</comment>
+        <comment xml:lang="fr">Package SpeedyNote</comment>
+        <comment xml:lang="zh">SpeedyNote 包</comment>
+        <icon name="speedynote"/>
+        <glob pattern="*.spn"/>
+        <magic priority="50">
+            <match type="string" offset="0" value="Contents"/>
+        </magic>
+    </mime-type>
+</mime-info>
+EOFMIME
 
 %post
 /usr/bin/update-desktop-database -q /usr/share/applications || :
@@ -461,6 +503,7 @@ EOFDESKTOP
 /usr/share/applications/speedynote.desktop
 /usr/share/pixmaps/speedynote.png
 /usr/share/doc/%{name}/README.md
+/usr/share/mime/packages/application-x-speedynote-package.xml
 
 %changelog
 * $(date '+%a %b %d %Y') $MAINTAINER - $PKGVER-$PKGREL
@@ -528,9 +571,26 @@ Icon=speedynote
 Terminal=false
 StartupNotify=true
 Categories=Office;Education;
-Keywords=notes;pdf;annotation;writing;
-MimeType=application/pdf;
+Keywords=notes;pdf;annotation;writing;package;
+MimeType=application/pdf;application/x-speedynote-package;
 EOFDESKTOP
+
+    install -Dm644 /dev/stdin "\$pkgdir/usr/share/mime/packages/application-x-speedynote-package.xml" << EOFMIME
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+    <mime-type type="application/x-speedynote-package">
+        <comment>SpeedyNote Package</comment>
+        <comment xml:lang="es">Paquete de SpeedyNote</comment>
+        <comment xml:lang="fr">Package SpeedyNote</comment>
+        <comment xml:lang="zh">SpeedyNote 包</comment>
+        <icon name="speedynote"/>
+        <glob pattern="*.spn"/>
+        <magic priority="50">
+            <match type="string" offset="0" value="Contents"/>
+        </magic>
+    </mime-type>
+</mime-info>
+EOFMIME
 }
 
 post_install() {
@@ -600,9 +660,26 @@ Icon=speedynote
 Terminal=false
 StartupNotify=true
 Categories=Office;Education;
-Keywords=notes;pdf;annotation;writing;
-MimeType=application/pdf;
+Keywords=notes;pdf;annotation;writing;package;
+MimeType=application/pdf;application/x-speedynote-package;
 EOFDESKTOP
+
+    install -Dm644 /dev/stdin "\$pkgdir/usr/share/mime/packages/application-x-speedynote-package.xml" << EOFMIME
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+    <mime-type type="application/x-speedynote-package">
+        <comment>SpeedyNote Package</comment>
+        <comment xml:lang="es">Paquete de SpeedyNote</comment>
+        <comment xml:lang="fr">Package SpeedyNote</comment>
+        <comment xml:lang="zh">SpeedyNote 包</comment>
+        <icon name="speedynote"/>
+        <glob pattern="*.spn"/>
+        <magic priority="50">
+            <match type="string" offset="0" value="Contents"/>
+        </magic>
+    </mime-type>
+</mime-info>
+EOFMIME
 }
 EOF
     
@@ -630,7 +707,7 @@ EOF
     # Build package
     abuild -r
     
-    echo -e "${GREEN}Alpine package created in ~/packages/alpine-pkg/${PKGNAME}/${PKGNAME}-${PKGVER}-r${PKGREL}.apk${NC}"
+    echo -e "${GREEN}Alpine package created in ~/packages/alpine-pkg/${PKGNAME}/ for .apk file"
 }
 
 # Function to clean up

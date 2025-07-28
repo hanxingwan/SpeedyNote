@@ -7,6 +7,9 @@
 #include <QPainter>
 #include <QApplication>
 #include <QRegularExpression>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
 
 RecentNotebooksManager::RecentNotebooksManager(QObject *parent)
     : QObject(parent), settings("SpeedyNote", "App") {
@@ -150,7 +153,28 @@ QString RecentNotebooksManager::getCoverImagePathForNotebook(const QString& fold
 }
 
 QString RecentNotebooksManager::getNotebookDisplayName(const QString& folderPath) const {
-    // Check for PDF metadata first
+    // ✅ Check for PDF metadata in JSON first
+    QString jsonFile = folderPath + "/.speedynote_metadata.json";
+    if (QFile::exists(jsonFile)) {
+        QFile file(jsonFile);
+        if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QByteArray data = file.readAll();
+            file.close();
+            
+            QJsonParseError error;
+            QJsonDocument doc = QJsonDocument::fromJson(data, &error);
+            
+            if (error.error == QJsonParseError::NoError) {
+                QJsonObject obj = doc.object();
+                QString pdfPath = obj["pdf_path"].toString();
+                if (!pdfPath.isEmpty()) {
+                    return QFileInfo(pdfPath).fileName();
+                }
+            }
+        }
+    }
+    
+    // ✅ Fallback to old system for backwards compatibility during transition
     QString metadataFile = folderPath + "/.pdf_path.txt";
     if (QFile::exists(metadataFile)) {
         QFile file(metadataFile);
@@ -163,6 +187,7 @@ QString RecentNotebooksManager::getNotebookDisplayName(const QString& folderPath
             }
         }
     }
+    
     // Fallback to folder name
     return QFileInfo(folderPath).fileName();
 } 

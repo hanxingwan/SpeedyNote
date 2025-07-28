@@ -28,6 +28,12 @@
 
 #include <QtConcurrent/QtConcurrentRun>
 #include <QFuture>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QJsonValue>
+#include <QJsonParseError>
+#include <QUuid>
 #include <QFutureWatcher>
 
 #include <QDirIterator>
@@ -96,7 +102,22 @@ InkCanvas::InkCanvas(QWidget *parent)
 }
 
 InkCanvas::~InkCanvas() {
-    // Cleanup if needed
+    // ✅ Auto-save if the canvas has been edited
+    if (edited && !saveFolder.isEmpty()) {
+        // Save the current page using existing logic
+        saveToFile(lastActivePage);
+        
+        // Also save markdown windows if they exist
+        if (markdownManager) {
+            markdownManager->saveWindowsForPage(lastActivePage);
+        }
+    }
+    
+    // ✅ Sync .spn package and cleanup temp directory
+    if (isSpnPackage) {
+        syncSpnPackage();
+        SpnPackageManager::cleanupTempDir(tempWorkingDir);
+    }
 }
 
 
@@ -127,17 +148,14 @@ void InkCanvas::loadPdf(const QString &pdfPath) {
         totalPdfPages = pdfDocument->numPages();
         isPdfLoaded = true;
         totalPdfPages = pdfDocument->numPages();
-        loadPdfPage(0); // Load first page
-        // ✅ Save the PDF path in the metadata file
+        // ✅ Don't automatically load page 0 - let MainWindow handle initial page loading
+        
+        // ✅ Save the PDF path in the unified JSON metadata
         if (!saveFolder.isEmpty()) {
-            QString metadataFile = saveFolder + "/.pdf_path.txt";
-            QFile file(metadataFile);
-            if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-                QTextStream out(&file);
-                out << pdfPath;  // Store the absolute path of the PDF
-                file.close();
-            }
+            this->pdfPath = pdfPath; // Store in member variable
+            saveNotebookMetadata(); // Save to JSON
         }
+        
         // Emit signal that PDF was loaded
         emit pdfLoaded();
     }
@@ -165,10 +183,10 @@ void InkCanvas::clearPdf() {
     }
     activePdfWatchers.clear();
 
-    // ✅ Remove the PDF path file when clearing the PDF
+    // ✅ Clear the PDF path from JSON metadata when clearing the PDF
     if (!saveFolder.isEmpty()) {
-        QString metadataFile = saveFolder + "/.pdf_path.txt";
-        QFile::remove(metadataFile);
+        this->pdfPath.clear();
+        saveNotebookMetadata();
     }
 }
 
@@ -1302,62 +1320,36 @@ void InkCanvas::setTool(ToolType tool) {
 }
 
 void InkCanvas::setSaveFolder(const QString &folderPath) {
-    saveFolder = folderPath;
+    // ✅ Handle .spn packages by extracting to temporary directory
+    if (SpnPackageManager::isSpnPackage(folderPath)) {
+        // Clean up previous temp directory if exists
+        if (!tempWorkingDir.isEmpty()) {
+            SpnPackageManager::cleanupTempDir(tempWorkingDir);
+        }
+        
+        // Extract .spn package to temporary directory
+        tempWorkingDir = SpnPackageManager::extractSpnToTemp(folderPath);
+        if (tempWorkingDir.isEmpty()) {
+            qWarning() << "Failed to extract .spn package:" << folderPath;
+            return;
+        }
+        
+        saveFolder = tempWorkingDir;
+        actualPackagePath = folderPath; // Store the .spn package path for display
+        isSpnPackage = true;
+    } else {
+        saveFolder = folderPath;
+        actualPackagePath.clear();
+        tempWorkingDir.clear();
+        isSpnPackage = false;
+    }
+    
     clearPdfNoDelete(); 
 
     if (!saveFolder.isEmpty()) {
         QDir().mkpath(saveFolder);
-        loadNotebookId();  // ✅ Load notebook ID when save folder is set
+        loadNotebookMetadata();  // ✅ Load unified JSON metadata when save folder is set
     }
-
-    QString bgMetaFile = saveFolder + "/.background_config.txt";  // This metadata is for background styles, not to be confused with pdf directories. 
-    if (QFile::exists(bgMetaFile)) {
-        QFile file(bgMetaFile);
-        if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            QTextStream in(&file);
-            while (!in.atEnd()) {
-                QString line = in.readLine().trimmed();
-                if (line.startsWith("style=")) {
-                    QString val = line.mid(6);
-                    if (val == "Grid") backgroundStyle = BackgroundStyle::Grid;
-                    else if (val == "Lines") backgroundStyle = BackgroundStyle::Lines;
-                    else backgroundStyle = BackgroundStyle::None;
-                } else if (line.startsWith("color=")) {
-                    backgroundColor = QColor(line.mid(6));
-                } else if (line.startsWith("density=")) {
-                    backgroundDensity = line.mid(8).toInt();
-                }
-            }
-            file.close();
-        }
-    }
-
-    // ✅ Check if the folder has a saved PDF path
-    QString metadataFile = saveFolder + "/.pdf_path.txt";
-    if (!QFile::exists(metadataFile)) {
-        return;
-    }
-
-
-    QFile file(metadataFile);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        return;
-    }
-
-    QTextStream in(&file);
-    QString storedPdfPath = in.readLine().trimmed();
-    file.close();
-
-    if (storedPdfPath.isEmpty()) {
-        return;
-    }
-
-
-    // ✅ Ensure the stored PDF file still exists before loading
-    if (!QFile::exists(storedPdfPath)) {
-        return;
-    }
-    loadPdf(storedPdfPath);
 }
 
 void InkCanvas::saveToFile(int pageNumber) {
@@ -1383,6 +1375,9 @@ void InkCanvas::saveToFile(int pageNumber) {
     if (markdownManager) {
         markdownManager->saveWindowsForPage(pageNumber);
     }
+    
+    // ✅ Sync changes to .spn package if needed
+    syncSpnPackage();
     
     // Update note cache with the saved buffer
     noteCache.insert(pageNumber, new QPixmap(buffer));
@@ -1691,10 +1686,6 @@ Poppler::Document* InkCanvas::getPdfDocument() const {
     return pdfDocument.get();
 }
 
-QString InkCanvas::getSaveFolder() const {
-    return saveFolder;
-}
-
 void InkCanvas::saveCurrentPage() {
     MainWindow *mainWin = qobject_cast<MainWindow*>(parentWidget());  // ✅ Get main window
     if (!mainWin) return;
@@ -1732,23 +1723,7 @@ void InkCanvas::setBackgroundDensity(int density) {
     update();
 }
 
-void InkCanvas::saveBackgroundMetadata() {
-    if (saveFolder.isEmpty()) return;
-
-    QString bgMetaFile = saveFolder + "/.background_config.txt";
-    QFile file(bgMetaFile);
-    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        QTextStream out(&file);
-        QString styleStr = "None";
-        if (backgroundStyle == BackgroundStyle::Grid) styleStr = "Grid";
-        else if (backgroundStyle == BackgroundStyle::Lines) styleStr = "Lines";
-
-        out << "style=" << styleStr << "\n";
-        out << "color=" << backgroundColor.name().toUpper() << "\n";
-        out << "density=" << backgroundDensity << "\n";
-        file.close();
-    }
-}
+// saveBackgroundMetadata implementation moved to unified JSON system below
 
 
 void InkCanvas::exportNotebook(const QString &destinationFile) {
@@ -2897,6 +2872,316 @@ QRect InkCanvas::mapCanvasToWidget(const QRect &canvasRect) const {
     QPointF bottomRight = mapCanvasToWidget(canvasRect.bottomRight());
     
     return QRect(topLeft.toPoint(), bottomRight.toPoint());
+}
+
+// ✅ New unified JSON metadata system
+void InkCanvas::loadNotebookMetadata() {
+    if (saveFolder.isEmpty()) return;
+    
+    QString metadataFile = saveFolder + "/.speedynote_metadata.json";
+    
+    // First, try to migrate from old files if JSON doesn't exist
+    if (!QFile::exists(metadataFile)) {
+        // Check if old metadata files exist
+        if (QFile::exists(saveFolder + "/.notebook_id.txt") || 
+            QFile::exists(saveFolder + "/.pdf_path.txt") || 
+            QFile::exists(saveFolder + "/.background_config.txt") || 
+            QFile::exists(saveFolder + "/.bookmarks.txt")) {
+            qDebug() << "Detected old metadata files, migrating to JSON format...";
+            migrateOldMetadataFiles();
+            return; // migrateOldMetadataFiles calls saveNotebookMetadata which creates the JSON
+        } else {
+            // No old files, this is a new notebook - generate new ID
+            if (notebookId.isEmpty()) {
+                notebookId = QUuid::createUuid().toString(QUuid::WithoutBraces).replace("-", "");
+                qDebug() << "New notebook created with ID:" << notebookId;
+            }
+            return;
+        }
+    }
+    
+    QFile file(metadataFile);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return;
+    }
+    
+    QByteArray data = file.readAll();
+    file.close();
+    
+    QJsonParseError error;
+    QJsonDocument doc = QJsonDocument::fromJson(data, &error);
+    
+    if (error.error != QJsonParseError::NoError) {
+        qWarning() << "Failed to parse metadata JSON:" << error.errorString();
+        return;
+    }
+    
+    QJsonObject obj = doc.object();
+    
+    // Load all metadata
+    notebookId = obj["notebook_id"].toString();
+    pdfPath = obj["pdf_path"].toString();
+    lastAccessedPage = obj["last_accessed_page"].toInt(0);
+    
+    // Background settings
+    QString bgStyleStr = obj["background_style"].toString("None");
+    if (bgStyleStr == "Grid") backgroundStyle = BackgroundStyle::Grid;
+    else if (bgStyleStr == "Lines") backgroundStyle = BackgroundStyle::Lines;
+    else backgroundStyle = BackgroundStyle::None;
+    
+    backgroundColor = QColor(obj["background_color"].toString("#ffffff"));
+    backgroundDensity = obj["background_density"].toInt(20);
+    
+    // Load bookmarks
+    bookmarks.clear();
+    QJsonArray bookmarkArray = obj["bookmarks"].toArray();
+    for (const QJsonValue &value : bookmarkArray) {
+        bookmarks.append(value.toString());
+    }
+    
+    // If we have a PDF path, try to load it (missing PDF will be handled later)
+    if (!pdfPath.isEmpty()) {
+        if (QFile::exists(pdfPath)) {
+            loadPdf(pdfPath);
+        }
+        // Note: Missing PDF handling is done in handleMissingPdf() when the notebook is opened
+    }
+}
+
+void InkCanvas::saveNotebookMetadata() {
+    if (saveFolder.isEmpty()) return;
+    
+    QJsonObject obj;
+    
+    // Save all metadata
+    obj["notebook_id"] = notebookId;
+    obj["pdf_path"] = pdfPath;
+    obj["last_accessed_page"] = lastAccessedPage;
+    obj["version"] = "1.0";
+    obj["last_modified"] = QDateTime::currentDateTime().toString(Qt::ISODate);
+    
+    // Background settings
+    QString bgStyleStr = "None";
+    if (backgroundStyle == BackgroundStyle::Grid) bgStyleStr = "Grid";
+    else if (backgroundStyle == BackgroundStyle::Lines) bgStyleStr = "Lines";
+    
+    obj["background_style"] = bgStyleStr;
+    obj["background_color"] = backgroundColor.name();
+    obj["background_density"] = backgroundDensity;
+    
+    // Save bookmarks
+    QJsonArray bookmarkArray;
+    for (const QString &bookmark : bookmarks) {
+        bookmarkArray.append(bookmark);
+    }
+    obj["bookmarks"] = bookmarkArray;
+    
+    QJsonDocument doc(obj);
+    
+    QString metadataFile = saveFolder + "/.speedynote_metadata.json";
+    QFile file(metadataFile);
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        file.write(doc.toJson());
+        file.close();
+    }
+    
+    // ✅ Sync changes to .spn package if needed
+    syncSpnPackage();
+}
+
+void InkCanvas::setLastAccessedPage(int pageNumber) {
+    lastAccessedPage = pageNumber;
+    saveNotebookMetadata(); // Auto-save when page changes
+}
+
+int InkCanvas::getLastAccessedPage() const {
+    return lastAccessedPage;
+}
+
+QString InkCanvas::getPdfPath() const {
+    return pdfPath;
+}
+
+QString InkCanvas::getNotebookId() const {
+    return notebookId;
+}
+
+bool InkCanvas::handleMissingPdf(QWidget *parent) {
+    if (pdfPath.isEmpty()) {
+        return true; // No PDF was linked, continue normally
+    }
+    
+    // Check if PDF file exists
+    if (QFile::exists(pdfPath)) {
+        return true; // PDF exists, continue normally
+    }
+    
+    // PDF is missing, show relink dialog
+    PdfRelinkDialog dialog(pdfPath, parent);
+    dialog.exec();
+    
+    PdfRelinkDialog::Result result = dialog.getResult();
+    
+    if (result == PdfRelinkDialog::RelinkPdf) {
+        QString newPdfPath = dialog.getNewPdfPath();
+        if (!newPdfPath.isEmpty()) {
+            // Update PDF path and reload
+            pdfPath = newPdfPath;
+            saveNotebookMetadata(); // Save the new path
+            loadPdf(newPdfPath); // Load the new PDF
+            return true;
+        }
+    } else if (result == PdfRelinkDialog::ContinueWithoutPdf) {
+        // Clear PDF path and continue without PDF
+        pdfPath.clear();
+        saveNotebookMetadata(); // Save the cleared path
+        clearPdf(); // Clear any loaded PDF data
+        return true;
+    }
+    
+    // User cancelled or other error
+    return false;
+}
+
+void InkCanvas::migrateOldMetadataFiles() {
+    if (saveFolder.isEmpty()) return;
+    
+    qDebug() << "Migrating old metadata files for folder:" << saveFolder;
+    
+    // ✅ CRITICAL: Always load existing notebook ID first to preserve file naming consistency
+    QString idFile = saveFolder + "/.notebook_id.txt";
+    if (QFile::exists(idFile)) {
+        QFile file(idFile);
+        if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QTextStream in(&file);
+            QString existingId = in.readLine().trimmed();
+            file.close();
+            if (!existingId.isEmpty()) {
+                notebookId = existingId;
+                qDebug() << "Preserved existing notebook ID:" << notebookId;
+            }
+        }
+    }
+    
+    // Only generate new ID if none exists
+    if (notebookId.isEmpty()) {
+        notebookId = QUuid::createUuid().toString(QUuid::WithoutBraces).replace("-", "");
+        qDebug() << "Generated new notebook ID:" << notebookId;
+    }
+    
+    // Migrate PDF path
+    QString pdfPathFile = saveFolder + "/.pdf_path.txt";
+    if (QFile::exists(pdfPathFile)) {
+        QFile file(pdfPathFile);
+        if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QTextStream in(&file);
+            pdfPath = in.readLine().trimmed();
+            file.close();
+        }
+    }
+    
+    // Migrate background config
+    QString bgMetaFile = saveFolder + "/.background_config.txt";
+    if (QFile::exists(bgMetaFile)) {
+        QFile file(bgMetaFile);
+        if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QTextStream in(&file);
+            while (!in.atEnd()) {
+                QString line = in.readLine().trimmed();
+                if (line.startsWith("style=")) {
+                    QString val = line.mid(6);
+                    if (val == "Grid") backgroundStyle = BackgroundStyle::Grid;
+                    else if (val == "Lines") backgroundStyle = BackgroundStyle::Lines;
+                    else backgroundStyle = BackgroundStyle::None;
+                } else if (line.startsWith("color=")) {
+                    backgroundColor = QColor(line.mid(6));
+                } else if (line.startsWith("density=")) {
+                    backgroundDensity = line.mid(8).toInt();
+                }
+            }
+            file.close();
+        }
+    }
+    
+    // Migrate bookmarks
+    QString bookmarksFile = saveFolder + "/.bookmarks.txt";
+    bookmarks.clear();
+    if (QFile::exists(bookmarksFile)) {
+        QFile file(bookmarksFile);
+        if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QTextStream in(&file);
+            while (!in.atEnd()) {
+                QString line = in.readLine().trimmed();
+                if (!line.isEmpty()) {
+                    bookmarks.append(line);
+                }
+            }
+            file.close();
+        }
+    }
+    
+    // Set default last accessed page to 0
+    lastAccessedPage = 0;
+    
+    // Save to new JSON format
+    saveNotebookMetadata();
+    
+    // ✅ Verify migration was successful before cleanup
+    QString jsonFile = saveFolder + "/.speedynote_metadata.json";
+    if (QFile::exists(jsonFile)) {
+        // Clean up old files only after successful JSON creation
+        QFile::remove(saveFolder + "/.notebook_id.txt");
+        QFile::remove(saveFolder + "/.pdf_path.txt");
+        QFile::remove(saveFolder + "/.background_config.txt");
+        QFile::remove(saveFolder + "/.bookmarks.txt");
+        
+        qDebug() << "Successfully migrated metadata files to JSON for folder:" << saveFolder;
+        qDebug() << "Notebook ID preserved:" << notebookId;
+        qDebug() << "PDF path:" << pdfPath;
+        qDebug() << "Bookmarks count:" << bookmarks.size();
+    } else {
+        qWarning() << "Migration failed - JSON file not created. Keeping old files as backup.";
+    }
+}
+
+// ✅ Modified existing methods to use JSON system
+void InkCanvas::saveBackgroundMetadata() {
+    // This method is called when background settings change
+    // Now it just saves to the unified JSON
+    saveNotebookMetadata();
+}
+
+// ✅ Bookmark management methods
+void InkCanvas::addBookmark(const QString &bookmark) {
+    if (!bookmarks.contains(bookmark)) {
+        bookmarks.append(bookmark);
+        saveNotebookMetadata();
+    }
+}
+
+void InkCanvas::removeBookmark(const QString &bookmark) {
+    if (bookmarks.removeAll(bookmark) > 0) {
+        saveNotebookMetadata();
+    }
+}
+
+QStringList InkCanvas::getBookmarks() const {
+    return bookmarks;
+}
+
+void InkCanvas::setBookmarks(const QStringList &bookmarkList) {
+    bookmarks = bookmarkList;
+    saveNotebookMetadata();
+}
+
+QString InkCanvas::getDisplayPath() const {
+    return actualPackagePath.isEmpty() ? saveFolder : actualPackagePath;
+}
+
+void InkCanvas::syncSpnPackage() {
+    if (isSpnPackage && !actualPackagePath.isEmpty() && !tempWorkingDir.isEmpty()) {
+        SpnPackageManager::updateSpnFromTemp(actualPackagePath, tempWorkingDir);
+    }
 }
 
 

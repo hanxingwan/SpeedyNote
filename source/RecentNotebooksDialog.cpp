@@ -87,9 +87,18 @@ void RecentNotebooksDialog::onNotebookClicked() {
                      mainWindowRef->saveCurrentPage(); // Use MainWindow's save method
                 }
                 canvas->setSaveFolder(notebookPath);
-                mainWindowRef->switchPageWithDirection(1, 1); // Use MainWindow's direction-aware switchPage method
-                mainWindowRef->pageInput->setValue(1); // Update pageInput in MainWindow
+                
+                // ✅ Show last accessed page dialog if available
+                if (!mainWindowRef->showLastAccessedPageDialog(canvas)) {
+                    // No last accessed page, start from page 1
+                    mainWindowRef->switchPageWithDirection(1, 1); // Use MainWindow's direction-aware switchPage method
+                    mainWindowRef->pageInput->setValue(1); // Update pageInput in MainWindow
+                } else {
+                    // Dialog handled page switching, update page input
+                    mainWindowRef->pageInput->setValue(mainWindowRef->getCurrentPageForCanvas(canvas) + 1);
+                }
                 mainWindowRef->updateTabLabel(); // Update tab label in MainWindow
+                mainWindowRef->updateBookmarkButtonState(); // ✅ Update bookmark button state after loading notebook
                 
                 // Update recent notebooks list and refresh cover page
                 if (notebookManager) {

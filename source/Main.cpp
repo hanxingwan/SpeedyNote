@@ -79,6 +79,10 @@ int main(int argc, char *argv[]) {
             // Handle PDF file association
             w.show(); // Show window first for dialog parent
             w.openPdfFile(inputFile);
+        } else if (inputFile.toLower().endsWith(".spn")) {
+            // Handle SpeedyNote package
+            w.show(); // Show window first
+            w.openSpnPackage(inputFile);
         } else if (inputFile.toLower().endsWith(".snpkg")) {
             // Handle notebook package import
             w.importNotebookFromFile(inputFile);
@@ -86,9 +90,9 @@ int main(int argc, char *argv[]) {
         } else {
             // Unknown file type, just show the application
             w.show();
-    }
+        }
     } else {
-    w.show();
+        w.show();
     }
     return app.exec();
 }
