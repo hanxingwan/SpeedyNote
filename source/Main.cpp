@@ -55,15 +55,32 @@ int main(int argc, char *argv[]) {
     QString locale = QLocale::system().name(); // e.g., "zh_CN", "es_ES"
     QString langCode = locale.section('_', 0, 0); // e.g., "zh"
 
+    // Debug: Uncomment these lines to debug translation loading issues
     // printf("Locale: %s\n", locale.toStdString().c_str());
     // printf("Language Code: %s\n", langCode.toStdString().c_str());
 
-    // QString locale = "es-ES"; // e.g., "zh_CN", "es_ES"
-    // QString langCode = "es"; // e.g., "zh"
-    QString translationsPath = QCoreApplication::applicationDirPath();
-
-    if (translator.load(translationsPath + "/app_" + langCode + ".qm")) {
-        app.installTranslator(&translator);
+    // Try multiple paths to find translation files
+    QStringList translationPaths = {
+        QCoreApplication::applicationDirPath(),  // Same directory as executable
+        QCoreApplication::applicationDirPath() + "/translations",  // translations subdirectory
+        ":/resources/translations"  // Qt resource system
+    };
+    
+    bool translationLoaded = false;
+    for (const QString &path : translationPaths) {
+        QString translationFile = path + "/app_" + langCode + ".qm";
+        if (translator.load(translationFile)) {
+            app.installTranslator(&translator);
+            translationLoaded = true;
+            // Debug: Uncomment this line to see which translation file was loaded
+            // printf("Translation loaded from: %s\n", translationFile.toStdString().c_str());
+            break;
+        }
+    }
+    
+    if (!translationLoaded) {
+        // Debug: Uncomment this line to see when translation loading fails
+        // printf("No translation file found for language: %s\n", langCode.toStdString().c_str());
     }
 
     QString inputFile;
@@ -79,16 +96,17 @@ int main(int argc, char *argv[]) {
             // Handle PDF file association
             w.show(); // Show window first for dialog parent
             w.openPdfFile(inputFile);
-        } else if (inputFile.toLower().endsWith(".snpkg")) {
-            // Handle notebook package import
-            w.importNotebookFromFile(inputFile);
-            w.show();
+        } else if (inputFile.toLower().endsWith(".spn")) {
+            // Handle SpeedyNote package
+            w.show(); // Show window first
+            w.openSpnPackage(inputFile);
+
         } else {
             // Unknown file type, just show the application
             w.show();
-    }
+        }
     } else {
-    w.show();
+        w.show();
     }
     return app.exec();
 }

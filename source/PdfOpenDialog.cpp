@@ -1,4 +1,5 @@
 #include "PdfOpenDialog.h"
+#include "SpnPackageManager.h"
 #include <QFileDialog>
 #include <QDir>
 #include <QMessageBox>
@@ -93,9 +94,9 @@ void PdfOpenDialog::setupUI()
     QVBoxLayout *buttonLayout = new QVBoxLayout();
     buttonLayout->setSpacing(10);
     
-    // Create new folder button
-    QPushButton *createFolderBtn = new QPushButton(tr("Create New Notebook Folder (\"%1\")").arg(folderName));
-    createFolderBtn->setIcon(QApplication::style()->standardIcon(QStyle::SP_DirIcon));
+    // Create new .spn package button
+    QPushButton *createFolderBtn = new QPushButton(tr("Create New SpeedyNote Package (\"%1.spn\")").arg(folderName));
+    createFolderBtn->setIcon(QIcon(":/resources/icons/mainicon.png"));
     createFolderBtn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     createFolderBtn->setMinimumHeight(40);
     createFolderBtn->setStyleSheet(R"(
@@ -116,8 +117,8 @@ void PdfOpenDialog::setupUI()
     )");
     connect(createFolderBtn, &QPushButton::clicked, this, &PdfOpenDialog::onCreateNewFolder);
     
-    // Use existing folder button
-    QPushButton *existingFolderBtn = new QPushButton(tr("Use Existing Notebook Folder..."));
+    // Use existing notebook button (folder or .spn)
+    QPushButton *existingFolderBtn = new QPushButton(tr("Use Existing Notebook..."));
     existingFolderBtn->setIcon(QApplication::style()->standardIcon(QStyle::SP_DirOpenIcon));
     existingFolderBtn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     existingFolderBtn->setMinimumHeight(40);
@@ -200,23 +201,23 @@ void PdfOpenDialog::resizeEvent(QResizeEvent *event)
 void PdfOpenDialog::onCreateNewFolder()
 {
     QFileInfo fileInfo(pdfPath);
-    QString suggestedFolderName = fileInfo.baseName();
+    QString suggestedName = fileInfo.baseName();
     
     // Get the directory where the PDF is located
     QString pdfDir = fileInfo.absolutePath();
-    QString newFolderPath = pdfDir + "/" + suggestedFolderName;
+    QString newSpnPath = pdfDir + "/" + suggestedName + ".spn";
     
-    // Check if folder already exists
-    if (QDir(newFolderPath).exists()) {
+    // Check if .spn package already exists
+    if (QDir(newSpnPath).exists()) {
         QMessageBox::StandardButton reply = QMessageBox::question(
             this, 
-            tr("Folder Exists"), 
-            tr("A folder named \"%1\" already exists in the same directory as the PDF.\n\nDo you want to use this existing folder?").arg(suggestedFolderName),
+            tr("Package Exists"), 
+            tr("A SpeedyNote package named \"%1.spn\" already exists in the same directory as the PDF.\n\nDo you want to use this existing package?").arg(suggestedName),
             QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel
         );
         
         if (reply == QMessageBox::Yes) {
-            selectedFolder = newFolderPath;
+            selectedFolder = newSpnPath;
             result = UseExistingFolder;
             accept();
             return;
@@ -228,37 +229,47 @@ void PdfOpenDialog::onCreateNewFolder()
         // Try to create with incremented name
         int counter = 1;
         do {
-            newFolderPath = pdfDir + "/" + suggestedFolderName + QString("_%1").arg(counter);
+            newSpnPath = pdfDir + "/" + suggestedName + QString("_%1.spn").arg(counter);
             counter++;
-        } while (QDir(newFolderPath).exists() && counter < 100);
+        } while (QDir(newSpnPath).exists() && counter < 100);
         
         if (counter >= 100) {
-            QMessageBox::warning(this, tr("Error"), tr("Could not create a unique folder name."));
+            QMessageBox::warning(this, tr("Error"), tr("Could not create a unique package name."));
             return;
         }
     }
     
-    // Create the new folder
-    QDir dir;
-    if (dir.mkpath(newFolderPath)) {
-        selectedFolder = newFolderPath;
+    // Create the new .spn package
+    if (SpnPackageManager::createSpnPackage(newSpnPath)) {
+        selectedFolder = newSpnPath;
         result = CreateNewFolder;
         accept();
     } else {
-        QMessageBox::warning(this, tr("Error"), tr("Failed to create folder: %1").arg(newFolderPath));
+        QMessageBox::warning(this, tr("Error"), tr("Failed to create SpeedyNote package: %1").arg(newSpnPath));
     }
 }
 
 void PdfOpenDialog::onUseExistingFolder()
 {
-    QString folder = QFileDialog::getExistingDirectory(
-        this, 
-        tr("Select Existing Notebook Folder"), 
-        QFileInfo(pdfPath).absolutePath()
+    // Use QFileDialog to select either folders or .spn files
+    QString selected = QFileDialog::getOpenFileName(
+        this,
+        tr("Select Existing Notebook (.spn) or Folder"),
+        QFileInfo(pdfPath).absolutePath(),
+        tr("SpeedyNote Packages (*.spn);;All Files (*)")
     );
     
-    if (!folder.isEmpty()) {
-        selectedFolder = folder;
+    // If no .spn file selected, try folder selection
+    if (selected.isEmpty()) {
+        selected = QFileDialog::getExistingDirectory(
+            this, 
+            tr("Select Existing Notebook Folder"), 
+            QFileInfo(pdfPath).absolutePath()
+        );
+    }
+    
+    if (!selected.isEmpty()) {
+        selectedFolder = selected;
         result = UseExistingFolder;
         accept();
     }
@@ -272,14 +283,28 @@ void PdfOpenDialog::onCancel()
 
 // Static method to check if a matching notebook folder exists and is valid
 // This checks for a folder with the same name as the PDF (without extension)
-// in the same directory as the PDF file
+// or a .spn package with the same name in the same directory as the PDF file
 bool PdfOpenDialog::hasValidNotebookFolder(const QString &pdfPath, QString &folderPath)
 {
     QFileInfo fileInfo(pdfPath);
-    QString suggestedFolderName = fileInfo.baseName(); // Filename without extension
+    QString suggestedName = fileInfo.baseName(); // Filename without extension
     QString pdfDir = fileInfo.absolutePath(); // Directory containing the PDF
-    QString potentialFolderPath = pdfDir + "/" + suggestedFolderName;
     
+    // First, check for .spn package
+    QString potentialSpnPath = pdfDir + "/" + suggestedName + ".spn";
+    if (SpnPackageManager::isValidSpnPackage(potentialSpnPath)) {
+        // Extract to temp and check if it's valid for this PDF
+        QString tempDir = SpnPackageManager::extractSpnToTemp(potentialSpnPath);
+        if (!tempDir.isEmpty() && isValidNotebookFolder(tempDir, pdfPath)) {
+            SpnPackageManager::cleanupTempDir(tempDir);
+            folderPath = potentialSpnPath; // Return the .spn package path
+            return true;
+        }
+        SpnPackageManager::cleanupTempDir(tempDir);
+    }
+    
+    // Then, check for regular folder
+    QString potentialFolderPath = pdfDir + "/" + suggestedName;
     if (isValidNotebookFolder(potentialFolderPath, pdfPath)) {
         folderPath = potentialFolderPath;
         return true;
@@ -325,7 +350,7 @@ bool PdfOpenDialog::isValidNotebookFolder(const QString &folderPath, const QStri
     if (QFile::exists(notebookIdFile)) {
         // Additional check: ensure this folder has some notebook content
         QStringList contentFiles = folder.entryList(
-            QStringList() << "*.png" << ".pdf_path.txt" << ".bookmarks.txt" << ".background_config.txt", 
+            QStringList() << "*.png" << ".pdf_path.txt" << ".bookmarks.txt" << ".background_config.txt" << ".speedynote_metadata.json", 
             QDir::Files
         );
         

@@ -15,8 +15,10 @@
 #include <QLabel>
 
 #include "InkCanvas.h" // Needed for BackgroundStyle enum
-#include "MainWindow.h"
 #include "KeyCaptureDialog.h"
+
+// Forward declarations
+class MainWindow;
 #include "ControllerMappingDialog.h" // New: Include controller mapping dialog
 
 class ControlPanelDialog : public QDialog {
