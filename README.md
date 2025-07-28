@@ -18,7 +18,7 @@ vintage hardware._
 - 📌 **PDF background integration** with annotation overlay
 - 🌀 **Dial UI + Joy-Con support** for intuitive one-handed control
 - 🎨 **Per-page background styles**: grid, lined, or blank (customizable)
-- 💾 **Portable `.spr` notebooks** for note storage
+- 💾 **Portable `.spn` notebooks** for note storage
 - 🔎 **Zoom, pan, thickness, and color preset switching** via dial
 - 🗔 **Markdown sticky notes are supported** for text-based notes
 - 💡 **Designed for low-spec devices** (133Hz Sample Rate @ Intel Atom N450)
@@ -48,13 +48,13 @@ vintage hardware._
 2. *(Optitonal)* Click the PDF button on the tool bar to import a PDF document
 3. Start writing/drawing using your stylus
 4. Use the **MagicDial** or **Joy-Con** to change tools, zoom, scroll, or switch pages
-5. Click the `×` on the tab and save the notebook as a `spr` package
+5. Click the `×` on the tab and save the notebook as a `spn` package
 
 ###### OR
 
 1. Right click a PDF file in File Explorer (or equivalent)
 2. Click open with and select SpeedyNote
-3. Create an `spr` notebook package in the directory of the PDF file
+3. Create an `spn` notebook package in the directory of the PDF file
 4. Next time when you double click the `spr` notebook, all the notes with the PDF background will be loaded.
 5. Start writing/drawing using your stylus
 
