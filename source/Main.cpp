@@ -83,10 +83,7 @@ int main(int argc, char *argv[]) {
             // Handle SpeedyNote package
             w.show(); // Show window first
             w.openSpnPackage(inputFile);
-        } else if (inputFile.toLower().endsWith(".snpkg")) {
-            // Handle notebook package import
-            w.importNotebookFromFile(inputFile);
-            w.show();
+
         } else {
             // Unknown file type, just show the application
             w.show();

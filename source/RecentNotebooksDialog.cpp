@@ -5,6 +5,8 @@
 #include <QVBoxLayout>
 #include <QPixmap>
 #include <QScrollArea>
+#include <QTimer>
+#include <QPointer>
 
 RecentNotebooksDialog::RecentNotebooksDialog(MainWindow *mainWindow, RecentNotebooksManager *manager, QWidget *parent)
     : QDialog(parent), notebookManager(manager), mainWindowRef(mainWindow) {
@@ -80,32 +82,44 @@ void RecentNotebooksDialog::onNotebookClicked() {
     if (button) {
         QString notebookPath = button->property("notebookPath").toString();
         if (!notebookPath.isEmpty() && mainWindowRef) {
-            // This logic is similar to MainWindow::selectFolder but directly sets the folder.
-            InkCanvas *canvas = mainWindowRef->currentCanvas(); // Get current canvas from MainWindow
-            if (canvas) {
-                if (canvas->isEdited()){
-                     mainWindowRef->saveCurrentPage(); // Use MainWindow's save method
-                }
-                canvas->setSaveFolder(notebookPath);
-                
-                // ✅ Show last accessed page dialog if available
-                if (!mainWindowRef->showLastAccessedPageDialog(canvas)) {
-                    // No last accessed page, start from page 1
-                    mainWindowRef->switchPageWithDirection(1, 1); // Use MainWindow's direction-aware switchPage method
-                    mainWindowRef->pageInput->setValue(1); // Update pageInput in MainWindow
-                } else {
-                    // Dialog handled page switching, update page input
-                    mainWindowRef->pageInput->setValue(mainWindowRef->getCurrentPageForCanvas(canvas) + 1);
-                }
-                mainWindowRef->updateTabLabel(); // Update tab label in MainWindow
-                mainWindowRef->updateBookmarkButtonState(); // ✅ Update bookmark button state after loading notebook
-                
-                // Update recent notebooks list and refresh cover page
-                if (notebookManager) {
-                    // Generate and save fresh cover preview
-                    notebookManager->generateAndSaveCoverPreview(notebookPath, canvas);
-                    // Add/update in recent list (this moves it to the top)
-                    notebookManager->addRecentNotebook(notebookPath, canvas);
+            // ✅ Handle .spn files vs regular folders properly
+            if (notebookPath.endsWith(".spn", Qt::CaseInsensitive)) {
+                // For .spn files, use the proper opening method
+                mainWindowRef->openSpnPackage(notebookPath);
+            } else {
+                // For regular folders, use the existing logic
+                InkCanvas *canvas = mainWindowRef->currentCanvas();
+                if (canvas) {
+                    if (canvas->isEdited()){
+                         mainWindowRef->saveCurrentPage();
+                    }
+                    canvas->setSaveFolder(notebookPath);
+                    
+                    // ✅ Show last accessed page dialog if available
+                    if (!mainWindowRef->showLastAccessedPageDialog(canvas)) {
+                        // No last accessed page, start from page 1
+                        mainWindowRef->switchPageWithDirection(1, 1);
+                        mainWindowRef->pageInput->setValue(1);
+                    } else {
+                        // Dialog handled page switching, update page input
+                        mainWindowRef->pageInput->setValue(mainWindowRef->getCurrentPageForCanvas(canvas) + 1);
+                    }
+                    mainWindowRef->updateTabLabel();
+                    mainWindowRef->updateBookmarkButtonState();
+                    
+                    // ✅ Update recent notebooks list AFTER page is loaded to ensure proper thumbnail generation
+                    if (notebookManager) {
+                        // Use QPointer to safely handle canvas deletion
+                        QPointer<InkCanvas> canvasPtr(canvas);
+                        QTimer::singleShot(100, this, [this, notebookPath, canvasPtr]() {
+                            if (notebookManager && canvasPtr && !canvasPtr.isNull()) {
+                                // Generate and save fresh cover preview
+                                notebookManager->generateAndSaveCoverPreview(notebookPath, canvasPtr.data());
+                                // Add/update in recent list (this moves it to the top)
+                                notebookManager->addRecentNotebook(notebookPath, canvasPtr.data());
+                            }
+                        });
+                    }
                 }
             }
             accept(); // Close the dialog

@@ -24,6 +24,8 @@ private:
     void saveRecentNotebooks();
     QString getCoverImageDir() const;
     QString sanitizeFolderName(const QString& folderPath) const;
+    QString getPdfPathFromNotebook(const QString& folderPath) const;
+    QString getNotebookIdFromPath(const QString& folderPath) const;
 
     QStringList recentNotebookPaths;
     const int MAX_RECENT_NOTEBOOKS = 16;

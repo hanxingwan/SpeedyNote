@@ -1726,123 +1726,10 @@ void InkCanvas::setBackgroundDensity(int density) {
 // saveBackgroundMetadata implementation moved to unified JSON system below
 
 
-void InkCanvas::exportNotebook(const QString &destinationFile) {
-    if (destinationFile.isEmpty()) {
-        QMessageBox::warning(nullptr, tr("Export Error"), tr("No export file specified."));
-        return;
-    }
-
-    if (saveFolder.isEmpty()) {
-        QMessageBox::warning(nullptr, tr("Export Error"), tr("No notebook loaded (saveFolder is empty)"));
-        return;
-    }
-
-    QStringList files;
-
-    // Collect all files from saveFolder
-    QDir dir(saveFolder);
-    QDirIterator it(saveFolder, QDir::Files, QDirIterator::Subdirectories);
-    while (it.hasNext()) {
-        QString filePath = it.next();
-        QString relativePath = dir.relativeFilePath(filePath);
-        files << relativePath;
-    }
-
-    if (files.isEmpty()) {
-        QMessageBox::warning(nullptr, tr("Export Error"), tr("No files found to export."));
-        return;
-    }
-
-    // Generate temporary file list
-    QString tempFileList = saveFolder + "/filelist.txt";
-    QFile listFile(tempFileList);
-    if (listFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        QTextStream out(&listFile);
-        for (const QString &file : files) {
-            out << file << "\n";
-        }
-        listFile.close();
-    } else {
-        QMessageBox::warning(nullptr, tr("Export Error"), tr("Failed to create temporary file list."));
-        return;
-    }
-
-#ifdef _WIN32
-    QString tarExe = QCoreApplication::applicationDirPath() + "/bsdtar.exe";
-#else
-    QString tarExe = "tar";
-#endif
-
-    QStringList args;
-    args << "-cf" << QDir::toNativeSeparators(destinationFile);
-
-    for (const QString &file : files) {
-        args << QDir::toNativeSeparators(file);
-    }
-
-    QProcess process;
-    process.setWorkingDirectory(saveFolder);
-
-    process.start(tarExe, args);
-    if (!process.waitForFinished()) {
-        QMessageBox::warning(nullptr, tr("Export Error"), tr("Tar process failed to finish."));
-        QFile::remove(tempFileList);
-        return;
-    }
-
-    QFile::remove(tempFileList);
-
-    if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
-        QMessageBox::warning(nullptr, tr("Export Error"), tr("Tar process failed."));
-        return;
-    }
-
-    QMessageBox::information(nullptr, tr("Export"), tr("Notebook exported successfully."));
-}
 
 
-void InkCanvas::importNotebook(const QString &packageFile) {
 
-    // Ask user for destination working folder
-    QString destFolder = QFileDialog::getExistingDirectory(nullptr, tr("Select Destination Folder for Imported Notebook"));
 
-    if (destFolder.isEmpty()) {
-        QMessageBox::warning(nullptr, tr("Import Canceled"), tr("No destination folder selected."));
-        return;
-    }
-
-    // Check if destination folder is empty (optional, good practice)
-    QDir destDir(destFolder);
-    if (!destDir.entryList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot).isEmpty()) {
-        QMessageBox::StandardButton reply = QMessageBox::question(nullptr, tr("Destination Not Empty"),
-            tr("The selected folder is not empty. Files may be overwritten. Continue?"),
-            QMessageBox::Yes | QMessageBox::No);
-        if (reply != QMessageBox::Yes) {
-            return;
-        }
-    }
-
-#ifdef _WIN32
-    QString tarExe = QCoreApplication::applicationDirPath() + "/bsdtar.exe";
-#else
-    QString tarExe = "tar";
-#endif
-
-    // Extract package
-    QStringList args;
-    args << "-xf" << packageFile;
-
-    QProcess process;
-    process.setWorkingDirectory(destFolder);
-    process.start(tarExe, args);
-    process.waitForFinished();
-
-    // Switch notebook folder
-    setSaveFolder(destFolder);
-    loadPage(0);
-
-    QMessageBox::information(nullptr, tr("Import Complete"), tr("Notebook imported successfully."));
-}
 
 
 void InkCanvas::loadNotebookId() {
@@ -1870,28 +1757,7 @@ void InkCanvas::saveNotebookId() {
 }
 
 
-void InkCanvas::importNotebookTo(const QString &packageFile, const QString &destFolder) {
 
-    #ifdef _WIN32
-        QString tarExe = QCoreApplication::applicationDirPath() + "/bsdtar.exe";
-    #else
-        QString tarExe = "tar";
-    #endif
-    
-        QStringList args;
-        args << "-xf" << packageFile;
-    
-        QProcess process;
-        process.setWorkingDirectory(destFolder);
-        process.start(tarExe, args);
-        process.waitForFinished();
-    
-        setSaveFolder(destFolder);
-        loadNotebookId();
-        loadPage(0);
-
-        QMessageBox::information(nullptr, tr("Import"), tr("Notebook imported successfully."));
-    }
 
 bool InkCanvas::event(QEvent *event) {
     if (!touchGesturesEnabled) {
@@ -2887,14 +2753,14 @@ void InkCanvas::loadNotebookMetadata() {
             QFile::exists(saveFolder + "/.pdf_path.txt") || 
             QFile::exists(saveFolder + "/.background_config.txt") || 
             QFile::exists(saveFolder + "/.bookmarks.txt")) {
-            qDebug() << "Detected old metadata files, migrating to JSON format...";
+            // qDebug() << "Detected old metadata files, migrating to JSON format...";
             migrateOldMetadataFiles();
             return; // migrateOldMetadataFiles calls saveNotebookMetadata which creates the JSON
         } else {
             // No old files, this is a new notebook - generate new ID
             if (notebookId.isEmpty()) {
                 notebookId = QUuid::createUuid().toString(QUuid::WithoutBraces).replace("-", "");
-                qDebug() << "New notebook created with ID:" << notebookId;
+                // qDebug() << "New notebook created with ID:" << notebookId;
             }
             return;
         }
@@ -3046,7 +2912,7 @@ bool InkCanvas::handleMissingPdf(QWidget *parent) {
 void InkCanvas::migrateOldMetadataFiles() {
     if (saveFolder.isEmpty()) return;
     
-    qDebug() << "Migrating old metadata files for folder:" << saveFolder;
+    // qDebug() << "Migrating old metadata files for folder:" << saveFolder;
     
     // ✅ CRITICAL: Always load existing notebook ID first to preserve file naming consistency
     QString idFile = saveFolder + "/.notebook_id.txt";
@@ -3058,7 +2924,7 @@ void InkCanvas::migrateOldMetadataFiles() {
             file.close();
             if (!existingId.isEmpty()) {
                 notebookId = existingId;
-                qDebug() << "Preserved existing notebook ID:" << notebookId;
+                // qDebug() << "Preserved existing notebook ID:" << notebookId;
             }
         }
     }
@@ -3066,7 +2932,7 @@ void InkCanvas::migrateOldMetadataFiles() {
     // Only generate new ID if none exists
     if (notebookId.isEmpty()) {
         notebookId = QUuid::createUuid().toString(QUuid::WithoutBraces).replace("-", "");
-        qDebug() << "Generated new notebook ID:" << notebookId;
+        // qDebug() << "Generated new notebook ID:" << notebookId;
     }
     
     // Migrate PDF path
@@ -3135,10 +3001,10 @@ void InkCanvas::migrateOldMetadataFiles() {
         QFile::remove(saveFolder + "/.background_config.txt");
         QFile::remove(saveFolder + "/.bookmarks.txt");
         
-        qDebug() << "Successfully migrated metadata files to JSON for folder:" << saveFolder;
-        qDebug() << "Notebook ID preserved:" << notebookId;
-        qDebug() << "PDF path:" << pdfPath;
-        qDebug() << "Bookmarks count:" << bookmarks.size();
+        //qDebug() << "Successfully migrated metadata files to JSON for folder:" << saveFolder;
+        //qDebug() << "Notebook ID preserved:" << notebookId;
+        //qDebug() << "PDF path:" << pdfPath;
+        //qDebug() << "Bookmarks count:" << bookmarks.size();
     } else {
         qWarning() << "Migration failed - JSON file not created. Keeping old files as backup.";
     }

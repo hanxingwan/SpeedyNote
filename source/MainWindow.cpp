@@ -10,6 +10,7 @@
 #include <QLineEdit>
 #include <QTextEdit>
 #include <QPlainTextEdit>
+#include <QPointer>
 #include "ToolType.h" // Include the header file where ToolType is defined
 #include <QFileDialog>
 #include <QDateTime>
@@ -42,7 +43,7 @@
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false) {
 
-    setWindowTitle(tr("SpeedyNote Beta 0.6.2"));
+    setWindowTitle(tr("SpeedyNote Beta 0.7.0"));
 
     // Enable IME support for multi-language input
     setAttribute(Qt::WA_InputMethodEnabled, true);
@@ -183,33 +184,7 @@ void MainWindow::setupUi() {
         }
     });
 
-    exportNotebookButton = new QPushButton(this);
-    exportNotebookButton->setFixedSize(26, 30);
-    QIcon exportIcon(loadThemedIcon("export"));  // Path to your icon in resources
-    exportNotebookButton->setIcon(exportIcon);
-    exportNotebookButton->setStyleSheet(buttonStyle);
-    exportNotebookButton->setToolTip(tr("Export Notebook Into .SNPKG File"));
-    importNotebookButton = new QPushButton(this);
-    importNotebookButton->setFixedSize(26, 30);
-    QIcon importIcon(loadThemedIcon("import"));  // Path to your icon in resources
-    importNotebookButton->setIcon(importIcon);
-    importNotebookButton->setStyleSheet(buttonStyle);
-    importNotebookButton->setToolTip(tr("Import Notebook From .SNPKG File"));
 
-    connect(exportNotebookButton, &QPushButton::clicked, this, [=]() {
-        QString filename = QFileDialog::getSaveFileName(this, tr("Export Notebook"), "", "SpeedyNote Package (*.snpkg)");
-        if (!filename.isEmpty()) {
-            if (!filename.endsWith(".snpkg")) filename += ".snpkg";
-            currentCanvas()->exportNotebook(filename);
-        }
-    });
-    
-    connect(importNotebookButton, &QPushButton::clicked, this, [=]() {
-        QString filename = QFileDialog::getOpenFileName(this, tr("Import Notebook"), "", "SpeedyNote Package (*.snpkg)");
-        if (!filename.isEmpty()) {
-            currentCanvas()->importNotebook(filename);
-        }
-    });
 
     benchmarkButton = new QPushButton(this);
     QIcon benchmarkIcon(loadThemedIcon("benchmark"));  // Path to your icon in resources
@@ -296,7 +271,7 @@ void MainWindow::setupUi() {
     // Use the darkMode variable already declared at the beginning of setupUi()
 
     redButton = new QPushButton(this);
-    redButton->setFixedSize(18, 30);  // Half width
+    redButton->setFixedSize(16, 30);  // Half width
     QString redIconPath = darkMode ? ":/resources/icons/pen_light_red.png" : ":/resources/icons/pen_dark_red.png";
     QIcon redIcon(redIconPath);
     redButton->setIcon(redIcon);
@@ -309,7 +284,7 @@ void MainWindow::setupUi() {
     });
     
     blueButton = new QPushButton(this);
-    blueButton->setFixedSize(18, 30);  // Half width
+    blueButton->setFixedSize(16, 30);  // Half width
     QString blueIconPath = darkMode ? ":/resources/icons/pen_light_blue.png" : ":/resources/icons/pen_dark_blue.png";
     QIcon blueIcon(blueIconPath);
     blueButton->setIcon(blueIcon);
@@ -322,7 +297,7 @@ void MainWindow::setupUi() {
     });
 
     yellowButton = new QPushButton(this);
-    yellowButton->setFixedSize(18, 30);  // Half width
+    yellowButton->setFixedSize(16, 30);  // Half width
     QString yellowIconPath = darkMode ? ":/resources/icons/pen_light_yellow.png" : ":/resources/icons/pen_dark_yellow.png";
     QIcon yellowIcon(yellowIconPath);
     yellowButton->setIcon(yellowIcon);
@@ -335,7 +310,7 @@ void MainWindow::setupUi() {
     });
 
     greenButton = new QPushButton(this);
-    greenButton->setFixedSize(18, 30);  // Half width
+    greenButton->setFixedSize(16, 30);  // Half width
     QString greenIconPath = darkMode ? ":/resources/icons/pen_light_green.png" : ":/resources/icons/pen_dark_green.png";
     QIcon greenIcon(greenIconPath);
     greenButton->setIcon(greenIcon);
@@ -348,7 +323,7 @@ void MainWindow::setupUi() {
     });
 
     blackButton = new QPushButton(this);
-    blackButton->setFixedSize(18, 30);  // Half width
+    blackButton->setFixedSize(16, 30);  // Half width
     QString blackIconPath = darkMode ? ":/resources/icons/pen_light_black.png" : ":/resources/icons/pen_dark_black.png";
     QIcon blackIcon(blackIconPath);
     blackButton->setIcon(blackIcon);
@@ -361,7 +336,7 @@ void MainWindow::setupUi() {
     });
 
     whiteButton = new QPushButton(this);
-    whiteButton->setFixedSize(18, 30);  // Half width
+    whiteButton->setFixedSize(16, 30);  // Half width
     QString whiteIconPath = darkMode ? ":/resources/icons/pen_light_white.png" : ":/resources/icons/pen_dark_white.png";
     QIcon whiteIcon(whiteIconPath);
     whiteButton->setIcon(whiteIcon);
@@ -1018,8 +993,7 @@ void MainWindow::setupUi() {
     controlLayout->addWidget(toggleTabBarButton);
     controlLayout->addWidget(selectFolderButton);
 
-    controlLayout->addWidget(exportNotebookButton);
-    controlLayout->addWidget(importNotebookButton);
+
     controlLayout->addWidget(loadPdfButton);
     controlLayout->addWidget(clearPdfButton);
     controlLayout->addWidget(pdfTextSelectButton);
@@ -1393,7 +1367,7 @@ void MainWindow::selectFolder() {
                 // Dialog handled page switching, update page input
                 pageInput->setValue(getCurrentPageForCanvas(canvas) + 1);
             }
-            updateTabLabel();
+        updateTabLabel();
             updateBookmarkButtonState(); // ✅ Update bookmark button state after loading notebook
             recentNotebooksManager->addRecentNotebook(canvas->getDisplayPath(), canvas); // Track the display path
         }
@@ -3473,8 +3447,7 @@ void MainWindow::updateTheme() {
     if (loadPdfButton) loadPdfButton->setIcon(loadThemedIcon("pdf"));
     if (clearPdfButton) clearPdfButton->setIcon(loadThemedIcon("pdfdelete"));
     if (pdfTextSelectButton) pdfTextSelectButton->setIcon(loadThemedIcon("ibeam"));
-    if (exportNotebookButton) exportNotebookButton->setIcon(loadThemedIcon("export"));
-    if (importNotebookButton) importNotebookButton->setIcon(loadThemedIcon("import"));
+
     if (benchmarkButton) benchmarkButton->setIcon(loadThemedIcon("benchmark"));
     if (toggleTabBarButton) toggleTabBarButton->setIcon(loadThemedIcon("tabs"));
     if (toggleOutlineButton) toggleOutlineButton->setIcon(loadThemedIcon("outline"));
@@ -3515,8 +3488,7 @@ void MainWindow::updateTheme() {
     if (loadPdfButton) loadPdfButton->setStyleSheet(newButtonStyle);
     if (clearPdfButton) clearPdfButton->setStyleSheet(newButtonStyle);
     if (pdfTextSelectButton) pdfTextSelectButton->setStyleSheet(newButtonStyle);
-    if (exportNotebookButton) exportNotebookButton->setStyleSheet(newButtonStyle);
-    if (importNotebookButton) importNotebookButton->setStyleSheet(newButtonStyle);
+
     if (benchmarkButton) benchmarkButton->setStyleSheet(newButtonStyle);
     if (toggleTabBarButton) toggleTabBarButton->setStyleSheet(newButtonStyle);
     if (toggleOutlineButton) toggleOutlineButton->setStyleSheet(newButtonStyle);
@@ -4032,25 +4004,7 @@ void MainWindow::handleControllerButton(const QString &buttonName) {  // This is
 }
 
 
-void MainWindow::importNotebookFromFile(const QString &packageFile) {
 
-    QString destDir = QFileDialog::getExistingDirectory(this, tr("Select Working Directory for Notebook"));
-
-    if (destDir.isEmpty()) {
-        QMessageBox::warning(this, tr("Import Cancelled"), tr("No directory selected. Notebook will not be opened."));
-        return;
-    }
-
-    InkCanvas *canvas = currentCanvas();
-    if (!canvas) return;
-
-    canvas->importNotebookTo(packageFile, destDir);
-
-    // Change saveFolder in InkCanvas
-    canvas->setSaveFolder(destDir);
-    canvas->loadPage(0);
-    updateZoom(); // ✅ Update zoom and pan range after importing notebook
-}
 
 void MainWindow::openPdfFile(const QString &pdfPath) {
     // Check if the PDF file exists
@@ -4077,12 +4031,9 @@ void MainWindow::openPdfFile(const QString &pdfPath) {
         // Load the PDF
         canvas->loadPdf(pdfPath);
         
-        // Update tab label and recent notebooks
+        // Update tab label
         updateTabLabel();
         updateBookmarkButtonState(); // ✅ Update bookmark button state after loading notebook
-        if (recentNotebooksManager) {
-            recentNotebooksManager->addRecentNotebook(existingFolderPath, canvas);
-        }
         
         // ✅ Show last accessed page dialog if available
         if (!showLastAccessedPageDialog(canvas)) {
@@ -4095,6 +4046,17 @@ void MainWindow::openPdfFile(const QString &pdfPath) {
         }
         updateZoom();
         updatePanRange();
+        
+        // ✅ Add to recent notebooks AFTER page is loaded to ensure proper thumbnail generation
+        if (recentNotebooksManager) {
+            // Use QPointer to safely handle canvas deletion
+            QPointer<InkCanvas> canvasPtr(canvas);
+            QTimer::singleShot(100, this, [this, existingFolderPath, canvasPtr]() {
+                if (recentNotebooksManager && canvasPtr && !canvasPtr.isNull()) {
+                    recentNotebooksManager->addRecentNotebook(existingFolderPath, canvasPtr.data());
+                }
+            });
+        }
         
         return; // Exit early, no need to show dialog
     }
@@ -4125,17 +4087,25 @@ void MainWindow::openPdfFile(const QString &pdfPath) {
         // Load the PDF
         canvas->loadPdf(pdfPath);
         
-        // Update tab label and recent notebooks
+        // Update tab label
         updateTabLabel();
-        if (recentNotebooksManager) {
-            recentNotebooksManager->addRecentNotebook(selectedFolder, canvas);
-        }
         
         // Switch to page 1 for new folders (no last accessed page)
         switchPageWithDirection(1, 1);
         pageInput->setValue(1);
         updateZoom();
         updatePanRange();
+        
+        // ✅ Add to recent notebooks AFTER page is loaded to ensure proper thumbnail generation
+        if (recentNotebooksManager) {
+            // Use QPointer to safely handle canvas deletion
+            QPointer<InkCanvas> canvasPtr(canvas);
+            QTimer::singleShot(100, this, [this, selectedFolder, canvasPtr]() {
+                if (recentNotebooksManager && canvasPtr && !canvasPtr.isNull()) {
+                    recentNotebooksManager->addRecentNotebook(selectedFolder, canvasPtr.data());
+                }
+            });
+        }
         
     } else if (result == PdfOpenDialog::UseExistingFolder) {
         // ✅ Check if the existing folder is linked to the same PDF using JSON metadata
@@ -4178,12 +4148,9 @@ void MainWindow::openPdfFile(const QString &pdfPath) {
             canvas->loadPdf(pdfPath);
         }
         
-        // Update tab label and recent notebooks
+        // Update tab label
         updateTabLabel();
         updateBookmarkButtonState(); // ✅ Update bookmark button state after loading notebook
-        if (recentNotebooksManager) {
-            recentNotebooksManager->addRecentNotebook(selectedFolder, canvas);
-        }
         
         // ✅ Show last accessed page dialog if available for existing folders
         if (!showLastAccessedPageDialog(canvas)) {
@@ -4196,6 +4163,17 @@ void MainWindow::openPdfFile(const QString &pdfPath) {
         }
         updateZoom();
         updatePanRange();
+        
+        // ✅ Add to recent notebooks AFTER page is loaded to ensure proper thumbnail generation
+        if (recentNotebooksManager) {
+            // Use QPointer to safely handle canvas deletion
+            QPointer<InkCanvas> canvasPtr(canvas);
+            QTimer::singleShot(100, this, [this, selectedFolder, canvasPtr]() {
+                if (recentNotebooksManager && canvasPtr && !canvasPtr.isNull()) {
+                    recentNotebooksManager->addRecentNotebook(selectedFolder, canvasPtr.data());
+                }
+            });
+        }
     }
 }
 
@@ -4678,7 +4656,7 @@ void MainWindow::updateToolbarLayout() {
     int scaledWidth = width();
     
     // Dynamic threshold based on zoom button visibility
-    int threshold = areZoomButtonsVisible() ? 1548 : 1438;
+    int threshold = areZoomButtonsVisible() ? 1474 : 1364;
     
     // Debug output to understand what's happening
     // qDebug() << "Window width:" << scaledWidth << "Threshold:" << threshold << "Zoom buttons visible:" << areZoomButtonsVisible();
@@ -4717,8 +4695,7 @@ void MainWindow::createSingleRowLayout() {
         newLayout->addWidget(toggleBookmarkButton);
         newLayout->addWidget(touchGesturesButton);
         newLayout->addWidget(selectFolderButton);
-    newLayout->addWidget(exportNotebookButton);
-    newLayout->addWidget(importNotebookButton);
+    
     newLayout->addWidget(loadPdfButton);
     newLayout->addWidget(clearPdfButton);
     newLayout->addWidget(pdfTextSelectButton);
@@ -4810,8 +4787,7 @@ void MainWindow::createTwoRowLayout() {
         newFirstRowLayout->addWidget(toggleBookmarkButton);
         newFirstRowLayout->addWidget(touchGesturesButton);
         newFirstRowLayout->addWidget(selectFolderButton);
-    newFirstRowLayout->addWidget(exportNotebookButton);
-    newFirstRowLayout->addWidget(importNotebookButton);
+    
     newFirstRowLayout->addWidget(loadPdfButton);
     newFirstRowLayout->addWidget(clearPdfButton);
     newFirstRowLayout->addWidget(pdfTextSelectButton);
@@ -5772,12 +5748,9 @@ void MainWindow::openSpnPackage(const QString &spnPath)
         return;
     }
     
-    // Update tab label and recent notebooks
+    // Update tab label
     updateTabLabel();
     updateBookmarkButtonState(); // ✅ Update bookmark button state after loading notebook
-    if (recentNotebooksManager) {
-        recentNotebooksManager->addRecentNotebook(spnPath, canvas);
-    }
     
     // ✅ Show last accessed page dialog if available
     if (!showLastAccessedPageDialog(canvas)) {
@@ -5790,4 +5763,15 @@ void MainWindow::openSpnPackage(const QString &spnPath)
     }
     updateZoom();
     updatePanRange();
+    
+    // ✅ Add to recent notebooks AFTER page is loaded to ensure proper thumbnail generation
+    if (recentNotebooksManager) {
+        // Use QPointer to safely handle canvas deletion
+        QPointer<InkCanvas> canvasPtr(canvas);
+        QTimer::singleShot(100, this, [this, spnPath, canvasPtr]() {
+            if (recentNotebooksManager && canvasPtr && !canvasPtr.isNull()) {
+                recentNotebooksManager->addRecentNotebook(spnPath, canvasPtr.data());
+            }
+        });
+    }
 }
