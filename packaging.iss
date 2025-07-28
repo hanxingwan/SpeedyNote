@@ -18,7 +18,7 @@ Name: "zh"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 Name: "fr"; MessagesFile: "compiler:Languages\French.isl"
 
 [Files]
-Source: "C:\Games\notecpp_2rowlowres_legacy\build\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
+Source: ".\build\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
 
 [Icons]
 Name: "{group}\SpeedyNote"; Filename: "{app}\NoteApp.exe"; WorkingDir: "{app}"
