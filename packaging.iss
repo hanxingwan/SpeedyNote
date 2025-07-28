@@ -1,7 +1,7 @@
 ; SpeedyNote Inno Setup Script
 [Setup]
 AppName=SpeedyNote
-AppVersion=0.7.0
+AppVersion=0.7.1
 DefaultDirName={autopf}\SpeedyNote
 DefaultGroupName=SpeedyNote
 OutputBaseFilename=SpeedyNoteInstaller
@@ -29,6 +29,7 @@ Name: "{group}\Uninstall SpeedyNote"; Filename: "{uninstallexe}"
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"
 Name: "pdfassociation"; Description: "Associate PDF files with SpeedyNote (adds SpeedyNote to 'Open with' menu)"; GroupDescription: "File associations:"
 Name: "spnassociation"; Description: "Associate .spn files with SpeedyNote (SpeedyNote Package files)"; GroupDescription: "File associations:"
+Name: "contextmenu"; Description: "Add 'SpeedyNote Package' to right-click 'New' menu"; GroupDescription: "Context menu:"
 
 [Registry]
 ; PDF file association entries (only if task is selected)
@@ -56,6 +57,11 @@ Root: HKCR; Subkey: "SpeedyNote.SPN\DefaultIcon"; ValueType: string; ValueData: 
 Root: HKCR; Subkey: "SpeedyNote.SPN\shell\open"; ValueType: string; ValueName: "FriendlyName"; ValueData: "Open with SpeedyNote"; Tasks: spnassociation
 Root: HKCR; Subkey: "SpeedyNote.SPN\shell\open\command"; ValueType: string; ValueData: """{app}\NoteApp.exe"" ""%1"""; Tasks: spnassociation
 Root: HKLM; Subkey: "SOFTWARE\SpeedyNote\Capabilities\FileAssociations"; ValueType: string; ValueName: ".spn"; ValueData: "SpeedyNote.SPN"; Tasks: spnassociation
+
+; ✅ Context menu "New" entry for .spn files
+Root: HKCR; Subkey: ".spn\ShellNew"; ValueType: string; ValueName: "Command"; ValueData: """{app}\NoteApp.exe"" --create-silent ""%1"""; Tasks: contextmenu
+Root: HKCR; Subkey: ".spn\ShellNew"; ValueType: string; ValueName: "MenuText"; ValueData: "SpeedyNote Package"; Tasks: contextmenu
+Root: HKCR; Subkey: ".spn\ShellNew"; ValueType: string; ValueName: "IconPath"; ValueData: "{app}\NoteApp.exe,0"; Tasks: contextmenu
 
 [Run]
 Filename: "{app}\NoteApp.exe"; Description: "{cm:LaunchProgram,SpeedyNote}"; Flags: nowait postinstall skipifsilent

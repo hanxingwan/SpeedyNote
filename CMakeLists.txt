@@ -35,14 +35,14 @@ if (WIN32)
     set(WIN_RESOURCES app_icon.rc)
 
     # Find dependencies for Windows
-    find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Multimedia Concurrent Xml)
+    find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Multimedia Concurrent Xml Network)
     find_package(Poppler REQUIRED)
     find_package(SDL2 REQUIRED CONFIG)
     unset(SDL2main CACHE)
 elseif (UNIX)
     # Linux-specific configuration
     # Use system paths for Linux
-    find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Multimedia Concurrent Xml)
+    find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Multimedia Concurrent Xml Network)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(POPPLER REQUIRED IMPORTED_TARGET poppler-qt6)
 
@@ -161,13 +161,13 @@ add_compile_definitions(QT_NO_DEPRECATED_WARNINGS)
 # ✅ Link libraries - platform specific
 if (WIN32)
     target_link_libraries(NoteApp
-            Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Multimedia Qt6::Concurrent Qt6::Xml
+            Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Multimedia Qt6::Concurrent Qt6::Xml Qt6::Network
             SDL2::SDL2
             ${POPPLER_LIBRARIES}
     )
 elseif (UNIX)
     target_link_libraries(NoteApp
-            Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Multimedia Qt6::Concurrent Qt6::Xml
+            Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Multimedia Qt6::Concurrent Qt6::Xml Qt6::Network
             PkgConfig::SDL2
             PkgConfig::POPPLER
     )

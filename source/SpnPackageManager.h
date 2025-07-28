@@ -7,6 +7,9 @@
 #include <QJsonObject>
 #include <QJsonDocument>
 
+// Forward declaration to avoid circular includes
+enum class BackgroundStyle;
+
 class SpnPackageManager
 {
 public:
@@ -16,6 +19,9 @@ public:
     // Convert a regular folder to .spn package file
     static bool convertFolderToSpn(const QString &folderPath, QString &spnPath);
     
+    // Convert folder to .spn package with specific target path
+    static bool convertFolderToSpnPath(const QString &folderPath, const QString &targetSpnPath);
+    
     // Extract .spn package to a temporary working directory
     static QString extractSpnToTemp(const QString &spnPath);
     
@@ -24,6 +30,10 @@ public:
     
     // Create a new .spn package file
     static bool createSpnPackage(const QString &spnPath, const QString &notebookName = QString());
+    
+    // Create a new .spn package with custom background settings
+    static bool createSpnPackageWithBackground(const QString &spnPath, const QString &notebookName,
+                                               BackgroundStyle style, const QColor &color, int density);
     
     // Get the display name for a .spn package
     static QString getSpnDisplayName(const QString &spnPath);
@@ -47,7 +57,13 @@ private:
     // Internal helper methods
     static bool packDirectoryToSpn(const QString &dirPath, const QString &spnPath);
     static bool unpackSpnToDirectory(const QString &spnPath, const QString &dirPath);
-    static QJsonObject createSpnHeader(const QString &notebookName);
+    static QJsonObject createSpnHeader(const QString &notebookName, 
+                                       const QString &backgroundStyle = "None",
+                                       const QString &backgroundColor = "#ffffff", 
+                                       int backgroundDensity = 20);
+    
+    // Helper function to convert BackgroundStyle enum to string
+    static QString backgroundStyleToString(BackgroundStyle style);
 };
 
 #endif // SPNPACKAGEMANAGER_H 

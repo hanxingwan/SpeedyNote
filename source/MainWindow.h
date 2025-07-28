@@ -32,6 +32,9 @@
 #include "ControlPanelDialog.h"
 #include "MarkdownWindowManager.h"
 #include "SpnPackageManager.h"
+#include <QLocalServer>
+#include <QLocalSocket>
+#include <QSharedMemory>
 
 // Forward declarations
 class QTreeWidgetItem;
@@ -213,9 +216,16 @@ public:
     void setPressMapping(const QString &buttonName, const QString &action);
     DialMode dialModeFromString(const QString &mode);
 
-    void importNotebookFromFile(const QString &packageFile);
+
     void openPdfFile(const QString &pdfPath); // ✅ Open PDF file directly
-    void openSpnPackage(const QString &spnPath); // ✅ Open .spn package directly
+    void openSpnPackage(const QString &spnPath);
+    void createNewSpnPackage(const QString &spnPath); // ✅ Create new empty SPN package
+    
+    // Single instance functionality
+    static bool isInstanceRunning();
+    static bool sendToExistingInstance(const QString &filePath);
+    void setupSingleInstanceServer();
+    void openFileInNewTab(const QString &filePath); // ✅ Open .spn package directly
     bool showLastAccessedPageDialog(InkCanvas *canvas); // ✅ Show dialog for last accessed page
 
     int getPdfDPI() const { return pdfRenderDPI; }
@@ -227,6 +237,7 @@ public:
     // Background settings persistence
     void saveDefaultBackgroundSettings(BackgroundStyle style, QColor color, int density);
     void loadDefaultBackgroundSettings(BackgroundStyle &style, QColor &color, int &density);
+    void applyDefaultBackgroundToCanvas(InkCanvas *canvas); // ✅ Helper to apply default background settings
     
     void saveThemeSettings();
     void loadThemeSettings();
@@ -266,6 +277,7 @@ public:
 private slots:
     void toggleBenchmark();
     void updateBenchmarkDisplay();
+    void onNewConnection(); // Handle new instance connections
     void applyCustomColor(); // Added function for custom color input
     void updateThickness(int value); // New function for thickness control
     void adjustThicknessForZoom(int oldZoom, int newZoom); // Adjust thickness when zoom changes
@@ -345,6 +357,7 @@ private slots:
     void updateStraightLineButtonState();
     void updateRopeToolButtonState(); // New slot for rope tool button
     void updateMarkdownButtonState(); // New slot for markdown button
+    void onAnnotatedImageSaved(const QString &filePath); // ✅ Handle annotated image saved notification
 
     void setPenTool();               // Set pen tool
     void setMarkerTool();            // Set marker tool
@@ -381,8 +394,7 @@ private:
     QTimer *benchmarkTimer;
     bool benchmarking;
 
-    QPushButton *exportNotebookButton;
-    QPushButton *importNotebookButton;
+
 
     QPushButton *redButton;
     QPushButton *blueButton;
@@ -555,11 +567,15 @@ private:
     void saveKeyboardMappings();
     void loadKeyboardMappings();
 
-    void ensureTabHasUniqueSaveFolder(InkCanvas* canvas);
+    bool ensureTabHasUniqueSaveFolder(InkCanvas* canvas); // Returns true if tab can be closed
 
     RecentNotebooksManager *recentNotebooksManager; // Added manager instance
 
     int pdfRenderDPI = 192;  // Default to 288 DPI
+    
+    // Single instance support
+    QLocalServer *localServer;
+    static QSharedMemory *sharedMemory;
 
     void setupUi();
 

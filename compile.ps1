@@ -19,6 +19,6 @@ cmake --build . -- -j16
 & "C:\Qt\6.8.2\mingw_64\bin\windeployqt.exe" "NoteApp.exe"
 
 Copy-Item -Path "..\dllpack\*.dll" -Destination "..\build" -Force
-Copy-Item -Path "..\dllpack\bsdtar.exe" -Destination "..\build" -Force
+# Copy-Item -Path "..\dllpack\bsdtar.exe" -Destination "..\build" -Force
 ./NoteApp.exe
 cd ../

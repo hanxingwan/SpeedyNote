@@ -168,6 +168,9 @@ void InkCanvas::clearPdf() {
     totalPdfPages = 0;
     pdfCache.clear();
     
+    // ✅ Clear the background image immediately to remove PDF from display
+    backgroundImage = QPixmap();
+    
     // Reset cache system state
     currentCachedPage = -1;
     if (pdfCacheTimer && pdfCacheTimer->isActive()) {
@@ -1386,19 +1389,76 @@ void InkCanvas::saveToFile(int pageNumber) {
 void InkCanvas::saveAnnotated(int pageNumber) {
     if (saveFolder.isEmpty()) return;
 
-    QString filePath = saveFolder + QString("/annotated_%1_%2.png").arg(notebookId).arg(pageNumber, 5, 10, QChar('0'));
+    // ✅ Determine the target directory for the annotated image
+    QString targetDir;
+    QString displayPath = getDisplayPath(); // Gets .spn path or folder path
+    
+    if (isSpnPackage && !actualPackagePath.isEmpty()) {
+        // For .spn packages, save in the same directory as the .spn file
+        QFileInfo spnInfo(actualPackagePath);
+        targetDir = spnInfo.absolutePath();
+    } else {
+        // For regular folders, save in the folder itself
+        targetDir = saveFolder;
+    }
+    
+    // ✅ Get notebook ID from JSON metadata
+    loadNotebookMetadata(); // Ensure metadata is loaded
+    QString currentNotebookId = getNotebookId();
+    if (currentNotebookId.isEmpty()) {
+        currentNotebookId = "unknown"; // Fallback if no ID found
+    }
+    
+    // ✅ Create filename with proper notebook ID
+    QString fileName = QString("annotated_%1_page_%2.png")
+                       .arg(currentNotebookId)
+                       .arg(pageNumber + 1, 3, 10, QChar('0')); // 1-based page numbering
+    QString filePath = targetDir + "/" + fileName;
 
     // Use the buffer size to ensure correct resolution
     QImage image(buffer.size(), QImage::Format_ARGB32);
     image.fill(Qt::transparent);
     QPainter painter(&image);
     
+    // ✅ Draw background (PDF or notebook background)
     if (!backgroundImage.isNull()) {
+        // Draw PDF background if available
         painter.drawPixmap(0, 0, backgroundImage.scaled(buffer.size(), Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation));
+    } else {
+        // Draw notebook background (grid/lines/color) if no PDF
+        painter.fillRect(image.rect(), backgroundColor);
+        
+        if (backgroundStyle != BackgroundStyle::None) {
+            QPen linePen(QColor(100, 100, 100, 100));
+            linePen.setWidthF(1.0);
+            painter.setPen(linePen);
+
+            qreal scaledDensity = backgroundDensity;
+            if (devicePixelRatioF() > 1.0) {
+                scaledDensity *= devicePixelRatioF();
+            }
+
+            if (backgroundStyle == BackgroundStyle::Lines || backgroundStyle == BackgroundStyle::Grid) {
+                for (int y = 0; y < image.height(); y += scaledDensity) {
+                    painter.drawLine(0, y, image.width(), y);
+                }
+            }
+            if (backgroundStyle == BackgroundStyle::Grid) {
+                for (int x = 0; x < image.width(); x += scaledDensity) {
+                    painter.drawLine(x, 0, x, image.height());
+                }
+            }
+        }
     }
     
+    // ✅ Draw user strokes on top
     painter.drawPixmap(0, 0, buffer);
-    image.save(filePath, "PNG");
+    
+    // ✅ Save the image
+    if (image.save(filePath, "PNG")) {
+        // ✅ Emit signal to notify MainWindow for user message
+        emit annotatedImageSaved(filePath);
+    }
 }
 
 
