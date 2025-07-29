@@ -1149,15 +1149,12 @@ void MainWindow::setupUi() {
 MainWindow::~MainWindow() {
 
     saveButtonMappings();  // ✅ Save on exit, as backup
+    delete canvas;
     
-    // Cleanup single instance resources first
+    // Cleanup single instance resources
     if (localServer) {
-        // Disconnect all signals to prevent crashes during shutdown
-        localServer->disconnect();
         localServer->close();
         QLocalServer::removeServer("SpeedyNote_SingleInstance");
-        localServer->deleteLater();
-        localServer = nullptr;
     }
     
     if (sharedMemory) {
@@ -1165,8 +1162,6 @@ MainWindow::~MainWindow() {
         delete sharedMemory;
         sharedMemory = nullptr;
     }
-    
-    delete canvas;
 }
 
 void MainWindow::toggleBenchmark() {
@@ -5964,23 +5959,9 @@ bool MainWindow::sendToExistingInstance(const QString &filePath)
     
     // Send the file path to the existing instance
     QByteArray data = filePath.toUtf8();
-    qint64 bytesWritten = socket.write(data);
-    
-    if (bytesWritten == -1) {
-        socket.disconnectFromServer();
-        return false; // Failed to write data
-    }
-    
-    if (!socket.waitForBytesWritten(3000)) {
-        socket.disconnectFromServer();
-        return false; // Failed to send data within timeout
-    }
-    
-    // Ensure clean disconnect
+    socket.write(data);
+    socket.waitForBytesWritten(3000);
     socket.disconnectFromServer();
-    if (socket.state() != QLocalSocket::UnconnectedState) {
-        socket.waitForDisconnected(1000);
-    }
     
     return true;
 }
@@ -5995,14 +5976,11 @@ void MainWindow::setupSingleInstanceServer()
     // Start listening for new connections
     if (!localServer->listen("SpeedyNote_SingleInstance")) {
         qWarning() << "Failed to start single instance server:" << localServer->errorString();
-        // Clean up on failure
-        localServer->deleteLater();
-        localServer = nullptr;
         return;
     }
     
-    // Connect to handle new connections with queued connection for safety
-    connect(localServer, &QLocalServer::newConnection, this, &MainWindow::onNewConnection, Qt::QueuedConnection);
+    // Connect to handle new connections
+    connect(localServer, &QLocalServer::newConnection, this, &MainWindow::onNewConnection);
 }
 
 void MainWindow::onNewConnection()
@@ -6016,12 +5994,9 @@ void MainWindow::onNewConnection()
     // Use QPointer for safe access in lambdas
     QPointer<QLocalSocket> socketPtr(clientSocket);
     
-    // Handle data reception with proper connection management
+    // Handle data reception
     connect(clientSocket, &QLocalSocket::readyRead, this, [this, socketPtr]() {
-        if (!socketPtr || socketPtr.isNull()) return; // Socket was already deleted
-        
-        // Disconnect the readyRead signal to prevent multiple calls
-        socketPtr->disconnect(socketPtr.data(), &QLocalSocket::readyRead, this, nullptr);
+        if (!socketPtr) return; // Socket was already deleted
         
         QByteArray data = socketPtr->readAll();
         QString command = QString::fromUtf8(data);
@@ -6043,21 +6018,17 @@ void MainWindow::onNewConnection()
         }
         
         // Close the connection after processing
-        if (socketPtr && !socketPtr.isNull()) {
+        if (socketPtr) {
             socketPtr->disconnectFromServer();
         }
-    }, Qt::QueuedConnection); // Use queued connection for safety
+    });
     
     // Clean up when disconnected
-    connect(clientSocket, &QLocalSocket::disconnected, this, [socketPtr]() {
-        if (socketPtr && !socketPtr.isNull()) {
-            socketPtr->deleteLater();
-        }
-    }, Qt::QueuedConnection);
+    connect(clientSocket, &QLocalSocket::disconnected, clientSocket, &QLocalSocket::deleteLater);
     
     // Set a reasonable timeout (3 seconds) with safe pointer
     QTimer::singleShot(3000, this, [socketPtr]() {
-        if (socketPtr && !socketPtr.isNull() && socketPtr->state() != QLocalSocket::UnconnectedState) {
+        if (socketPtr && socketPtr->state() != QLocalSocket::UnconnectedState) {
             socketPtr->disconnectFromServer();
         }
     });

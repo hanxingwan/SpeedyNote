@@ -8,6 +8,13 @@ set(CMAKE_CXX_STANDARD 17)
 set(QT_PATH "C:/Qt/6.8.2/mingw_64" CACHE PATH "Path to Qt installation")
 set(SDL2_ROOT "C:/libs/SDL2" CACHE PATH "Path to SDL2")
 set(POPPLER_PATH "C:/msys64/mingw64" CACHE PATH "Path to Poppler")
+# This is where the "libpoppler-qt6-dev" equivalent in Windows is located. 
+# Go to the MSYS2 terminal to run this commands:
+# pacman -S mingw-w64-x86_64-poppler-qt6
+
+# Also, there isn't such thing called PopplerConfig.cmake. 
+#That's why I need to make a FindPoppler.cmake file
+
 # ✅ Platform-specific configuration
 if (WIN32)
     # ✅ Platform-specific configuration
@@ -17,10 +24,13 @@ if (WIN32)
             "${SDL2_ROOT}/lib/cmake"
     )
     set(CMAKE_MODULE_PATH "${QT_PATH}/lib/cmake/Poppler")
+    # In my case, this path is C:\Qt\6.8.2\mingw_64\lib\cmake\Poppler. 
+    # This path includes the FindPoppler.cmake file. 
+    # You need to manually put FindPoppler.cmake into this folder.
 
     include_directories(
-            "${POPPLER_PATH}/include/poppler"
-            "${POPPLER_PATH}/include/poppler/cpp"
+            # "${POPPLER_PATH}/include/poppler"
+            # "${POPPLER_PATH}/include/poppler/cpp" In fact, these 2 paths are poppler and poppler-cpp, which are different from poppler-qt6.
             "${POPPLER_PATH}/include/poppler/qt6"
             "${SDL2_ROOT}/include"
             ${CMAKE_CURRENT_BINARY_DIR}
