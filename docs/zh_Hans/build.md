@@ -87,3 +87,5 @@ cmake -B build -DQT_PATH={QT-PATH} -DSDL2_ROOT={SDL2-ROOT} -DPOPPLER_PATH={POPPL
 如果提示`Can't find FindPoppler.cmake`，手动补全`FindPoppler.cmake`即可，[具体于此](./FindPoppler.cmake)。
 
 随即构建即可。
+
+对于Windows，如果想制作成安装程序，可以考虑使用`InnerSetup`。
