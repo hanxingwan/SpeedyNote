@@ -30,7 +30,7 @@ git clone git@github.com:alpha-liu-01/SpeedyNote.git
 
 ##### Poppler
 
-如果您是 Windows，我们强烈建议您使用`MSYS2`配置所需的东西。至少，您需要一个`Unix-Like`环境，不想装`MSYS2`，也可以考虑`Windows Subsystem Linux`。如果您有一个与`QT6`绑定好的`Poppler`，考虑跳过此步骤。
+如果您正在使用 Windows，我们强烈建议您使用`MSYS2`配置所需的东西。至少，您需要一个`Unix-Like`环境，不想装`MSYS2`，也可以考虑`Windows Subsystem for Linux`。如果您有一个与`QT6`绑定好的`Poppler`，考虑跳过此步骤。
 
 于此，我们建议您使用`Unix-Like`环境工具链，例如`GNU Toolchain`或者`LLVM Toolchain`。对于后者，我们还没有测试过。**不要使用`MSVC`工具链以增加不必要的麻烦。或者说，对于`MSVC`，我们还没成功过。**
 
@@ -44,7 +44,7 @@ pacman -S mingw-w64-x86_64-poppler mingw-w64-x86_64-poppler-qt6
 
 ##### SDL2
 
-您可以在 [此处下载](https://github.com/libsdl-org/SDL/releases)，请选择 SDL 版本号为 2.x.x 的包，请下载包含 Mingw 字样的包，例如：`SDL2-devel-2.32.8-mingw.zip`
+您可以在 [此处下载](https://github.com/libsdl-org/SDL/releases)，请选择 SDL 版本号为 2.x.x 的包，请下载包含 Mingw 字样的包，例如：`SDL2-devel-2.32.8-mingw.zip`。SDL3被验证无法正常使用。
 
 > 如果您使用`MSVC`工具链，请下载带有 VC 字样的包。
 
@@ -72,7 +72,7 @@ qt6-tools
 sdl2-compat
 ```
 
-包的名字可能随不同包管理器而不同。
+包的名字可能随不同包管理器而不同。在`build-package.sh`中已经有记载。您可以直接运行这一脚本来编译和打包。
 
 ### 编译
 
@@ -88,4 +88,5 @@ cmake -B build -DQT_PATH={QT-PATH} -DSDL2_ROOT={SDL2-ROOT} -DPOPPLER_PATH={POPPL
 
 随即构建即可。
 
-对于Windows，如果想制作成安装程序，可以考虑使用`InnerSetup`。
+
+对于Windows，如果想制作成安装程序，可以考虑使用`InnoSetup`。
