@@ -129,43 +129,7 @@ SOFTWARE.
 
 # 构建
 
----
-
-#### Windows
-
-1. 安装依赖
-
-    - QT6
-    - DSL2
-    - Poppler
-    - Compiler(e.g. Mingw GCC/Mingw llvm clang, or MSVC(Visual Studio))
-    - CMake
-    - Ninja (Optional)
-
-2. 移动资源文件
-
-    ```PowerShell
-    Copy-Item -Path \
-   ".\resources\translations\*.qm" -Destination ".\build"
-    ```
-   如果失败了，尝试使用强制参数 `--Force` 重试.
-
-3. 编译
-
-    ```PowerShell
-    cmake -B build  \
-    -DQT_PATH="D:/Your/Qt/Path" \
-    -DSDL2_ROOT="E:/Your/SDL2" \
-    -DPOPPLER_PATH="F:/Your/Poppler"
-    cmake -G Ninja # If installed ninja. 
-    cmake --build build
-   ```
-
-4. 运行
-
-   通常情况下，编译产物可能在 `./build/NoteApp.exe`
-
-5. 要是想做成安装程序，考虑使用 `InnerSetup`
+请尝试观看[此文档](../docs/zh_Hans/build.md).
 
 #### Linux
 
