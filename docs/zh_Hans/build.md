@@ -88,5 +88,9 @@ cmake -B build -DQT_PATH={QT-PATH} -DSDL2_ROOT={SDL2-ROOT} -DPOPPLER_PATH={POPPL
 
 随即构建即可。
 
-
 对于Windows，如果想制作成安装程序，可以考虑使用`InnoSetup`。
+
+如果问题不大的话，编译后的产物是可以正常运行的。如果您的编译产物报了`找不到 xxx.dll`，可不要以为是真的缺少了什么 dll ，
+实际上，您什么也没有缺，毕竟这是您编译的，如果缺少了，应该过不了编译器一关。
+
+请参阅 [运行问题](./run.md) 尝试修复、
