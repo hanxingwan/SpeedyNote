@@ -46,7 +46,9 @@ enum class InternalControllerAction {
     ToggleOutline,       // New: Toggle PDF outline sidebar
     ToggleBookmarks,     // New: Toggle bookmarks sidebar
     AddBookmark,         // New: Add/remove current page bookmark
-    ToggleTouchGestures  // New: Toggle touch gestures
+    ToggleTouchGestures, // New: Toggle touch gestures
+    PreviousPage,        // New: Go to previous page
+    NextPage             // New: Go to next page
 };
 
 class ButtonMappingHelper {

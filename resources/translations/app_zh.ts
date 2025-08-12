@@ -4,25 +4,25 @@
 <context>
     <name>ButtonMappingHelper</name>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="99"/>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="112"/>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="242"/>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="247"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="103"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="116"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="250"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="255"/>
         <source>None</source>
         <translation type="unfinished">无</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="100"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="104"/>
         <source>Page Switching</source>
         <translation type="unfinished">翻页</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="101"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="105"/>
         <source>Zoom Control</source>
         <translation type="unfinished">缩放画布</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="102"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="106"/>
         <source>Thickness Control</source>
         <translation type="unfinished">调整笔尖粗细</translation>
     </message>
@@ -31,212 +31,222 @@
         <translation type="obsolete">颜色微调</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="104"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="108"/>
         <source>Tool Switching</source>
         <translation type="unfinished">工具切换</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="105"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="109"/>
         <source>Preset Selection</source>
         <translation type="unfinished">颜色预设切换</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="106"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="110"/>
         <source>Pan and Page Scroll</source>
         <translation type="unfinished">上下滑动画布</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="113"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="117"/>
         <source>Toggle Fullscreen</source>
         <translation type="unfinished">全屏显示</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="114"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="118"/>
         <source>Toggle Dial</source>
         <translation type="unfinished">显示/隐藏旋钮</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="115"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="119"/>
         <source>Zoom 50%</source>
         <translation type="unfinished">缩放50%</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="116"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="120"/>
         <source>Zoom Out</source>
         <translation type="unfinished">缩放100%</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="117"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="121"/>
         <source>Zoom 200%</source>
         <translation type="unfinished">缩放200%</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="118"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="122"/>
         <source>Add Preset</source>
         <translation type="unfinished">添加当前颜色到预设</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="119"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="123"/>
         <source>Delete Page</source>
         <translation type="unfinished">删除当前页</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="120"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="124"/>
         <source>Fast Forward</source>
         <translation type="unfinished">翻一页顶8页</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="121"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="125"/>
         <source>Open Control Panel</source>
         <translation type="unfinished">打开控制面板</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="122"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="126"/>
         <source>Red</source>
         <translation type="unfinished">红色</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="123"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="127"/>
         <source>Blue</source>
         <translation type="unfinished">蓝色</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="124"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="128"/>
         <source>Yellow</source>
         <translation type="unfinished">黄色</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="125"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="129"/>
         <source>Green</source>
         <translation type="unfinished">绿色</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="126"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="130"/>
         <source>Black</source>
         <translation type="unfinished">黑色</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="127"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="131"/>
         <source>White</source>
         <translation type="unfinished">白色</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="128"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="132"/>
         <source>Custom Color</source>
         <translation type="unfinished">自定义色</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="129"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="133"/>
         <source>Toggle Sidebar</source>
         <translation type="unfinished">开关侧边栏</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="130"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="134"/>
         <source>Save</source>
         <translation type="unfinished">保存当页</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="131"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="135"/>
         <source>Straight Line Tool</source>
         <translation type="unfinished">直线工具</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="132"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="136"/>
         <source>Rope Tool</source>
         <translation type="unfinished">套索工具</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="133"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="137"/>
         <source>Set Pen Tool</source>
         <translation type="unfinished">钢笔</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="134"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="138"/>
         <source>Set Marker Tool</source>
         <translation type="unfinished">记号笔</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="135"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="139"/>
         <source>Set Eraser Tool</source>
         <translation type="unfinished">橡皮</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="136"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="140"/>
         <source>Toggle PDF Text Selection</source>
         <translation type="unfinished">开启PDF文本选中</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="137"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="141"/>
         <source>Toggle PDF Outline</source>
         <translation type="unfinished">开关PDF大纲</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="138"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="142"/>
         <source>Toggle Bookmarks</source>
         <translation type="unfinished">开关书签栏</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="139"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="143"/>
         <source>Add/Remove Bookmark</source>
         <translation type="unfinished">添加/移除书签</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="140"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="144"/>
         <source>Toggle Touch Gestures</source>
         <translation type="unfinished">开关触摸手势</translation>
     </message>
     <message>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="145"/>
+        <source>Previous Page</source>
+        <translation type="unfinished">上一页</translation>
+    </message>
+    <message>
         <location filename="../../source/ButtonMappingTypes.cpp" line="146"/>
+        <source>Next Page</source>
+        <translation type="unfinished">下一页</translation>
+    </message>
+    <message>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="152"/>
         <source>Left Shoulder</source>
         <translation type="unfinished">右上</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="147"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="153"/>
         <source>Right Shoulder</source>
         <translation type="unfinished">右下</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="148"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="154"/>
         <source>Paddle 2</source>
         <translation type="unfinished">L键</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="149"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="155"/>
         <source>Paddle 4</source>
         <translation type="unfinished">ZL键</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="150"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="156"/>
         <source>Y Button</source>
         <translation type="unfinished">十字键上</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="151"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="157"/>
         <source>A Button</source>
         <translation type="unfinished">十字键下</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="152"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="158"/>
         <source>B Button</source>
         <translation type="unfinished">十字键左</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="153"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="159"/>
         <source>X Button</source>
         <translation type="unfinished">十字键右</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="154"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="160"/>
         <source>Left Stick</source>
         <translation type="unfinished">摇杆下压</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="155"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="161"/>
         <source>Start Button</source>
         <translation type="unfinished">减号键</translation>
     </message>
     <message>
-        <location filename="../../source/ButtonMappingTypes.cpp" line="156"/>
+        <location filename="../../source/ButtonMappingTypes.cpp" line="162"/>
         <source>Guide Button</source>
         <translation type="unfinished">截图键</translation>
     </message>
@@ -259,280 +269,315 @@
         <translation type="unfinished">性能</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="40"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="41"/>
         <source>Apply</source>
         <translation type="unfinished">应用</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="41"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="42"/>
         <source>OK</source>
         <translation type="unfinished">确认</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="42"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="43"/>
         <source>Cancel</source>
         <translation type="unfinished">取消</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="69"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="70"/>
         <source>Background Style:</source>
         <translation type="unfinished">网格线类型：</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="71"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="72"/>
         <source>None</source>
         <translation type="unfinished">无</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="72"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="73"/>
         <source>Grid</source>
         <translation type="unfinished">网格</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="73"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="74"/>
         <source>Lines</source>
         <translation type="unfinished">横线</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="75"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="76"/>
         <source>Background Color:</source>
         <translation type="unfinished">背景颜色：</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="79"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="80"/>
         <source>Density:</source>
         <translation type="unfinished">条格线间距：</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="97"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="98"/>
         <source>Select Background Color</source>
         <translation type="unfinished">选择背景颜色</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="208"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="209"/>
         <source>Adjust how the PDF is rendered. Higher DPI means better quality but slower performance. DO NOT CHANGE THIS OPTION WHEN MULTIPLE TABS ARE OPEN. THIS MAY LEAD TO UNDEFINED BEHAVIOR!</source>
         <translation type="unfinished">调节PDF渲染的精度。更高的DPI意味着更精细的字体和图像，但是性能可能会受到影响。警告：不要尝试在打开多个标签页的时候修改此选项，否则可能会导致异常！</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="238"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="239"/>
         <source>Show Zoom Buttons</source>
         <translation type="unfinished">显示缩放预设按钮</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="241"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="242"/>
         <source>This will show/hide the 0.5x, 1x, and 2x zoom buttons on the toolbar</source>
         <translation type="unfinished">开启此选项会显示/隐藏0.5倍 1倍和2倍缩放的预设按钮</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="307"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="308"/>
         <source>Configure custom keyboard shortcuts for application actions:</source>
         <translation type="unfinished">配置自定义快捷键映射：</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="313"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="314"/>
         <source>Key Sequence</source>
         <translation type="unfinished">组合键</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="313"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="314"/>
         <source>Action</source>
         <translation type="unfinished">动作</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="321"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="322"/>
         <source>Add Mapping</source>
         <translation type="unfinished">添加映射</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="322"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="458"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="323"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="459"/>
         <source>Remove Mapping</source>
         <translation type="unfinished">删除映射</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="347"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="348"/>
         <source>Keyboard Shortcuts</source>
         <translation type="unfinished">键盘快捷键</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="355"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="356"/>
         <source>Use Custom Accent Color</source>
         <translation type="unfinished">使用自定义主题色</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="358"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="359"/>
         <source>Accent Color:</source>
         <translation type="unfinished">主题色：</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="369"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="370"/>
         <source>When enabled, use a custom accent color instead of the system accent color for the toolbar, dial, and tab selection.</source>
         <translation type="unfinished">启用此选项后，你可以使用一个不同于系统强调色的颜色当工具栏/旋钮/标签页的主题色。</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="379"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="380"/>
         <source>Use Brighter Color Palette</source>
         <translation type="unfinished">使用更明亮的颜色预设</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="382"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="383"/>
         <source>When enabled, use brighter colors (good for dark PDF backgrounds). When disabled, use darker colors (good for light PDF backgrounds). This setting is independent of the UI theme.</source>
         <translation type="unfinished">启用这个选项后，工具栏上的颜色预设会换成更亮的颜色，从而在暗色的背景上提升对比度。关闭此选项则更适合亮色的背景。这一选项和上面的暗黑模式开关互相独立。</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="389"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="390"/>
         <source>Theme</source>
         <translation type="unfinished">主题</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="393"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="394"/>
         <source>Select Accent Color</source>
         <translation type="unfinished">选择主题色</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="414"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="415"/>
         <source>Key Already Mapped</source>
         <translation type="unfinished">这一组合键已经映射过了</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="415"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="416"/>
         <source>The key sequence &apos;%1&apos; is already mapped. Please choose a different key combination.</source>
         <translation type="unfinished">组合键“%1”已经映射过了。请选择另一个按键组合。</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="422"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="423"/>
         <source>Select Action</source>
         <translation type="unfinished">选择动作</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="423"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="424"/>
         <source>Choose the action to perform when &apos;%1&apos; is pressed:</source>
         <translation type="unfinished">选择当“%1”按下时执行的动作：</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="448"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="449"/>
         <source>No Selection</source>
         <translation type="unfinished">没有选中</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="448"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="449"/>
         <source>Please select a mapping to remove.</source>
         <translation type="unfinished">请选中一个快捷键映射再移除。</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="459"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="460"/>
         <source>Are you sure you want to remove the keyboard shortcut &apos;%1&apos;?</source>
         <translation type="unfinished">你确定你要一处键盘快捷键“%1”？</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="478"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="479"/>
         <source>Configure physical controller button mappings for your Joy-Con or other controller:</source>
         <translation type="unfinished">配置实体手柄按键来对应Joy-Con上的每一个按键：</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="482"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="483"/>
         <source>Note: This maps your physical controller buttons to the logical Joy-Con functions used by the application. After setting up the physical mapping, you can configure what actions each logical button performs in the &apos;Button Mapping&apos; tab.</source>
         <translation type="unfinished">提示：因为实体手柄的按键在每个系统上的默认映射不同，你需要在这里让程序了解你手柄上的哪个按键对应Joy-Con上的哪个按键。执行完这一步以后你再去把Joy-Con上的每一个按键映射到诸功能上。</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="489"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="490"/>
         <source>Configure Controller Mapping</source>
         <translation type="unfinished">配置手柄映射</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="495"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="496"/>
         <source>Reconnect Controller</source>
         <translation type="unfinished">重新连接手柄</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="502"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="503"/>
         <source>Current controller status:</source>
         <translation type="unfinished">当前手柄链接状态：</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="548"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="549"/>
         <source>Controller manager is not available.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="553"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="554"/>
         <source>🔄 Reconnecting...</source>
         <translation type="unfinished">🔄 重新连接中...</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="570"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="571"/>
         <source>Reconnection Successful</source>
         <translation type="unfinished">重新连接成功</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="571"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="572"/>
         <source>Controller has been successfully reconnected!</source>
         <translation type="unfinished">手柄重连成功！</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="573"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="574"/>
         <source>Reconnection Failed</source>
         <translation type="unfinished">重连失败</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="574"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="575"/>
         <source>Failed to reconnect controller. Please ensure your controller is powered on and in pairing mode, then try again.</source>
         <translation type="unfinished">重新连接手柄失败。请确保您的手柄已经开启而且处于搜寻模式，然后再试一次。</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="583"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="584"/>
         <source>✗ Controller manager not available</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="589"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="590"/>
         <source>✓ Controller connected</source>
         <translation type="unfinished">✓ 手柄已连接</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="592"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="593"/>
         <source>✗ No controller detected</source>
         <translation type="unfinished">✗ 手柄未连接</translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="628"/>
+        <source>SpeedyNote</source>
+        <translation type="unfinished">极疾记</translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="636"/>
+        <source>Version 0.7.2</source>
+        <translation type="unfinished">0.7.2 公测版</translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="644"/>
+        <source>A fast and intuitive note-taking application with PDF annotation support</source>
+        <translation type="unfinished">一款超级快超级高效超级便捷的笔记App，还附带PDF注释的功能</translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="653"/>
+        <source>Developed by GitHub @alpha-liu-01 and various contributors</source>
+        <translation type="unfinished">由GitHub 用户 @alpha-liu-01 和诸贡献者合力开发</translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="661"/>
+        <source>© 2025 SpeedyNote. All rights reserved.</source>
+        <translation type="unfinished">© 2025 SpeedyNote.</translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="670"/>
+        <source>Built with Qt %1</source>
+        <translation type="unfinished">使用 Qt %1 开发</translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="677"/>
+        <source>About</source>
+        <translation type="unfinished">关于</translation>
     </message>
     <message>
         <source>Please connect your controller and restart the application.</source>
         <translation type="obsolete">请连接你的手柄然后重启应用。</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="513"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="514"/>
         <source>Controller Mapping</source>
         <translation type="unfinished">手柄映射</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="518"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="541"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="519"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="542"/>
         <source>Error</source>
         <translation type="unfinished">错误</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="518"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="541"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="519"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="542"/>
         <source>MainWindow reference not available.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="524"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="547"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="525"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="548"/>
         <source>Controller Not Available</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="525"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="526"/>
         <source>Controller manager is not available. Please ensure a controller is connected and restart the application.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="530"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="531"/>
         <source>No Controller Detected</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="531"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="532"/>
         <source>No controller is currently connected. Please connect your controller and restart the application.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -541,17 +586,17 @@
         <translation type="obsolete">背景颜色：%1</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="190"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="191"/>
         <source>Enable Low-Resolution PDF Previews</source>
         <translation type="unfinished">随翻页随加载页面预览</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="195"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="196"/>
         <source>Disabling this may improve dial smoothness on low-end devices.</source>
         <translation type="unfinished">关闭此选项可能会提升低配置设备的翻页速度。</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="199"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="200"/>
         <source>PDF Rendering DPI:</source>
         <translation type="unfinished">PDF 渲染 DPI：</translation>
     </message>
@@ -560,12 +605,12 @@
         <translation type="obsolete">调节PDF渲染的精度。更高的DPI意味着更精细的字体和图像，但是性能可能会受到影响。</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="229"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="230"/>
         <source>Show Benchmark Controls</source>
         <translation type="unfinished">显示检测采样率功能</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="232"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="233"/>
         <source>This will show/hide the benchmark controls on the toolbar. Press the clock button to start/stop the benchmark.</source>
         <translation type="unfinished">开启此选项会在工具栏上显示测试每秒处理的采样点数。点击钟表图标来开始/停止测试。你需要不抬笔一直画，同时读取每秒采样率数。这个数据与你的数位板/数位屏和CPU性能相关，但是CPU大概率不会是瓶颈。</translation>
     </message>
@@ -578,12 +623,12 @@
         <translation type="obsolete">关闭此选项会在状态栏上隐藏红蓝黑以外的其他颜色。这可能对低分辨率设备有帮助</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="246"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="247"/>
         <source>Scroll on Top after Page Switching</source>
         <translation type="unfinished">翻页后自动滚动到页面顶端</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="249"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="250"/>
         <source>Enabling this will make the page scroll to the top after switching to a new page.</source>
         <translation type="unfinished">开启此选项会在翻页时自动让页面回滚到最顶端。</translation>
     </message>
@@ -596,22 +641,22 @@
         <translation type="obsolete">开启双指缩放和滑动移动画布。当关闭时，画布只接受笔的输入。警告！启用时可能会导致误触。</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="256"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="257"/>
         <source>Features</source>
         <translation type="unfinished">功能</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="285"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="286"/>
         <source>Hold:</source>
         <translation type="unfinished">按住该键时摇杆功能：</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="291"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="292"/>
         <source>Press:</source>
         <translation type="unfinished">单次按压该键功能：</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="299"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="300"/>
         <source>Button Mapping</source>
         <translation type="unfinished">Joy-Con 映射</translation>
     </message>
@@ -666,95 +711,105 @@ Click &apos;Map&apos; next to each function, then press the corresponding button
         <translation type="unfinished">&lt;b&gt;动作&lt;/b&gt;</translation>
     </message>
     <message>
-        <location filename="../../source/ControllerMappingDialog.cpp" line="88"/>
-        <location filename="../../source/ControllerMappingDialog.cpp" line="206"/>
-        <location filename="../../source/ControllerMappingDialog.cpp" line="229"/>
+        <location filename="../../source/ControllerMappingDialog.cpp" line="89"/>
+        <location filename="../../source/ControllerMappingDialog.cpp" line="209"/>
+        <location filename="../../source/ControllerMappingDialog.cpp" line="232"/>
         <source>Map</source>
         <translation type="unfinished">映射</translation>
     </message>
     <message>
-        <location filename="../../source/ControllerMappingDialog.cpp" line="103"/>
-        <location filename="../../source/ControllerMappingDialog.cpp" line="243"/>
+        <location filename="../../source/ControllerMappingDialog.cpp" line="104"/>
+        <location filename="../../source/ControllerMappingDialog.cpp" line="246"/>
         <source>Reset to Defaults</source>
         <translation type="unfinished">重置</translation>
     </message>
     <message>
-        <location filename="../../source/ControllerMappingDialog.cpp" line="109"/>
+        <location filename="../../source/ControllerMappingDialog.cpp" line="110"/>
         <source>Apply</source>
         <translation type="unfinished">应用</translation>
     </message>
     <message>
-        <location filename="../../source/ControllerMappingDialog.cpp" line="113"/>
+        <location filename="../../source/ControllerMappingDialog.cpp" line="114"/>
         <source>Cancel</source>
         <translation type="unfinished">取消</translation>
     </message>
     <message>
-        <location filename="../../source/ControllerMappingDialog.cpp" line="122"/>
+        <location filename="../../source/ControllerMappingDialog.cpp" line="123"/>
         <source>L Button (Left Shoulder)</source>
         <translation type="unfinished">L键</translation>
     </message>
     <message>
-        <location filename="../../source/ControllerMappingDialog.cpp" line="123"/>
+        <location filename="../../source/ControllerMappingDialog.cpp" line="124"/>
         <source>ZL Button (Left Trigger)</source>
         <translation type="unfinished">ZL键</translation>
     </message>
     <message>
-        <location filename="../../source/ControllerMappingDialog.cpp" line="124"/>
+        <location filename="../../source/ControllerMappingDialog.cpp" line="125"/>
         <source>SL Button (Side Left)</source>
         <translation type="unfinished">SL键</translation>
     </message>
     <message>
-        <location filename="../../source/ControllerMappingDialog.cpp" line="125"/>
+        <location filename="../../source/ControllerMappingDialog.cpp" line="126"/>
         <source>SR Button (Side Right)</source>
         <translation type="unfinished">SR键</translation>
     </message>
     <message>
-        <location filename="../../source/ControllerMappingDialog.cpp" line="126"/>
+        <location filename="../../source/ControllerMappingDialog.cpp" line="127"/>
         <source>Up Arrow (D-Pad Up)</source>
         <translation type="unfinished">十字键上</translation>
     </message>
     <message>
-        <location filename="../../source/ControllerMappingDialog.cpp" line="127"/>
+        <location filename="../../source/ControllerMappingDialog.cpp" line="128"/>
         <source>Down Arrow (D-Pad Down)</source>
         <translation type="unfinished">十字键下</translation>
     </message>
     <message>
-        <location filename="../../source/ControllerMappingDialog.cpp" line="128"/>
+        <location filename="../../source/ControllerMappingDialog.cpp" line="129"/>
         <source>Left Arrow (D-Pad Left)</source>
         <translation type="unfinished">十字键左</translation>
     </message>
     <message>
-        <location filename="../../source/ControllerMappingDialog.cpp" line="129"/>
+        <location filename="../../source/ControllerMappingDialog.cpp" line="130"/>
         <source>Right Arrow (D-Pad Right)</source>
         <translation type="unfinished">十字键右</translation>
     </message>
     <message>
-        <location filename="../../source/ControllerMappingDialog.cpp" line="130"/>
+        <location filename="../../source/ControllerMappingDialog.cpp" line="131"/>
         <source>Analog Stick Press</source>
         <translation type="unfinished">按压摇杆</translation>
     </message>
     <message>
-        <location filename="../../source/ControllerMappingDialog.cpp" line="131"/>
+        <location filename="../../source/ControllerMappingDialog.cpp" line="132"/>
         <source>Minus Button (-)</source>
         <translation type="unfinished">减号键</translation>
     </message>
     <message>
-        <location filename="../../source/ControllerMappingDialog.cpp" line="132"/>
+        <location filename="../../source/ControllerMappingDialog.cpp" line="133"/>
         <source>Screenshot Button</source>
         <translation type="unfinished">截图键</translation>
     </message>
     <message>
-        <location filename="../../source/ControllerMappingDialog.cpp" line="168"/>
+        <location filename="../../source/ControllerMappingDialog.cpp" line="134"/>
+        <source>Previous Page</source>
+        <translation type="unfinished">上一页</translation>
+    </message>
+    <message>
+        <location filename="../../source/ControllerMappingDialog.cpp" line="135"/>
+        <source>Next Page</source>
+        <translation type="unfinished">下一页</translation>
+    </message>
+    <message>
+        <location filename="../../source/ControllerMappingDialog.cpp" line="171"/>
         <source>Press button...</source>
         <translation type="unfinished">请按下...</translation>
     </message>
     <message>
-        <location filename="../../source/ControllerMappingDialog.cpp" line="199"/>
+        <location filename="../../source/ControllerMappingDialog.cpp" line="202"/>
         <source>Button Conflict</source>
         <translation type="unfinished">按键冲突</translation>
     </message>
     <message>
-        <location filename="../../source/ControllerMappingDialog.cpp" line="200"/>
+        <location filename="../../source/ControllerMappingDialog.cpp" line="203"/>
         <source>The button &apos;%1&apos; is already mapped to &apos;%2&apos;.
 
 Do you want to reassign it to &apos;%3&apos;?</source>
@@ -762,17 +817,17 @@ Do you want to reassign it to &apos;%3&apos;?</source>
 你要把它重新映射到“%3”上吗？</translation>
     </message>
     <message>
-        <location filename="../../source/ControllerMappingDialog.cpp" line="238"/>
+        <location filename="../../source/ControllerMappingDialog.cpp" line="241"/>
         <source>Mapping Complete</source>
         <translation type="unfinished">映射成功</translation>
     </message>
     <message>
-        <location filename="../../source/ControllerMappingDialog.cpp" line="239"/>
+        <location filename="../../source/ControllerMappingDialog.cpp" line="242"/>
         <source>Button &apos;%1&apos; has been successfully mapped!</source>
         <translation type="unfinished">按键“%1”映射成功！</translation>
     </message>
     <message>
-        <location filename="../../source/ControllerMappingDialog.cpp" line="244"/>
+        <location filename="../../source/ControllerMappingDialog.cpp" line="247"/>
         <source>Are you sure you want to reset all button mappings to their default values?
 
 This will overwrite your current configuration.</source>
@@ -780,12 +835,12 @@ This will overwrite your current configuration.</source>
 这会覆盖当前的设置。</translation>
     </message>
     <message>
-        <location filename="../../source/ControllerMappingDialog.cpp" line="257"/>
+        <location filename="../../source/ControllerMappingDialog.cpp" line="260"/>
         <source>Reset Complete</source>
         <translation type="unfinished">重置成功</translation>
     </message>
     <message>
-        <location filename="../../source/ControllerMappingDialog.cpp" line="258"/>
+        <location filename="../../source/ControllerMappingDialog.cpp" line="261"/>
         <source>All button mappings have been reset to their default values.</source>
         <translation type="unfinished">所有按键映射都已经重置到了默认值。</translation>
     </message>
@@ -861,12 +916,12 @@ This will overwrite your current configuration.</source>
         <translation type="obsolete">导入</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="2451"/>
+        <location filename="../../source/InkCanvas.cpp" line="2485"/>
         <source>Copy</source>
         <translation type="unfinished">复制</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="2462"/>
+        <location filename="../../source/InkCanvas.cpp" line="2496"/>
         <source>Cancel</source>
         <translation type="unfinished">取消</translation>
     </message>
@@ -1012,9 +1067,13 @@ This will overwrite your current configuration.</source>
         <translation type="obsolete">极疾记 Beta 0.7.0</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="49"/>
         <source>SpeedyNote Beta 0.7.1</source>
-        <translation type="unfinished">极疾记 Beta 0.7.1</translation>
+        <translation type="obsolete">极疾记 Beta 0.7.1</translation>
+    </message>
+    <message>
+        <location filename="../../source/MainWindow.cpp" line="49"/>
+        <source>SpeedyNote Beta 0.7.2</source>
+        <translation type="unfinished">极疾记 Beta 0.7.2</translation>
     </message>
     <message>
         <location filename="../../source/MainWindow.cpp" line="203"/>
@@ -1275,23 +1334,23 @@ Please try again or choose a different location.</source>
 %2</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="4075"/>
+        <location filename="../../source/MainWindow.cpp" line="4081"/>
         <source>File Not Found</source>
         <translation type="unfinished">找不到文件</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="4075"/>
+        <location filename="../../source/MainWindow.cpp" line="4081"/>
         <source>The PDF file could not be found:
 %1</source>
         <translation type="unfinished">找不到”%1“ 这一PDF文件</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="4193"/>
+        <location filename="../../source/MainWindow.cpp" line="4199"/>
         <source>Different PDF Linked</source>
         <translation type="unfinished">链接到不同的PDF</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="4194"/>
+        <location filename="../../source/MainWindow.cpp" line="4200"/>
         <source>This notebook folder is already linked to a different PDF file.
 
 Do you want to replace the link with the new PDF?</source>
@@ -1300,56 +1359,59 @@ Do you want to replace the link with the new PDF?</source>
 你是否想要使用这个新的PDF取而代之？</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="4604"/>
+        <location filename="../../source/MainWindow.cpp" line="4610"/>
         <source>Annotated Image Saved</source>
-        <translation type="unfinished"></translation>
+        <translation type="unfinished">带背景的画布已保存</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="4605"/>
+        <location filename="../../source/MainWindow.cpp" line="4611"/>
         <source>Annotated page saved successfully!
 
 File: %1
 Location: %2</source>
-        <translation type="unfinished"></translation>
+        <translation type="unfinished">带背景的画布已保存！
+
+文件： %1
+位置： %2</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5295"/>
-        <location filename="../../source/MainWindow.cpp" line="5518"/>
+        <location filename="../../source/MainWindow.cpp" line="5307"/>
+        <location filename="../../source/MainWindow.cpp" line="5530"/>
         <source>Page %1</source>
         <translation type="unfinished">第%1页</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5384"/>
+        <location filename="../../source/MainWindow.cpp" line="5396"/>
         <source>Copy</source>
         <translation type="unfinished">复制</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5393"/>
+        <location filename="../../source/MainWindow.cpp" line="5405"/>
         <source>Delete</source>
         <translation type="unfinished">删除</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5402"/>
+        <location filename="../../source/MainWindow.cpp" line="5414"/>
         <source>Cancel</source>
         <translation type="unfinished">取消</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5591"/>
+        <location filename="../../source/MainWindow.cpp" line="5603"/>
         <source>Bookmark %1</source>
         <translation type="unfinished">第%1个书签</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5614"/>
+        <location filename="../../source/MainWindow.cpp" line="5626"/>
         <source>Remove Bookmark</source>
         <translation type="unfinished">去除书签</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5616"/>
+        <location filename="../../source/MainWindow.cpp" line="5628"/>
         <source>Add Bookmark</source>
         <translation type="unfinished">添加到书签</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5794"/>
+        <location filename="../../source/MainWindow.cpp" line="5806"/>
         <source>This notebook was last accessed on page %1.
 
 Would you like to go directly to page %1, or start from page 1?</source>
@@ -1358,57 +1420,57 @@ Would you like to go directly to page %1, or start from page 1?</source>
 你是否要直接跳转到第%1页，还是说从头开始？</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5797"/>
+        <location filename="../../source/MainWindow.cpp" line="5809"/>
         <source>Last Accessed Page</source>
         <translation type="unfinished">上次访问的页面</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5801"/>
+        <location filename="../../source/MainWindow.cpp" line="5813"/>
         <source>Go to Page %1</source>
         <translation type="unfinished">翻到第%1页</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5802"/>
+        <location filename="../../source/MainWindow.cpp" line="5814"/>
         <source>Start from Page 1</source>
         <translation type="unfinished">从头开始</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5822"/>
+        <location filename="../../source/MainWindow.cpp" line="5834"/>
         <source>Invalid Package</source>
         <translation type="unfinished">笔记本封装错误</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5823"/>
+        <location filename="../../source/MainWindow.cpp" line="5835"/>
         <source>The selected file is not a valid SpeedyNote package.</source>
         <translation type="unfinished">您选中的文件不是一个有效的SpeedyNote笔记本。</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5876"/>
+        <location filename="../../source/MainWindow.cpp" line="5888"/>
         <source>File Exists</source>
         <translation type="unfinished">文件已存在</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5877"/>
+        <location filename="../../source/MainWindow.cpp" line="5889"/>
         <source>A file with this name already exists. Please choose a different name.</source>
         <translation type="unfinished">具有相同命名的文件已经存在。请换一个文件名。</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5887"/>
+        <location filename="../../source/MainWindow.cpp" line="5899"/>
         <source>Creation Failed</source>
         <translation type="unfinished">创建失败</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5888"/>
+        <location filename="../../source/MainWindow.cpp" line="5900"/>
         <source>Failed to create the SpeedyNote package. Please check file permissions.</source>
         <translation type="unfinished">无法创建SpeedyNote笔记本封装。请检查文件权限。</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5927"/>
+        <location filename="../../source/MainWindow.cpp" line="5939"/>
         <source>Package Created</source>
         <translation type="unfinished">笔记本创建成功</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5928"/>
+        <location filename="../../source/MainWindow.cpp" line="5940"/>
         <source>New SpeedyNote package &apos;%1&apos; has been created successfully!</source>
         <translation type="unfinished">新SpeedyNote笔记本“%1”已经成功创建！</translation>
     </message>

@@ -46,7 +46,7 @@ QSharedMemory *MainWindow::sharedMemory = nullptr;
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false), localServer(nullptr) {
 
-    setWindowTitle(tr("SpeedyNote Beta 0.7.1"));
+    setWindowTitle(tr("SpeedyNote Beta 0.7.2"));
 
     // Enable IME support for multi-language input
     setAttribute(Qt::WA_InputMethodEnabled, true);
@@ -4061,6 +4061,12 @@ void MainWindow::handleControllerButton(const QString &buttonName) {  // This is
         case ControllerAction::ToggleTouchGestures:
             touchGesturesButton->click();
             break;
+        case ControllerAction::PreviousPage:
+            goToPreviousPage();
+            break;
+        case ControllerAction::NextPage:
+            goToNextPage();
+            break;
         default:
             break;
     }
@@ -5046,6 +5052,12 @@ void MainWindow::handleKeyboardShortcut(const QString &keySequence) {
             break;
         case ControllerAction::ToggleTouchGestures:
             touchGesturesButton->click();
+            break;
+        case ControllerAction::PreviousPage:
+            goToPreviousPage();
+            break;
+        case ControllerAction::NextPage:
+            goToNextPage();
             break;
         default:
             break;

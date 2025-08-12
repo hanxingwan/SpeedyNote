@@ -11,7 +11,7 @@ KeyCaptureDialog::KeyCaptureDialog(QWidget *parent) : QDialog(parent) {
     instructionLabel->setWordWrap(true);
     
     capturedLabel = new QLabel(tr("(No key captured yet)"), this);
-    capturedLabel->setStyleSheet("QLabel { background-color: #f0f0f0; padding: 8px; border: 1px solid #ccc; }");
+    capturedLabel->setStyleSheet("QLabel { padding: 8px; border: 1px solid #ccc; }");
     capturedLabel->setAlignment(Qt::AlignCenter);
     
     // Buttons

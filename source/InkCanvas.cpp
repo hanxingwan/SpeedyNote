@@ -137,6 +137,24 @@ void InkCanvas::initializeBuffer() {
 }
 
 void InkCanvas::loadPdf(const QString &pdfPath) {
+    // ✅ Clear existing PDF cache before loading new PDF to prevent old pages from showing
+    pdfCache.clear();
+    currentCachedPage = -1;
+    
+    // Cancel any active PDF caching operations
+    if (pdfCacheTimer && pdfCacheTimer->isActive()) {
+        pdfCacheTimer->stop();
+    }
+    
+    // Cancel and clean up any active PDF watchers from previous PDF
+    for (QFutureWatcher<void>* watcher : activePdfWatchers) {
+        if (watcher && !watcher->isFinished()) {
+            watcher->cancel();
+        }
+        watcher->deleteLater();
+    }
+    activePdfWatchers.clear();
+    
     pdfDocument = Poppler::Document::load(pdfPath);
     if (pdfDocument && !pdfDocument->isLocked()) {
         // Enable anti-aliasing rendering hints for better text quality
@@ -158,6 +176,7 @@ void InkCanvas::loadPdf(const QString &pdfPath) {
         
         // Emit signal that PDF was loaded
         emit pdfLoaded();
+        // update();
     }
 }
 
@@ -653,6 +672,8 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
             hardwareEraserActive = true;
             previousTool = currentTool;
             currentTool = ToolType::Eraser;
+            // ✅ Switch to eraser thickness when hardware eraser is activated
+            penThickness = eraserToolThickness;
         }
     }
     
@@ -883,6 +904,19 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
         if (wasUsingHardwareEraser) {
             currentTool = previousTool;
             hardwareEraserActive = false;  // Reset hardware eraser tracking
+            
+            // ✅ Restore the thickness for the previous tool
+            switch (currentTool) {
+                case ToolType::Pen:
+                    penThickness = penToolThickness;
+                    break;
+                case ToolType::Marker:
+                    penThickness = markerToolThickness;
+                    break;
+                case ToolType::Eraser:
+                    penThickness = eraserToolThickness;
+                    break;
+            }
         }
 
         if (ropeToolMode) {

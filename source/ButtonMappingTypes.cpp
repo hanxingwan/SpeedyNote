@@ -45,6 +45,8 @@ QString ButtonMappingHelper::actionToInternalKey(InternalControllerAction action
         case InternalControllerAction::ToggleBookmarks: return "toggle_bookmarks";
         case InternalControllerAction::AddBookmark: return "add_bookmark";
         case InternalControllerAction::ToggleTouchGestures: return "toggle_touch_gestures";
+        case InternalControllerAction::PreviousPage: return "previous_page";
+        case InternalControllerAction::NextPage: return "next_page";
     }
     return "none";
 }
@@ -91,6 +93,8 @@ InternalControllerAction ButtonMappingHelper::internalKeyToAction(const QString 
     if (key == "toggle_bookmarks") return InternalControllerAction::ToggleBookmarks;
     if (key == "add_bookmark") return InternalControllerAction::AddBookmark;
     if (key == "toggle_touch_gestures") return InternalControllerAction::ToggleTouchGestures;
+    if (key == "previous_page") return InternalControllerAction::PreviousPage;
+    if (key == "next_page") return InternalControllerAction::NextPage;
     return InternalControllerAction::None;
 }
 
@@ -137,7 +141,9 @@ QStringList ButtonMappingHelper::getTranslatedActions() {
         tr("Toggle PDF Outline"),
         tr("Toggle Bookmarks"),
         tr("Add/Remove Bookmark"),
-        tr("Toggle Touch Gestures")
+        tr("Toggle Touch Gestures"),
+        tr("Previous Page"),
+        tr("Next Page")
     };
 }
 
@@ -200,7 +206,9 @@ QStringList ButtonMappingHelper::getInternalActionKeys() {
         "toggle_outline",
         "toggle_bookmarks",
         "add_bookmark",
-        "toggle_touch_gestures"
+        "toggle_touch_gestures",
+        "previous_page",
+        "next_page"
     };
 }
 

@@ -84,7 +84,9 @@ enum class ControllerAction {
     ToggleOutline,
     ToggleBookmarks,
     AddBookmark,
-    ToggleTouchGestures
+    ToggleTouchGestures,
+    PreviousPage,
+    NextPage
 };
 
 static QString actionToString(ControllerAction action) {
@@ -117,6 +119,8 @@ static QString actionToString(ControllerAction action) {
         case ControllerAction::ToggleBookmarks: return "Toggle Bookmarks";
         case ControllerAction::AddBookmark: return "Add/Remove Bookmark";
         case ControllerAction::ToggleTouchGestures: return "Toggle Touch Gestures";
+        case ControllerAction::PreviousPage: return "Previous Page";
+        case ControllerAction::NextPage: return "Next Page";
         default: return "None";
     }
 }
@@ -155,6 +159,8 @@ static ControllerAction stringToAction(const QString &str) {
         case InternalControllerAction::ToggleBookmarks: return ControllerAction::ToggleBookmarks;
         case InternalControllerAction::AddBookmark: return ControllerAction::AddBookmark;
         case InternalControllerAction::ToggleTouchGestures: return ControllerAction::ToggleTouchGestures;
+        case InternalControllerAction::PreviousPage: return ControllerAction::PreviousPage;
+        case InternalControllerAction::NextPage: return ControllerAction::NextPage;
     }
     return ControllerAction::None;
 }
