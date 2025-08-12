@@ -89,9 +89,13 @@ private:
     // Color palette widgets
     QCheckBox *useBrighterPaletteCheckbox;
     
+    // About tab widgets
+    QWidget *aboutTab;
+    
     void createThemeTab();
     void chooseAccentColor();
-    void updateControllerStatus(); // Update controller connection status display
+    void createAboutTab();            // New: create about tab
+    void updateControllerStatus();    // Update controller connection status display
 };
 
 #endif // CONTROLPANELDIALOG_H

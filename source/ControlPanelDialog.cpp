@@ -36,6 +36,7 @@ ControlPanelDialog::ControlPanelDialog(MainWindow *mainWindow, InkCanvas *target
     createControllerMappingTab();
     createKeyboardMappingTab();
     createThemeTab();
+    createAboutTab();
     // === Buttons ===
     applyButton = new QPushButton(tr("Apply"));
     okButton = new QPushButton(tr("OK"));
@@ -592,4 +593,86 @@ void ControlPanelDialog::updateControllerStatus() {
         controllerStatusLabel->setText(tr("✗ No controller detected"));
         controllerStatusLabel->setStyleSheet("color: red; font-weight: bold;");
     }
+}
+
+void ControlPanelDialog::createAboutTab() {
+    aboutTab = new QWidget(this);
+    QVBoxLayout *layout = new QVBoxLayout(aboutTab);
+    
+    // Add some spacing at the top
+    layout->addSpacing(20);
+    
+    // Application icon
+    QLabel *iconLabel = new QLabel(aboutTab);
+    QPixmap iconPixmap(":/resources/icons/mainicon.png");
+    if (iconPixmap.isNull()) {
+        // Fallback to file system path if resource doesn't work
+        iconPixmap.load("resources/icons/mainicon.png");
+    }
+    
+    if (!iconPixmap.isNull()) {
+        // Scale the icon to a reasonable size (e.g., 128x128)
+        iconPixmap = iconPixmap.scaled(128, 128, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        iconLabel->setPixmap(iconPixmap);
+    } else {
+        // Fallback text if icon can't be loaded
+        iconLabel->setText("📝");
+        iconLabel->setStyleSheet("font-size: 64px;");
+    }
+    iconLabel->setAlignment(Qt::AlignCenter);
+    layout->addWidget(iconLabel);
+    
+    layout->addSpacing(10);
+    
+    // Application name
+    QLabel *appNameLabel = new QLabel(tr("SpeedyNote"), aboutTab);
+    appNameLabel->setAlignment(Qt::AlignCenter);
+    appNameLabel->setStyleSheet("font-size: 24px; font-weight: bold; color: #2c3e50;");
+    layout->addWidget(appNameLabel);
+    
+    layout->addSpacing(5);
+    
+    // Version
+    QLabel *versionLabel = new QLabel(tr("Version 0.7.2"), aboutTab);
+    versionLabel->setAlignment(Qt::AlignCenter);
+    versionLabel->setStyleSheet("font-size: 14px; color: #7f8c8d;");
+    layout->addWidget(versionLabel);
+    
+    layout->addSpacing(15);
+    
+    // Description
+    QLabel *descriptionLabel = new QLabel(tr("A fast and intuitive note-taking application with PDF annotation support"), aboutTab);
+    descriptionLabel->setAlignment(Qt::AlignCenter);
+    descriptionLabel->setWordWrap(true);
+    descriptionLabel->setStyleSheet("font-size: 12px; color: #34495e; padding: 0 20px;");
+    layout->addWidget(descriptionLabel);
+    
+    layout->addSpacing(20);
+    
+    // Author information
+    QLabel *authorLabel = new QLabel(tr("Developed by GitHub @alpha-liu-01 and various contributors"), aboutTab);
+    authorLabel->setAlignment(Qt::AlignCenter);
+    authorLabel->setStyleSheet("font-size: 12px; color: #7f8c8d;");
+    layout->addWidget(authorLabel);
+    
+    layout->addSpacing(10);
+    
+    // Copyright
+    QLabel *copyrightLabel = new QLabel(tr("© 2025 SpeedyNote. All rights reserved."), aboutTab);
+    copyrightLabel->setAlignment(Qt::AlignCenter);
+    copyrightLabel->setStyleSheet("font-size: 10px; color: #95a5a6;");
+    layout->addWidget(copyrightLabel);
+    
+    // Add stretch to push everything to the top
+    layout->addStretch();
+    
+    // Built with Qt info
+    QLabel *qtLabel = new QLabel(tr("Built with Qt %1").arg(QT_VERSION_STR), aboutTab);
+    qtLabel->setAlignment(Qt::AlignCenter);
+    qtLabel->setStyleSheet("font-size: 9px; color: #bdc3c7;");
+    layout->addWidget(qtLabel);
+    
+    layout->addSpacing(10);
+    
+    tabWidget->addTab(aboutTab, tr("About"));
 }

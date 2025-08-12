@@ -63,7 +63,8 @@ void ControllerMappingDialog::setupUI() {
     
     // Create mapping rows for each logical button
     QStringList logicalButtons = {"LEFTSHOULDER", "RIGHTSHOULDER", "PADDLE2", "PADDLE4", 
-                                 "Y", "A", "B", "X", "LEFTSTICK", "START", "GUIDE"};
+                                 "Y", "A", "B", "X", "LEFTSTICK", "START", "GUIDE", 
+                                 "PREVIOUS_PAGE", "NEXT_PAGE"};
     
     int row = 1;
     for (const QString &logicalButton : logicalButtons) {
@@ -130,6 +131,8 @@ QMap<QString, QString> ControllerMappingDialog::getLogicalButtonDescriptions() c
     descriptions["LEFTSTICK"] = tr("Analog Stick Press");
     descriptions["START"] = tr("Minus Button (-)");
     descriptions["GUIDE"] = tr("Screenshot Button");
+    descriptions["PREVIOUS_PAGE"] = tr("Previous Page");
+    descriptions["NEXT_PAGE"] = tr("Next Page");
     return descriptions;
 }
 
