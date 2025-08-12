@@ -18,7 +18,7 @@ vintage hardware._
 - 📌 **PDF background integration** with annotation overlay
 - 🌀 **Dial UI + Joy-Con support** for intuitive one-handed control
 - 🎨 **Per-page background styles**: grid, lined, or blank (customizable)
-- 💾 **Portable `.snpkg` notebooks** for export/import & sharing
+- 💾 **Portable `.spn` notebooks** for note storage
 - 🔎 **Zoom, pan, thickness, and color preset switching** via dial
 - 🗔 **Markdown sticky notes are supported** for text-based notes
 - 💡 **Designed for low-spec devices** (133Hz Sample Rate @ Intel Atom N450)
@@ -45,33 +45,21 @@ vintage hardware._
 🛠️ Usage
 
 1. Launch `SpeedyNote` shortcut on desktop
-2. Click **Folder Icon** to select a working folder or **Import `.snpkg` Package
-3. *(Optitonal)* Click the PDF button on the tool bar to import a PDF document
-4. Start writing/drawing using your stylus
-5. Use the **MagicDial** or **Joy-Con** to change tools, zoom, scroll, or switch pages
-6. Notebooks can be exported as `.snpkg`
+2. *(Optitonal)* Click the PDF button on the tool bar to import a PDF document
+3. Start writing/drawing using your stylus
+4. Use the **MagicDial** or **Joy-Con** to change tools, zoom, scroll, or switch pages
+5. Click the `×` on the tab and save the notebook as a `spn` package
 
 ###### OR
 
 1. Right click a PDF file in File Explorer (or equivalent)
 2. Click open with and select SpeedyNote
-3. Create a folder for the directory of the current notebook
-4. Next time when you double click a PDF with a working directory already created, step 3 will be skipped.
+3. Create an `spn` notebook package in the directory of the PDF file
+4. Next time when you double click the `spr` notebook, all the notes with the PDF background will be loaded.
 5. Start writing/drawing using your stylus
 
 ---
 
-## 📦 Notebook Format
-
-- Can be saved as:
-    - 📁 A **folder** with `.png` pages + metadata
-    - 🗜️ A **`.snpkg` archive** for portability (non-compressed `.tar`)
-- Each notebook may contain:
-    - Annotated page images (`annotated_XXXX.png`)
-    - Optional background images from PDF (`XXXX.png`)
-    - Metadata: background style, density, color, and PDF path
-
----
 
 ## 🎮 Controller Support
 
