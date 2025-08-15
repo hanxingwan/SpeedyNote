@@ -292,6 +292,8 @@ void PictureWindowManager::renderPicturesToCanvas(QPainter &painter) const {
             window->renderToCanvas(painter, canvasRect);
         }
     }
+}
+
 void PictureWindowManager::renderPicturesToCanvas(QPainter &painter, const QRect &updateRect) const {
     if (!canvas) return;
     
