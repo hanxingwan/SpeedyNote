@@ -1537,6 +1537,11 @@ void MainWindow::saveCurrentPageConcurrent() {
         canvas->getMarkdownManager()->saveWindowsForPage(pageNumber);
     }
     
+    // ✅ Save picture windows for this page (this must be done on the main thread)
+    if (canvas->getPictureManager()) {
+        canvas->getPictureManager()->saveWindowsForPage(pageNumber);
+    }
+    
     // ✅ Get notebook ID from JSON metadata before concurrent operation
     QString notebookId = canvas->getNotebookId();
     if (notebookId.isEmpty()) {
