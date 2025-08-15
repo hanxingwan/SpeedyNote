@@ -2,6 +2,8 @@
 #include "ToolType.h"
 #include "MarkdownWindowManager.h"
 #include "MarkdownWindow.h" // Include the full definition
+#include "PictureWindowManager.h"
+#include "PictureWindow.h" // Include the full definition
 #include <QMouseEvent>
 #include <QScreen>
 #include <QGuiApplication>
@@ -21,6 +23,7 @@
 #include <QInputDevice>
 #include <QTabletEvent>
 #include <QTouchEvent>
+#include <QApplication>
 #include <QtMath>
 #include <QPainterPath>
 #include <QTimer>
@@ -95,10 +98,15 @@ InkCanvas::InkCanvas(QWidget *parent)
     
     // Initialize markdown manager
     markdownManager = new MarkdownWindowManager(this, this);
+    pictureManager = new PictureWindowManager(this, this);
     
     // Connect pan/zoom signals to update markdown window positions
     connect(this, &InkCanvas::panChanged, markdownManager, &MarkdownWindowManager::updateAllWindowPositions);
     connect(this, &InkCanvas::zoomChanged, markdownManager, &MarkdownWindowManager::updateAllWindowPositions);
+    
+    // Connect pan/zoom signals to update picture window positions
+    connect(this, &InkCanvas::panChanged, pictureManager, &PictureWindowManager::updateAllWindowPositions);
+    connect(this, &InkCanvas::zoomChanged, pictureManager, &PictureWindowManager::updateAllWindowPositions);
 }
 
 InkCanvas::~InkCanvas() {
@@ -110,6 +118,9 @@ InkCanvas::~InkCanvas() {
         // Also save markdown windows if they exist
         if (markdownManager) {
             markdownManager->saveWindowsForPage(lastActivePage);
+        }
+        if (pictureManager) {
+            pictureManager->saveWindowsForPage(lastActivePage);
         }
     }
     
@@ -186,7 +197,7 @@ void InkCanvas::clearPdf() {
     isPdfLoaded = false;
     totalPdfPages = 0;
     pdfCache.clear();
-    
+
     // ✅ Clear the background image immediately to remove PDF from display
     backgroundImage = QPixmap();
     
@@ -330,7 +341,7 @@ void InkCanvas::resizeEvent(QResizeEvent *event) {
     // Don't resize the buffer when the widget resizes
     // The buffer size should be determined by the PDF/document content, not the widget size
     // The paintEvent will handle centering the buffer content within the widget
-    
+
     QWidget::resizeEvent(event);
 }
 
@@ -404,6 +415,21 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
     // ✅ Draw loaded image or PDF background if available
     if (!backgroundImage.isNull()) {
         painter.drawPixmap(0, 0, backgroundImage);
+    }
+
+    // ✅ Draw pictures (above PDF, below user strokes) - only render pictures in update region
+    if (pictureManager) {
+        // Get the update region in canvas coordinates for efficient rendering
+        QRegion updateRegion = event->region();
+        if (!updateRegion.isEmpty()) {
+            // Convert update region to canvas coordinates
+            QRect updateRect = updateRegion.boundingRect();
+            QRect canvasUpdateRect = mapWidgetToCanvas(updateRect);
+            pictureManager->renderPicturesToCanvas(painter, canvasUpdateRect);
+        } else {
+            // Full repaint - render all pictures
+            pictureManager->renderPicturesToCanvas(painter);
+        }
     }
 
     // ✅ Draw user's strokes from the buffer (transparent overlay)
@@ -594,6 +620,13 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
 }
 
 void InkCanvas::tabletEvent(QTabletEvent *event) {
+    // Skip tablet event handling when a picture window is in edit mode
+    if (pictureWindowEditMode) {
+        qDebug() << "InkCanvas: Skipping tablet event due to picture window edit mode";
+        event->ignore();
+        return;
+    }
+    
     // ✅ PRIORITY: Handle PDF text selection with stylus when enabled
     // This redirects stylus input to text selection instead of drawing
     if (pdfTextSelectionEnabled && isPdfLoaded) {
@@ -1064,11 +1097,180 @@ QRectF InkCanvas::calculatePreviewRect(const QPointF &start, const QPointF &oldE
 }
 
 void InkCanvas::mousePressEvent(QMouseEvent *event) {
+    // Check if click is on a picture window - handle specific interactions
+    if (pictureManager && event->button() == Qt::LeftButton) {
+        // Convert widget coordinates to canvas coordinates
+        QPointF widgetPos = event->position();
+        QPointF canvasPos = mapWidgetToCanvas(widgetPos);
+        
+        // Check if click is on any picture window
+        PictureWindow *hitWindow = pictureManager->hitTest(canvasPos.toPoint());
+        if (hitWindow) {
+            // Handle specific picture window interactions
+            if (hitWindow->isClickOnDeleteButton(canvasPos.toPoint())) {
+                // Delete button clicked
+                // qDebug() << "Delete button clicked on picture window";
+                hitWindow->onDeleteClicked();
+                return;
+            }
+            
+            PictureWindow::ResizeHandle resizeHandle = hitWindow->getResizeHandleAtCanvasPos(canvasPos.toPoint());
+            if (resizeHandle != PictureWindow::None) {
+                // Resize handle clicked - enter edit mode and start resize
+                // qDebug() << "Resize handle clicked on picture window";
+                if (!hitWindow->isInEditMode()) {
+                    hitWindow->enterEditMode();
+                }
+                // Set up resize state in canvas
+                activePictureWindow = hitWindow;
+                pictureResizing = true;
+                pictureResizeHandle = static_cast<int>(resizeHandle);
+                // Store widget-local position for consistent coordinate system
+                pictureInteractionStartPos = event->position().toPoint();
+                pictureStartRect = hitWindow->getCanvasRect();
+                picturePreviousRect = pictureStartRect; // Initialize previous rect
+                return;
+            }
+            
+            if (hitWindow->isClickOnHeader(canvasPos.toPoint())) {
+                // Header clicked - enter edit mode and start drag
+                // qDebug() << "Header clicked on picture window";
+                if (!hitWindow->isInEditMode()) {
+                    hitWindow->enterEditMode();
+                }
+                // Set up drag state in canvas
+                activePictureWindow = hitWindow;
+                pictureDragging = true;
+                // Store widget-local position for consistent coordinate system
+                pictureInteractionStartPos = event->position().toPoint();
+                pictureStartRect = hitWindow->getCanvasRect();
+                picturePreviousRect = pictureStartRect; // Initialize previous rect
+                return;
+            }
+            
+            // Click on picture body - handle long press for edit mode or short tap for exit
+            if (!hitWindow->isInEditMode()) {
+                // Start long press timer for edit mode by forwarding to the picture window
+                QPoint localPos = canvasPos.toPoint() - hitWindow->getCanvasRect().topLeft();
+                QMouseEvent *forwardedEvent = new QMouseEvent(
+                    event->type(),
+                    localPos,
+                    event->globalPosition(),
+                    event->button(),
+                    event->buttons(),
+                    event->modifiers()
+                );
+                QApplication::postEvent(hitWindow, forwardedEvent);
+                return;
+            } else {
+                // Already in edit mode - check for short tap to exit
+                QPoint localPos = canvasPos.toPoint() - hitWindow->getCanvasRect().topLeft();
+                QMouseEvent *forwardedEvent = new QMouseEvent(
+                    event->type(),
+                    localPos,
+                    event->globalPosition(),
+                    event->button(),
+                    event->buttons(),
+                    event->modifiers()
+                );
+                QApplication::postEvent(hitWindow, forwardedEvent);
+                return;
+            }
+        } else {
+            // Click was on empty canvas, exit all edit modes
+            pictureManager->exitAllEditModes();
+        }
+    }
+    
     // Handle markdown selection when enabled
     if (markdownSelectionMode && event->button() == Qt::LeftButton) {
         markdownSelecting = true;
         markdownSelectionStart = event->pos();
         markdownSelectionEnd = markdownSelectionStart;
+        event->accept();
+        return;
+    }
+    
+    // Handle picture selection when enabled
+    if (pictureSelectionMode && event->button() == Qt::LeftButton) {
+        // qDebug() << "InkCanvas::mousePressEvent() - Picture selection mode active!";
+        //qDebug() << "  Click position:" << event->pos();
+        
+        pictureSelecting = true;
+        pictureSelectionStart = event->pos();
+        
+        // Show file dialog to select image
+        //qDebug() << "  Opening file dialog...";
+        QString imagePath = QFileDialog::getOpenFileName(this, tr("Select Image"), "", 
+            tr("Image Files (*.png *.jpg *.jpeg *.bmp *.gif *.tiff *.webp)"));
+        
+        //qDebug() << "  Selected image path:" << imagePath;
+        
+        if (!imagePath.isEmpty()) {
+            // Copy image to notebook and create picture window
+            MainWindow *mainWindow = qobject_cast<MainWindow*>(parent());
+            if (!mainWindow) {
+                // Try to find MainWindow through the widget hierarchy
+                QWidget *current = this;
+                while (current && !mainWindow) {
+                    current = current->parentWidget();
+                    mainWindow = qobject_cast<MainWindow*>(current);
+                }
+            }
+            //qDebug() << "  MainWindow found:" << (mainWindow != nullptr);
+            //qDebug() << "  PictureManager found:" << (pictureManager != nullptr);
+            
+            if (pictureManager) {
+                // Use InkCanvas's own method to get current page
+                int currentPage = getLastActivePage();
+                //qDebug() << "  Current page:" << currentPage;
+                
+                QString copiedImagePath = pictureManager->copyImageToNotebook(imagePath, currentPage);
+                //qDebug() << "  Copied image path:" << copiedImagePath;
+                
+                if (!copiedImagePath.isEmpty()) {
+                    // Create picture window at clicked position
+                    QRect initialRect(pictureSelectionStart, QSize(200, 150));
+                    //qDebug() << "  Creating picture window with rect:" << initialRect;
+                    
+                    PictureWindow* window = pictureManager->createPictureWindow(initialRect, copiedImagePath);
+                    //qDebug() << "  Picture window created:" << (window != nullptr);
+                    
+                    // Save pictures for current page
+                    pictureManager->saveWindowsForPage(currentPage);
+                    //qDebug() << "  Pictures saved for page";
+                    
+                    // Mark canvas as edited
+                    setEdited(true);
+                    //qDebug() << "  Canvas marked as edited";
+                } else {
+                    //qDebug() << "  ERROR: Failed to copy image to notebook!";
+                }
+            } else {
+                //qDebug() << "  ERROR: PictureManager is null!";
+            }
+        } else {
+            //qDebug() << "  User cancelled file dialog or no image selected";
+        }
+        
+        // Exit picture selection mode after placing a picture
+        setPictureSelectionMode(false);
+        // qDebug() << "  Picture selection mode disabled";
+        
+        // Update the main window button state
+        MainWindow *mainWindow = qobject_cast<MainWindow*>(parent());
+        if (!mainWindow) {
+            // Try to find MainWindow through the widget hierarchy
+            QWidget *current = this;
+            while (current && !mainWindow) {
+                current = current->parentWidget();
+                mainWindow = qobject_cast<MainWindow*>(current);
+            }
+        }
+        if (mainWindow) {
+            mainWindow->updatePictureButtonState();
+        }
+        
         event->accept();
         return;
     }
@@ -1095,6 +1297,12 @@ void InkCanvas::mousePressEvent(QMouseEvent *event) {
 }
 
 void InkCanvas::mouseMoveEvent(QMouseEvent *event) {
+    // Handle picture window drag/resize
+    if (pictureDragging || pictureResizing) {
+        handlePictureMouseMove(event);
+        return;
+    }
+    
     // Handle markdown selection when enabled
     if (markdownSelectionMode && markdownSelecting) {
         markdownSelectionEnd = event->pos();
@@ -1130,6 +1338,12 @@ void InkCanvas::mouseMoveEvent(QMouseEvent *event) {
 }
 
 void InkCanvas::mouseReleaseEvent(QMouseEvent *event) {
+    // Handle picture window drag/resize
+    if ((pictureDragging || pictureResizing) && event->button() == Qt::LeftButton) {
+        handlePictureMouseRelease(event);
+        return;
+    }
+    
     // Handle markdown selection when enabled
     if (markdownSelectionMode && markdownSelecting && event->button() == Qt::LeftButton) {
         markdownSelecting = false;
@@ -1368,9 +1582,9 @@ void InkCanvas::setSaveFolder(const QString &folderPath) {
         tempWorkingDir = SpnPackageManager::extractSpnToTemp(folderPath);
         if (tempWorkingDir.isEmpty()) {
             qWarning() << "Failed to extract .spn package:" << folderPath;
-            return;
-        }
-        
+        return;
+    }
+
         saveFolder = tempWorkingDir;
         actualPackagePath = folderPath; // Store the .spn package path for display
         isSpnPackage = true;
@@ -1411,6 +1625,10 @@ void InkCanvas::saveToFile(int pageNumber) {
     // Save markdown windows for this page
     if (markdownManager) {
         markdownManager->saveWindowsForPage(pageNumber);
+    }
+    // Save picture windows for this page
+    if (pictureManager) {
+        pictureManager->saveWindowsForPage(pageNumber);
     }
     
     // ✅ Sync changes to .spn package if needed
@@ -1503,6 +1721,9 @@ void InkCanvas::loadPage(int pageNumber) {
     // This ensures the correct repaint area and stops the transparency timer.
     if (markdownManager) {
         markdownManager->hideAllWindows();
+    }
+    if (pictureManager) {
+        pictureManager->hideAllWindows();
     }
 
     // Update current note page tracker
@@ -1631,6 +1852,9 @@ void InkCanvas::loadPage(int pageNumber) {
         if (markdownManager) {
             markdownManager->loadWindowsForPage(pageNumber);
         }
+        if (pictureManager) {
+            pictureManager->loadWindowsForPage(pageNumber);
+        }
     });
 }
 
@@ -1658,6 +1882,11 @@ void InkCanvas::deletePage(int pageNumber) {
     if (markdownManager) {
         markdownManager->deleteWindowsForPage(pageNumber);
     }
+    
+    // Delete picture windows for this page
+    if (pictureManager) {
+        pictureManager->deleteWindowsForPage(pageNumber);
+    }
 
     if (pdfDocument){
         loadPdfPage(pageNumber);
@@ -1666,6 +1895,35 @@ void InkCanvas::deletePage(int pageNumber) {
         loadPage(pageNumber);
     }
 
+}
+
+void InkCanvas::clearCurrentPage() {
+    // Clear the drawing buffer
+    if (buffer.isNull()) {
+        initializeBuffer();
+    } else {
+        buffer.fill(Qt::transparent);
+    }
+    
+    // Clear all markdown windows from current page
+    if (markdownManager) {
+        markdownManager->clearAllWindows();
+    }
+    
+    // Clear all picture windows from current page
+    if (pictureManager) {
+        pictureManager->clearCurrentPageWindows();
+    }
+    
+    // Mark as edited and update display
+    edited = true;
+    invalidateCurrentPageCache();
+    update();
+    
+    // Auto-save the cleared page
+    if (!saveFolder.isEmpty()) {
+        saveToFile(lastActivePage);
+    }
 }
 
 void InkCanvas::setBackground(const QString &filePath, int pageNumber) {
@@ -1855,6 +2113,14 @@ void InkCanvas::saveNotebookId() {
 
 bool InkCanvas::event(QEvent *event) {
     if (!touchGesturesEnabled) {
+        return QWidget::event(event);
+    }
+    
+    // Skip touch handling when a picture window is in edit mode
+    if (pictureWindowEditMode && (event->type() == QEvent::TouchBegin || 
+                                 event->type() == QEvent::TouchUpdate || 
+                                 event->type() == QEvent::TouchEnd)) {
+        // qDebug() << "InkCanvas: Skipping touch event due to picture window edit mode";
         return QWidget::event(event);
     }
 
@@ -2237,13 +2503,13 @@ void InkCanvas::loadPdfTextBoxes(int pageNumber) {
     if (!pdfDocument || pageNumber < 0 || pageNumber >= pdfDocument->numPages()) {
         return;
     }
-    
+
     // Get the page for text operations
     currentPdfPageForText = std::unique_ptr<Poppler::Page>(pdfDocument->page(pageNumber));
     if (!currentPdfPageForText) {
         return;
     }
-    
+
     // Load text boxes for the page
     auto textBoxVector = currentPdfPageForText->textList();
     currentPdfTextBoxes.clear();
@@ -2354,7 +2620,7 @@ void InkCanvas::updatePdfTextSelection(const QPointF &start, const QPointF &end)
     if (!isPdfLoaded || currentPdfTextBoxes.isEmpty()) {
         return;
     }
-    
+
     // Clear previous selection efficiently
     selectedTextBoxes.clear();
     
@@ -2436,7 +2702,7 @@ void InkCanvas::handlePdfLinkClick(const QPointF &position) {
     if (!isPdfLoaded || !currentPdfPageForText) {
         return;
     }
-    
+
     // Convert widget coordinates to PDF coordinates
     QPointF pdfPoint = mapWidgetToPdfCoordinates(position);
     
@@ -2507,7 +2773,7 @@ void InkCanvas::processPendingTextSelection() {
     if (!hasPendingSelection) {
         return;
     }
-    
+
     // Process the pending selection update
     updatePdfTextSelection(pendingSelectionStart, pendingSelectionEnd);
     hasPendingSelection = false;
@@ -2523,7 +2789,7 @@ void InkCanvas::renderPdfPageToCache(int pageNumber) {
     if (!pdfDocument || !isValidPageNumber(pageNumber)) {
         return;
     }
-    
+
     // Check if already cached
     if (pdfCache.contains(pageNumber)) {
         return;
@@ -2565,7 +2831,7 @@ void InkCanvas::checkAndCacheAdjacentPages(int targetPage) {
     if (!needPrevPage && !needCurrentPage && !needNextPage) {
         return;
     }
-    
+
     // Stop any existing timer
     if (pdfCacheTimer && pdfCacheTimer->isActive()) {
         pdfCacheTimer->stop();
@@ -2587,8 +2853,8 @@ void InkCanvas::checkAndCacheAdjacentPages(int targetPage) {
 
 void InkCanvas::cacheAdjacentPages() {
     if (!pdfDocument || currentCachedPage < 0) {
-        return;
-    }
+            return;
+        }
     
     // Check if the user has moved to a different page since the timer was started
     // If so, skip caching adjacent pages as they're no longer relevant
@@ -2790,6 +3056,39 @@ void InkCanvas::setMarkdownSelectionMode(bool enabled) {
 
 bool InkCanvas::isMarkdownSelectionMode() const {
     return markdownSelectionMode;
+}
+
+void InkCanvas::setPictureSelectionMode(bool enabled) {
+    // qDebug() << "InkCanvas::setPictureSelectionMode() called with enabled:" << enabled;
+    
+    pictureSelectionMode = enabled;
+    
+    if (pictureManager) {
+        // qDebug() << "  Setting picture manager selection mode to:" << enabled;
+        pictureManager->setSelectionMode(enabled);
+    } else {
+        // qDebug() << "  WARNING: Picture manager is null!";
+    }
+    
+    if (!enabled) {
+        pictureSelecting = false;
+    }
+    
+    // Update cursor
+    setCursor(enabled ? Qt::CrossCursor : Qt::ArrowCursor);
+    // qDebug() << "  Cursor updated to:" << (enabled ? "CrossCursor" : "ArrowCursor");
+}
+
+bool InkCanvas::isPictureSelectionMode() const {
+    return pictureSelectionMode;
+}
+
+void InkCanvas::setPictureWindowEditMode(bool enabled) {
+    pictureWindowEditMode = enabled;
+    //qDebug() << "InkCanvas::setPictureWindowEditMode() called with enabled:" << enabled;
+    
+    // When a picture window enters edit mode, disable pan for touch/stylus interactions
+    // This allows the picture window to handle touch events without interference
 }
 
 // Canvas coordinate conversion methods
@@ -3141,6 +3440,136 @@ QString InkCanvas::getDisplayPath() const {
 void InkCanvas::syncSpnPackage() {
     if (isSpnPackage && !actualPackagePath.isEmpty() && !tempWorkingDir.isEmpty()) {
         SpnPackageManager::updateSpnFromTemp(actualPackagePath, tempWorkingDir);
+    }
+}
+
+void InkCanvas::handlePictureMouseMove(QMouseEvent *event) {
+    if (!activePictureWindow) return;
+    
+    // Convert current mouse position to canvas coordinates
+    QPointF currentWidgetPos = event->position();
+    QPointF currentCanvasPos = mapWidgetToCanvas(currentWidgetPos);
+    
+    // Convert start position to canvas coordinates for proper delta calculation
+    QPointF startCanvasPos = mapWidgetToCanvas(QPointF(pictureInteractionStartPos));
+    
+    // Calculate delta in canvas coordinates (handles DPI scaling correctly)
+    QPointF deltaCanvas = currentCanvasPos - startCanvasPos;
+    QPoint delta = deltaCanvas.toPoint();
+    
+    QRect newRect = pictureStartRect;
+    
+    if (pictureResizing) {
+        // Handle resize based on the stored handle (similar to MarkdownWindow)
+        switch (static_cast<PictureWindow::ResizeHandle>(pictureResizeHandle)) {
+            case PictureWindow::TopLeft:
+                newRect.setTopLeft(newRect.topLeft() + delta);
+                break;
+            case PictureWindow::TopRight:
+                newRect.setTopRight(newRect.topRight() + delta);
+                break;
+            case PictureWindow::BottomLeft:
+                newRect.setBottomLeft(newRect.bottomLeft() + delta);
+                break;
+            case PictureWindow::BottomRight:
+                newRect.setBottomRight(newRect.bottomRight() + delta);
+                break;
+            case PictureWindow::Top:
+                newRect.setTop(newRect.top() + delta.y());
+                break;
+            case PictureWindow::Bottom:
+                newRect.setBottom(newRect.bottom() + delta.y());
+                break;
+            case PictureWindow::Left:
+                newRect.setLeft(newRect.left() + delta.x());
+                break;
+            case PictureWindow::Right:
+                newRect.setRight(newRect.right() + delta.x());
+                break;
+            default:
+                break;
+        }
+        
+        // Maintain aspect ratio if enabled
+        if (activePictureWindow->getMaintainAspectRatio()) {
+            double aspectRatio = activePictureWindow->getAspectRatio();
+            if (aspectRatio > 0) {
+                QSize newSize = newRect.size();
+                int headerHeight = 32; // Account for updated header height
+                int availableHeight = newSize.height() - headerHeight;
+                
+                // Calculate new dimensions based on aspect ratio
+                int newWidth = static_cast<int>(availableHeight * aspectRatio);
+                int newHeight = static_cast<int>(newWidth / aspectRatio) + headerHeight;
+                
+                // Apply the constrained size
+                newRect.setSize(QSize(newWidth, newHeight));
+            }
+        }
+        
+        // Enforce minimum size
+        newRect.setSize(newRect.size().expandedTo(QSize(100, 80)));
+        
+    } else if (pictureDragging) {
+        // Handle drag
+        newRect.translate(delta);
+    }
+    
+    // Keep within canvas bounds
+    QRect canvasBounds = getCanvasRect();
+    
+    // Apply canvas bounds constraints
+    int maxX = canvasBounds.width() - newRect.width();
+    int maxY = canvasBounds.height() - newRect.height();
+    
+    newRect.setX(qMax(0, qMin(newRect.x(), maxX)));
+    newRect.setY(qMax(0, qMin(newRect.y(), maxY)));
+    
+    // Also ensure the window doesn't get resized beyond canvas bounds
+    if (newRect.right() > canvasBounds.width()) {
+        newRect.setWidth(canvasBounds.width() - newRect.x());
+    }
+    if (newRect.bottom() > canvasBounds.height()) {
+        newRect.setHeight(canvasBounds.height() - newRect.y());
+    }
+    
+    // Update the picture window's canvas rect
+    activePictureWindow->setCanvasRect(newRect);
+    
+    // Only update the affected picture area instead of full canvas
+    // Use previous rect (from last frame) to clear ghost images properly
+    QRect widgetRect = mapCanvasToWidget(newRect);
+    QRect previousWidgetRect = mapCanvasToWidget(picturePreviousRect);
+    QRect combinedRect = widgetRect.united(previousWidgetRect);
+    update(combinedRect.adjusted(-10, -10, 10, 10)); // Padding for smooth edges
+    
+    // Update previous rect for next frame
+    picturePreviousRect = newRect;
+    
+    // Emit signals for saving
+    if (pictureResizing) {
+        emit activePictureWindow->windowResized(activePictureWindow);
+    } else if (pictureDragging) {
+        emit activePictureWindow->windowMoved(activePictureWindow);
+    }
+}
+
+void InkCanvas::handlePictureMouseRelease(QMouseEvent *event) {
+    if (!activePictureWindow) return;
+    
+    // Reset interaction state
+    activePictureWindow = nullptr;
+    pictureDragging = false;
+    pictureResizing = false;
+    pictureResizeHandle = 0; // Reset to None (0)
+    
+    // Mark canvas as edited since picture was moved/resized
+    setEdited(true);
+    
+    // Save current state
+    if (pictureManager) {
+        int currentPage = getLastActivePage();
+        pictureManager->saveWindowsForPage(currentPage);
     }
 }
 

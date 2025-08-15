@@ -127,6 +127,8 @@ add_executable(${PROJECT_NAME}
         source/ControllerMappingDialog.cpp
         source/MarkdownWindow.cpp
         source/MarkdownWindowManager.cpp
+	  source/PictureWindow.cpp
+    	  source/PictureWindowManager.cpp
         source/PdfOpenDialog.cpp
 	  source/PdfRelinkDialog.cpp
     	  source/SpnPackageManager.cpp

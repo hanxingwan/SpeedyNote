@@ -46,7 +46,7 @@ QSharedMemory *MainWindow::sharedMemory = nullptr;
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false), localServer(nullptr) {
 
-    setWindowTitle(tr("SpeedyNote Beta 0.7.2"));
+    setWindowTitle(tr("SpeedyNote Beta 0.8.0"));
 
     // Enable IME support for multi-language input
     setAttribute(Qt::WA_InputMethodEnabled, true);
@@ -487,12 +487,38 @@ void MainWindow::setupUi() {
         updateMarkdownButtonState();
     });
     
+    // Insert Picture Button
+    insertPictureButton = new QPushButton(this);
+    insertPictureButton->setFixedSize(26, 30);
+    QIcon pictureIcon(loadThemedIcon("background")); // Using import icon as placeholder for now
+    insertPictureButton->setIcon(pictureIcon);
+    insertPictureButton->setStyleSheet(buttonStyle);
+    insertPictureButton->setToolTip(tr("Insert Picture"));
+    connect(insertPictureButton, &QPushButton::clicked, this, [this]() {
+        // qDebug() << "MainWindow: Insert Picture button clicked!";
+        
+        if (!currentCanvas()) {
+            // qDebug() << "  ERROR: No current canvas!";
+            return;
+        }
+        
+        // Toggle picture selection mode
+        bool currentMode = currentCanvas()->isPictureSelectionMode();
+        bool newMode = !currentMode;
+        // qDebug() << "  Current picture selection mode:" << currentMode;
+        // qDebug() << "  New picture selection mode:" << newMode;
+        
+        currentCanvas()->setPictureSelectionMode(newMode);
+        updatePictureButtonState();
+        // qDebug() << "  Picture button state updated";
+    });
+    
     deletePageButton = new QPushButton(this);
     deletePageButton->setFixedSize(26, 30);
     QIcon trashIcon(loadThemedIcon("trash"));  // Path to your icon in resources
     deletePageButton->setIcon(trashIcon);
     deletePageButton->setStyleSheet(buttonStyle);
-    deletePageButton->setToolTip(tr("Delete Current Page"));
+    deletePageButton->setToolTip(tr("Clear All Content"));
     connect(deletePageButton, &QPushButton::clicked, this, &MainWindow::deleteCurrentPage);
 
     zoomButton = new QPushButton(this);
@@ -1000,7 +1026,7 @@ void MainWindow::setupUi() {
     controlLayout->addWidget(loadPdfButton);
     controlLayout->addWidget(clearPdfButton);
     controlLayout->addWidget(pdfTextSelectButton);
-    controlLayout->addWidget(backgroundButton);
+    // controlLayout->addWidget(backgroundButton);
     controlLayout->addWidget(saveButton);
     controlLayout->addWidget(saveAnnotatedButton);
     controlLayout->addWidget(openControlPanelButton);
@@ -1015,6 +1041,7 @@ void MainWindow::setupUi() {
     controlLayout->addWidget(straightLineToggleButton);
     controlLayout->addWidget(ropeToolButton); // Add rope tool button to layout
     controlLayout->addWidget(markdownButton); // Add markdown button to layout
+    controlLayout->addWidget(insertPictureButton); // Add picture button to layout
     // controlLayout->addWidget(colorPreview);
     // controlLayout->addWidget(thicknessButton);
     // controlLayout->addWidget(jumpToPageButton);
@@ -1485,7 +1512,8 @@ void MainWindow::switchPageWithDirection(int pageNumber, int direction) {
 }
 
 void MainWindow::deleteCurrentPage() {
-    currentCanvas()->deletePage(getCurrentPageForCanvas(currentCanvas()));
+    // Clear all content from current page (drawing + pictures + markdown) instead of deleting the page file
+    currentCanvas()->clearCurrentPage();
 }
 
 void MainWindow::saveCurrentPage() {
@@ -1507,6 +1535,11 @@ void MainWindow::saveCurrentPageConcurrent() {
     // Save markdown windows for this page (this must be done on the main thread)
     if (canvas->getMarkdownManager()) {
         canvas->getMarkdownManager()->saveWindowsForPage(pageNumber);
+    }
+    
+    // ✅ Save picture windows for this page (this must be done on the main thread)
+    if (canvas->getPictureManager()) {
+        canvas->getPictureManager()->saveWindowsForPage(pageNumber);
     }
     
     // ✅ Get notebook ID from JSON metadata before concurrent operation
@@ -1786,6 +1819,7 @@ void MainWindow::switchTab(int index) {
             updateStraightLineButtonState();  // Update straight line button state when switching tabs
             updateRopeToolButtonState(); // Update rope tool button state when switching tabs
             updateMarkdownButtonState(); // Update markdown button state when switching tabs
+            updatePictureButtonState(); // Update picture button state when switching tabs
             updatePdfTextSelectButtonState(); // Update PDF text selection button state when switching tabs
             updateBookmarkButtonState(); // Update bookmark button state when switching tabs
             updateDialButtonState();     // Update dial button state when switching tabs
@@ -2026,6 +2060,7 @@ void MainWindow::addNewTab() {
     updatePdfTextSelectButtonState(); // Initialize PDF text selection button state for the new tab
     updateBookmarkButtonState(); // Initialize bookmark button state for the new tab
     updateMarkdownButtonState(); // Initialize markdown button state for the new tab
+    updatePictureButtonState(); // Initialize picture button state for the new tab
     updateDialButtonState();     // Initialize dial button state for the new tab
     updateFastForwardButtonState(); // Initialize fast forward button state for the new tab
     updateToolButtonStates();   // Initialize tool button states for the new tab
@@ -3520,7 +3555,7 @@ void MainWindow::updateTheme() {
     if (saveButton) saveButton->setIcon(loadThemedIcon("save"));
     if (saveAnnotatedButton) saveAnnotatedButton->setIcon(loadThemedIcon("saveannotated"));
     if (fullscreenButton) fullscreenButton->setIcon(loadThemedIcon("fullscreen"));
-    if (backgroundButton) backgroundButton->setIcon(loadThemedIcon("background"));
+    // if (backgroundButton) backgroundButton->setIcon(loadThemedIcon("background"));
     if (straightLineToggleButton) straightLineToggleButton->setIcon(loadThemedIcon("straightLine"));
     if (ropeToolButton) ropeToolButton->setIcon(loadThemedIcon("rope"));
     if (markdownButton) markdownButton->setIcon(loadThemedIcon("markdown"));
@@ -3571,10 +3606,11 @@ void MainWindow::updateTheme() {
     if (penToolButton) penToolButton->setStyleSheet(newButtonStyle);
     if (markerToolButton) markerToolButton->setStyleSheet(newButtonStyle);
     if (eraserToolButton) eraserToolButton->setStyleSheet(newButtonStyle);
-    if (backgroundButton) backgroundButton->setStyleSheet(newButtonStyle);
+    // if (backgroundButton) backgroundButton->setStyleSheet(newButtonStyle);
     if (straightLineToggleButton) straightLineToggleButton->setStyleSheet(newButtonStyle);
     if (ropeToolButton) ropeToolButton->setStyleSheet(newButtonStyle);
     if (markdownButton) markdownButton->setStyleSheet(newButtonStyle);
+    if (insertPictureButton) insertPictureButton->setStyleSheet(newButtonStyle);
     if (deletePageButton) deletePageButton->setStyleSheet(newButtonStyle);
     if (zoomButton) zoomButton->setStyleSheet(newButtonStyle);
     if (dialToggleButton) dialToggleButton->setStyleSheet(newButtonStyle);
@@ -4601,6 +4637,23 @@ void MainWindow::updateMarkdownButtonState() {
     }
 }
 
+void MainWindow::updatePictureButtonState() {
+    // Check if there's a current canvas
+    if (!currentCanvas()) return;
+
+    // Update the button state to match the canvas picture selection mode
+    bool isEnabled = currentCanvas()->isPictureSelectionMode();
+
+    // Set visual indicator that the button is active/inactive
+    if (insertPictureButton) {
+        insertPictureButton->setProperty("selected", isEnabled);
+
+        // Force style update
+        insertPictureButton->style()->unpolish(insertPictureButton);
+        insertPictureButton->style()->polish(insertPictureButton);
+    }
+}
+
 void MainWindow::onAnnotatedImageSaved(const QString &filePath) {
     // ✅ Show success message to user
     QFileInfo fileInfo(filePath);
@@ -4783,7 +4836,7 @@ void MainWindow::createSingleRowLayout() {
     newLayout->addWidget(loadPdfButton);
     newLayout->addWidget(clearPdfButton);
     newLayout->addWidget(pdfTextSelectButton);
-    newLayout->addWidget(backgroundButton);
+    // newLayout->addWidget(backgroundButton);
     newLayout->addWidget(saveButton);
     newLayout->addWidget(saveAnnotatedButton);
     newLayout->addWidget(openControlPanelButton);
@@ -4801,6 +4854,7 @@ void MainWindow::createSingleRowLayout() {
     newLayout->addWidget(straightLineToggleButton);
     newLayout->addWidget(ropeToolButton);
     newLayout->addWidget(markdownButton);
+    newLayout->addWidget(insertPictureButton);
     newLayout->addWidget(dialToggleButton);
     newLayout->addWidget(fastForwardButton);
     newLayout->addWidget(btnPageSwitch);
@@ -4875,7 +4929,7 @@ void MainWindow::createTwoRowLayout() {
     newFirstRowLayout->addWidget(loadPdfButton);
     newFirstRowLayout->addWidget(clearPdfButton);
     newFirstRowLayout->addWidget(pdfTextSelectButton);
-    newFirstRowLayout->addWidget(backgroundButton);
+    // newFirstRowLayout->addWidget(backgroundButton);
     newFirstRowLayout->addWidget(saveButton);
     newFirstRowLayout->addWidget(saveAnnotatedButton);
     newFirstRowLayout->addWidget(openControlPanelButton);
@@ -4905,6 +4959,7 @@ void MainWindow::createTwoRowLayout() {
     newSecondRowLayout->addWidget(straightLineToggleButton);
     newSecondRowLayout->addWidget(ropeToolButton);
     newSecondRowLayout->addWidget(markdownButton);
+    newSecondRowLayout->addWidget(insertPictureButton);
     newSecondRowLayout->addWidget(dialToggleButton);
     newSecondRowLayout->addWidget(fastForwardButton);
     newSecondRowLayout->addWidget(btnPageSwitch);
