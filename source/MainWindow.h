@@ -31,6 +31,7 @@
 #include <QCloseEvent>
 #include "ControlPanelDialog.h"
 #include "MarkdownWindowManager.h"
+#include "PictureWindowManager.h"
 #include "SpnPackageManager.h"
 #include <QLocalServer>
 #include <QLocalSocket>
@@ -362,7 +363,11 @@ private slots:
     void selectColorButton(QPushButton* selectedButton);
     void updateStraightLineButtonState();
     void updateRopeToolButtonState(); // New slot for rope tool button
-    void updateMarkdownButtonState(); // New slot for markdown button
+    void updateMarkdownButtonState();
+public slots:
+    void updatePictureButtonState(); // Public slot for picture button state
+
+private:
     void onAnnotatedImageSaved(const QString &filePath); // ✅ Handle annotated image saved notification
 
     void setPenTool();               // Set pen tool
@@ -437,6 +442,7 @@ private:
     QPushButton *straightLineToggleButton; // Button to toggle straight line mode
     QPushButton *ropeToolButton; // Button to toggle rope tool mode
     QPushButton *markdownButton; // Button to toggle markdown mode
+    QPushButton *insertPictureButton; // Button to insert pictures
 
     QSlider *zoomSlider;
     QPushButton *zoomButton;

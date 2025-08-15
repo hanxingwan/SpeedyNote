@@ -18,12 +18,14 @@
 #include <QClipboard>
 #include <QFutureWatcher>
 #include "MarkdownWindowManager.h"
+#include "PictureWindowManager.h"
 #include "ToolType.h"
 #include "ButtonMappingTypes.h"
 #include "SpnPackageManager.h"
 #include "PdfRelinkDialog.h"
 
 class MarkdownWindowManager;
+class PictureWindowManager;
 
 enum class BackgroundStyle {
     None,
@@ -61,6 +63,7 @@ public:
     void saveCurrentPage();  // ✅ New function (see below)
     void loadPage(int pageNumber);
     void deletePage(int pageNumber);
+    void clearCurrentPage(); // Clear all content (drawing + pictures) from current page
     void setBackground(const QString &filePath, int pageNumber);
     void saveAnnotated(int pageNumber);
 
@@ -162,8 +165,14 @@ public:
     
     // Markdown integration
     MarkdownWindowManager* getMarkdownManager() const { return markdownManager; }
+    PictureWindowManager* getPictureManager() const { return pictureManager; }
     void setMarkdownSelectionMode(bool enabled);
     bool isMarkdownSelectionMode() const;
+    
+    // Picture integration
+    void setPictureSelectionMode(bool enabled);
+    bool isPictureSelectionMode() const;
+    void setPictureWindowEditMode(bool enabled);
 
     // PDF text selection and link functionality
     void setPdfTextSelectionEnabled(bool enabled) { 
@@ -358,10 +367,30 @@ private:
     
     // Markdown integration
     MarkdownWindowManager* markdownManager = nullptr;
+    PictureWindowManager* pictureManager = nullptr;
     bool markdownSelectionMode = false;
     QPoint markdownSelectionStart;
     QPoint markdownSelectionEnd;
     bool markdownSelecting = false;
+    
+    // Picture selection state
+    bool pictureSelectionMode = false;
+    QPoint pictureSelectionStart;
+    bool pictureSelecting = false;
+    bool pictureWindowEditMode = false;
+    
+    // Picture window interaction state
+    PictureWindow* activePictureWindow = nullptr;
+    bool pictureDragging = false;
+    bool pictureResizing = false;
+    QPoint pictureInteractionStartPos;
+    QRect pictureStartRect;
+    QRect picturePreviousRect; // Track previous position to clear ghost images
+    int pictureResizeHandle = 0; // Store as int to avoid incomplete type issues
+    
+    // Picture interaction helper methods
+    void handlePictureMouseMove(QMouseEvent *event);
+    void handlePictureMouseRelease(QMouseEvent *event);
     
     // Helper methods for PDF text selection
     void loadPdfTextBoxes(int pageNumber); // Load text boxes for a page
