@@ -13,6 +13,7 @@
 #include <QUuid>
 #include <QStandardPaths>
 #include <QCryptographicHash>
+#include <QSet>
 #ifdef Q_OS_WIN
 #include <windows.h>
 #endif
@@ -29,6 +30,8 @@ PictureWindowManager::PictureWindowManager(InkCanvas *canvas, QObject *parent)
 
 PictureWindowManager::~PictureWindowManager() {
     clearAllWindows();
+    // ✅ Clean up any remaining unused images on destruction
+    cleanupUnusedImages();
 }
 
 PictureWindow* PictureWindowManager::createPictureWindow(const QRect &rect, const QString &imagePath) {
@@ -90,6 +93,17 @@ PictureWindow* PictureWindowManager::createPictureWindow(const QRect &rect, cons
 void PictureWindowManager::removePictureWindow(PictureWindow *window) {
     if (!window) return;
     
+    // ✅ Delete the associated image file before removing the window
+    QString imagePath = window->getImagePath();
+    if (!imagePath.isEmpty() && QFile::exists(imagePath)) {
+        // Only delete if the image is inside the notebook folder (don't delete user's original files)
+        QString saveFolder = getSaveFolder();
+        if (!saveFolder.isEmpty() && imagePath.startsWith(saveFolder)) {
+            QFile::remove(imagePath);
+            // qDebug() << "Deleted image file:" << imagePath;
+        }
+    }
+    
     // Remove from current windows
     currentWindows.removeAll(window);
     
@@ -107,6 +121,18 @@ void PictureWindowManager::removePictureWindow(PictureWindow *window) {
 void PictureWindowManager::clearAllWindows() {
     // Clear current windows
     for (PictureWindow *window : currentWindows) {
+        if (window) {
+            // ✅ Delete the associated image file before removing the window
+            QString imagePath = window->getImagePath();
+            if (!imagePath.isEmpty() && QFile::exists(imagePath)) {
+                // Only delete if the image is inside the notebook folder (don't delete user's original files)
+                QString saveFolder = getSaveFolder();
+                if (!saveFolder.isEmpty() && imagePath.startsWith(saveFolder)) {
+                    QFile::remove(imagePath);
+                    // qDebug() << "Cleared all image file:" << imagePath;
+                }
+            }
+        }
         window->deleteLater();
     }
     currentWindows.clear();
@@ -114,6 +140,18 @@ void PictureWindowManager::clearAllWindows() {
     // Clear page windows
     for (auto it = pageWindows.begin(); it != pageWindows.end(); ++it) {
         for (PictureWindow *window : it.value()) {
+            if (window) {
+                // ✅ Delete the associated image file before removing the window
+                QString imagePath = window->getImagePath();
+                if (!imagePath.isEmpty() && QFile::exists(imagePath)) {
+                    // Only delete if the image is inside the notebook folder (don't delete user's original files)
+                    QString saveFolder = getSaveFolder();
+                    if (!saveFolder.isEmpty() && imagePath.startsWith(saveFolder)) {
+                        QFile::remove(imagePath);
+                        // qDebug() << "Cleared all page image file:" << imagePath;
+                    }
+                }
+            }
             window->deleteLater();
         }
     }
@@ -184,12 +222,24 @@ void PictureWindowManager::deleteWindowsForPage(int pageNumber) {
     if (pageWindows.contains(pageNumber)) {
         QList<PictureWindow*> windows = pageWindows[pageNumber];
         for (PictureWindow *window : windows) {
+            if (window) {
+                // ✅ Delete the associated image file before removing the window
+                QString imagePath = window->getImagePath();
+                if (!imagePath.isEmpty() && QFile::exists(imagePath)) {
+                    // Only delete if the image is inside the notebook folder (don't delete user's original files)
+                    QString saveFolder = getSaveFolder();
+                    if (!saveFolder.isEmpty() && imagePath.startsWith(saveFolder)) {
+                        QFile::remove(imagePath);
+                        // qDebug() << "Deleted page image file:" << imagePath;
+                    }
+                }
+            }
             window->deleteLater();
         }
         pageWindows.remove(pageNumber);
     }
     
-    // Delete file
+    // Delete metadata file
     QString filePath = getPictureDataFilePath(pageNumber);
     if (QFile::exists(filePath)) {
         QFile::remove(filePath);
@@ -242,8 +292,6 @@ void PictureWindowManager::renderPicturesToCanvas(QPainter &painter) const {
             window->renderToCanvas(painter, canvasRect);
         }
     }
-}
-
 void PictureWindowManager::renderPicturesToCanvas(QPainter &painter, const QRect &updateRect) const {
     if (!canvas) return;
     
@@ -324,8 +372,50 @@ QString PictureWindowManager::copyImageToNotebook(const QString &sourcePath, int
 }
 
 void PictureWindowManager::cleanupUnusedImages() {
-    // This method can be called to clean up image files that are no longer referenced
-    // by any picture windows. Implementation can be added later if needed.
+    // ✅ Clean up image files that are no longer referenced by any picture windows
+    QString saveFolder = getSaveFolder();
+    if (saveFolder.isEmpty()) return;
+    
+    // Get all image files in the notebook folder
+    QDir notebookDir(saveFolder);
+    QStringList imageFilters;
+    imageFilters << "*.png" << "*.jpg" << "*.jpeg" << "*.bmp" << "*.gif" << "*.tiff" << "*.webp";
+    QStringList imageFiles = notebookDir.entryList(imageFilters, QDir::Files);
+    
+    // Get all currently referenced image paths
+    QSet<QString> referencedImages;
+    
+    // Check current windows
+    for (PictureWindow *window : currentWindows) {
+        if (window) {
+            QString imagePath = window->getImagePath();
+            if (!imagePath.isEmpty()) {
+                referencedImages.insert(QFileInfo(imagePath).fileName());
+            }
+        }
+    }
+    
+    // Check all page windows
+    for (auto it = pageWindows.begin(); it != pageWindows.end(); ++it) {
+        for (PictureWindow *window : it.value()) {
+            if (window) {
+                QString imagePath = window->getImagePath();
+                if (!imagePath.isEmpty()) {
+                    referencedImages.insert(QFileInfo(imagePath).fileName());
+                }
+            }
+        }
+    }
+    
+    // Delete unreferenced image files (only those that match our naming pattern)
+    QString notebookId = getNotebookId();
+    for (const QString &fileName : imageFiles) {
+        if (fileName.startsWith(notebookId + "_img_") && !referencedImages.contains(fileName)) {
+            QString fullPath = saveFolder + "/" + fileName;
+            QFile::remove(fullPath);
+            // qDebug() << "Cleaned up unused image file:" << fileName;
+        }
+    }
 }
 
 void PictureWindowManager::clearCurrentPageWindows() {
@@ -336,6 +426,17 @@ void PictureWindowManager::clearCurrentPageWindows() {
     // Delete all current picture windows immediately
     for (PictureWindow *window : currentWindows) {
         if (window) {
+            // ✅ Delete the associated image file before removing the window
+            QString imagePath = window->getImagePath();
+            if (!imagePath.isEmpty() && QFile::exists(imagePath)) {
+                // Only delete if the image is inside the notebook folder (don't delete user's original files)
+                QString saveFolder = getSaveFolder();
+                if (!saveFolder.isEmpty() && imagePath.startsWith(saveFolder)) {
+                    QFile::remove(imagePath);
+                    // qDebug() << "Cleared image file:" << imagePath;
+                }
+            }
+            
             // Remove from all page windows maps first
             for (auto it = pageWindows.begin(); it != pageWindows.end(); ++it) {
                 it.value().removeAll(window);
