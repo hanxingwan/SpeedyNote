@@ -46,7 +46,7 @@ QSharedMemory *MainWindow::sharedMemory = nullptr;
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false), localServer(nullptr) {
 
-    setWindowTitle(tr("SpeedyNote Beta 0.8.0"));
+    setWindowTitle(tr("SpeedyNote Beta 0.8.1"));
 
     // Enable IME support for multi-language input
     setAttribute(Qt::WA_InputMethodEnabled, true);

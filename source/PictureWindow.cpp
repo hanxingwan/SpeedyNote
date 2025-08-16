@@ -282,6 +282,8 @@ void PictureWindow::setCanvasRect(const QRect &rect) {
         invalidateCache(); // Cache is invalid due to size/position change
     }
     canvasRect = rect;
+    // ✅ PERFORMANCE: Only update screen position when not in preview mode
+    // During drag/resize, the canvas handles positioning via outline preview
     updateScreenPosition();
 }
 
@@ -591,7 +593,7 @@ void PictureWindow::renderToCanvas(QPainter &painter, const QRect &targetRect) c
         cachePainter.setPen(QPen(QColor("#ff6600"), 2));
         cachePainter.setBrush(QBrush(QColor("#ff6600")));
         
-        int handleSize = 8;
+        int handleSize = 12; // ✅ TOUCH UX: Larger visual handles for better touch feedback
         // Corner handles - use QRect constructor for drawEllipse
         cachePainter.drawEllipse(QRect(QPoint(-handleSize/2, -handleSize/2), QSize(handleSize, handleSize)));
         cachePainter.drawEllipse(QRect(QPoint(targetRect.width() - handleSize/2, -handleSize/2), QSize(handleSize, handleSize)));
@@ -616,9 +618,9 @@ bool PictureWindow::isClickOnDeleteButton(const QPoint &canvasPos) const {
 PictureWindow::ResizeHandle PictureWindow::getResizeHandleAtCanvasPos(const QPoint &canvasPos) const {
     if (!editMode) return None;
     
-    // Make handles much larger for touch/pen interaction
-    int handleSize = 24; // Increased from 8 to 24 pixels
-    int tolerance = handleSize / 2; // 12 pixel radius around each corner
+    // ✅ TOUCH UX: Much larger handles for excellent touch/pen interaction
+    int handleSize = 40; // Increased to 40 pixels for much better touch interaction
+    int tolerance = handleSize / 2; // 20 pixel radius around each corner
     
     // Check corner handles with larger hit areas
     if ((canvasPos - canvasRect.topLeft()).manhattanLength() <= tolerance)
@@ -630,10 +632,10 @@ PictureWindow::ResizeHandle PictureWindow::getResizeHandleAtCanvasPos(const QPoi
     if ((canvasPos - canvasRect.bottomRight()).manhattanLength() <= tolerance)
         return BottomRight;
     
-    // Also check edge handles for better usability
-    int edgeTolerance = 16; // 16 pixels from edges
+    // Also check edge handles for better usability (but smaller than corners)
+    int edgeTolerance = 20; // Increased to 20 pixels from edges for better touch
     
-    // Top edge
+    // Top edge (excluding corner areas)
     if (canvasPos.y() >= canvasRect.top() - edgeTolerance && 
         canvasPos.y() <= canvasRect.top() + edgeTolerance &&
         canvasPos.x() >= canvasRect.left() + tolerance && 
@@ -671,6 +673,65 @@ bool PictureWindow::isClickOnHeader(const QPoint &canvasPos) const {
     QRect headerRect(canvasRect.x(), canvasRect.y(), canvasRect.width(), headerHeight);
     
     return headerRect.contains(canvasPos);
+}
+
+bool PictureWindow::isClickOnPictureBody(const QPoint &canvasPos) const {
+    if (!editMode) return false;
+    
+    // ✅ TOUCH UX: Make entire picture body draggable (except corners and delete button)
+    
+    // First check if click is within the picture window bounds
+    if (!canvasRect.contains(canvasPos)) {
+        return false;
+    }
+    
+    // Exclude corner resize handles (larger touch areas)
+    int handleSize = 40;
+    int tolerance = handleSize / 2; // 20 pixel radius
+    
+    if ((canvasPos - canvasRect.topLeft()).manhattanLength() <= tolerance ||
+        (canvasPos - canvasRect.topRight()).manhattanLength() <= tolerance ||
+        (canvasPos - canvasRect.bottomLeft()).manhattanLength() <= tolerance ||
+        (canvasPos - canvasRect.bottomRight()).manhattanLength() <= tolerance) {
+        return false; // Click is on a corner handle
+    }
+    
+    // Exclude delete button area
+    QRect deleteRect(canvasRect.right() - 24, canvasRect.y() + 8, 20, 20);
+    if (deleteRect.contains(canvasPos)) {
+        return false; // Click is on delete button
+    }
+    
+    // Exclude edge resize handles (but with smaller tolerance than corners)
+    int edgeTolerance = 20;
+    
+    // Check if click is on edge handles
+    bool onTopEdge = (canvasPos.y() >= canvasRect.top() - edgeTolerance && 
+                      canvasPos.y() <= canvasRect.top() + edgeTolerance &&
+                      canvasPos.x() >= canvasRect.left() + tolerance && 
+                      canvasPos.x() <= canvasRect.right() - tolerance);
+    
+    bool onBottomEdge = (canvasPos.y() >= canvasRect.bottom() - edgeTolerance && 
+                         canvasPos.y() <= canvasRect.bottom() + edgeTolerance &&
+                         canvasPos.x() >= canvasRect.left() + tolerance && 
+                         canvasPos.x() <= canvasRect.right() - tolerance);
+    
+    bool onLeftEdge = (canvasPos.x() >= canvasRect.left() - edgeTolerance && 
+                       canvasPos.x() <= canvasRect.left() + edgeTolerance &&
+                       canvasPos.y() >= canvasRect.top() + tolerance && 
+                       canvasPos.y() <= canvasRect.bottom() - tolerance);
+    
+    bool onRightEdge = (canvasPos.x() >= canvasRect.right() - edgeTolerance && 
+                        canvasPos.x() <= canvasRect.right() + edgeTolerance &&
+                        canvasPos.y() >= canvasRect.top() + tolerance && 
+                        canvasPos.y() <= canvasRect.bottom() - tolerance);
+    
+    if (onTopEdge || onBottomEdge || onLeftEdge || onRightEdge) {
+        return false; // Click is on an edge handle
+    }
+    
+    // If we get here, click is on the picture body - perfect for dragging!
+    return true;
 }
 
 void PictureWindow::mousePressEvent(QMouseEvent *event) {

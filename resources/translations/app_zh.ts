@@ -511,8 +511,12 @@
     </message>
     <message>
         <location filename="../../source/ControlPanelDialog.cpp" line="636"/>
+        <source>Version 0.8.1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Version 0.8.0</source>
-        <translation type="unfinished">0.8.0 公测版</translation>
+        <translation type="obsolete">0.8.0 公测版</translation>
     </message>
     <message>
         <source>Version 0.7.2</source>
@@ -920,22 +924,22 @@ This will overwrite your current configuration.</source>
         <translation type="obsolete">导入</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="1204"/>
+        <location filename="../../source/InkCanvas.cpp" line="1250"/>
         <source>Select Image</source>
         <translation type="unfinished">选择图片</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="1205"/>
+        <location filename="../../source/InkCanvas.cpp" line="1251"/>
         <source>Image Files (*.png *.jpg *.jpeg *.bmp *.gif *.tiff *.webp)</source>
         <translation type="unfinished">图片 (*.png *.jpg *.jpeg *.bmp *.gif *.tiff *.webp)</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="2751"/>
+        <location filename="../../source/InkCanvas.cpp" line="2802"/>
         <source>Copy</source>
         <translation type="unfinished">复制</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="2762"/>
+        <location filename="../../source/InkCanvas.cpp" line="2813"/>
         <source>Cancel</source>
         <translation type="unfinished">取消</translation>
     </message>
@@ -1174,9 +1178,13 @@ This will overwrite your current configuration.</source>
         <translation type="obsolete">删除本页</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="49"/>
         <source>SpeedyNote Beta 0.8.0</source>
-        <translation type="unfinished">极疾记 Beta 0.8.0</translation>
+        <translation type="obsolete">极疾记 Beta 0.8.0</translation>
+    </message>
+    <message>
+        <location filename="../../source/MainWindow.cpp" line="49"/>
+        <source>SpeedyNote Beta 0.8.1</source>
+        <translation type="unfinished">极疾记 Beta 0.8.1</translation>
     </message>
     <message>
         <location filename="../../source/MainWindow.cpp" line="496"/>
@@ -1294,12 +1302,12 @@ spn笔记本就像一个文件一样存放在目录中，但是性能方面和�
         <translation type="unfinished">无法将笔记本文件夹转换为spn文件。暂时保持原样。</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="2144"/>
+        <location filename="../../source/MainWindow.cpp" line="2149"/>
         <source>Save Notebook</source>
         <translation type="unfinished">保存笔记本</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="2145"/>
+        <location filename="../../source/MainWindow.cpp" line="2150"/>
         <source>This notebook contains unsaved work.
 
 Would you like to save it as a SpeedyNote Package (.spn) file before closing?</source>
@@ -1308,49 +1316,49 @@ Would you like to save it as a SpeedyNote Package (.spn) file before closing?</s
 你是否要再关闭之前先把它保存成一个SpeedyNote笔记本(.spn)文件？</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="2161"/>
+        <location filename="../../source/MainWindow.cpp" line="2166"/>
         <source>Save SpeedyNote Package</source>
         <translation type="unfinished">保存SpeedyNote笔记本</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="2176"/>
+        <location filename="../../source/MainWindow.cpp" line="2181"/>
         <source>Save Failed</source>
         <translation type="unfinished">保存失败</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="2177"/>
+        <location filename="../../source/MainWindow.cpp" line="2182"/>
         <source>Failed to save the notebook as a SpeedyNote Package.
 Please try again or choose a different location.</source>
         <translation type="unfinished">把当前笔记本保存未SpeedyNote笔记本封装失败。
 请再试一次或者换一个路径。</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="2184"/>
+        <location filename="../../source/MainWindow.cpp" line="2189"/>
         <source>Saved Successfully</source>
         <translation type="unfinished">保存成功</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="2185"/>
+        <location filename="../../source/MainWindow.cpp" line="2190"/>
         <source>Notebook saved as: %1</source>
         <translation type="unfinished">笔记本已经保存为%1</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="2517"/>
+        <location filename="../../source/MainWindow.cpp" line="2522"/>
         <source>Pen</source>
         <translation type="unfinished">钢笔粗细</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="2520"/>
+        <location filename="../../source/MainWindow.cpp" line="2525"/>
         <source>Marker</source>
         <translation type="unfinished">记号笔粗细</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="2523"/>
+        <location filename="../../source/MainWindow.cpp" line="2528"/>
         <source>Eraser</source>
         <translation type="unfinished">橡皮粗细</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="2526"/>
+        <location filename="../../source/MainWindow.cpp" line="2531"/>
         <source>
 
 %1
@@ -1361,23 +1369,23 @@ Please try again or choose a different location.</source>
 %2</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="4112"/>
+        <location filename="../../source/MainWindow.cpp" line="4117"/>
         <source>File Not Found</source>
         <translation type="unfinished">找不到文件</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="4112"/>
+        <location filename="../../source/MainWindow.cpp" line="4117"/>
         <source>The PDF file could not be found:
 %1</source>
         <translation type="unfinished">找不到”%1“ 这一PDF文件</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="4230"/>
+        <location filename="../../source/MainWindow.cpp" line="4235"/>
         <source>Different PDF Linked</source>
         <translation type="unfinished">链接到不同的PDF</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="4231"/>
+        <location filename="../../source/MainWindow.cpp" line="4236"/>
         <source>This notebook folder is already linked to a different PDF file.
 
 Do you want to replace the link with the new PDF?</source>
@@ -1386,12 +1394,12 @@ Do you want to replace the link with the new PDF?</source>
 你是否想要使用这个新的PDF取而代之？</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="4658"/>
+        <location filename="../../source/MainWindow.cpp" line="4663"/>
         <source>Annotated Image Saved</source>
         <translation type="unfinished">带背景的画布已保存</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="4659"/>
+        <location filename="../../source/MainWindow.cpp" line="4664"/>
         <source>Annotated page saved successfully!
 
 File: %1
@@ -1402,43 +1410,43 @@ Location: %2</source>
 位置： %2</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5357"/>
-        <location filename="../../source/MainWindow.cpp" line="5580"/>
+        <location filename="../../source/MainWindow.cpp" line="5362"/>
+        <location filename="../../source/MainWindow.cpp" line="5585"/>
         <source>Page %1</source>
         <translation type="unfinished">第%1页</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5446"/>
+        <location filename="../../source/MainWindow.cpp" line="5451"/>
         <source>Copy</source>
         <translation type="unfinished">复制</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5455"/>
+        <location filename="../../source/MainWindow.cpp" line="5460"/>
         <source>Delete</source>
         <translation type="unfinished">删除</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5464"/>
+        <location filename="../../source/MainWindow.cpp" line="5469"/>
         <source>Cancel</source>
         <translation type="unfinished">取消</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5653"/>
+        <location filename="../../source/MainWindow.cpp" line="5658"/>
         <source>Bookmark %1</source>
         <translation type="unfinished">第%1个书签</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5676"/>
+        <location filename="../../source/MainWindow.cpp" line="5681"/>
         <source>Remove Bookmark</source>
         <translation type="unfinished">去除书签</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5678"/>
+        <location filename="../../source/MainWindow.cpp" line="5683"/>
         <source>Add Bookmark</source>
         <translation type="unfinished">添加到书签</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5856"/>
+        <location filename="../../source/MainWindow.cpp" line="5861"/>
         <source>This notebook was last accessed on page %1.
 
 Would you like to go directly to page %1, or start from page 1?</source>
@@ -1447,57 +1455,57 @@ Would you like to go directly to page %1, or start from page 1?</source>
 你是否要直接跳转到第%1页，还是说从头开始？</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5859"/>
+        <location filename="../../source/MainWindow.cpp" line="5864"/>
         <source>Last Accessed Page</source>
         <translation type="unfinished">上次访问的页面</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5863"/>
+        <location filename="../../source/MainWindow.cpp" line="5868"/>
         <source>Go to Page %1</source>
         <translation type="unfinished">翻到第%1页</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5864"/>
+        <location filename="../../source/MainWindow.cpp" line="5869"/>
         <source>Start from Page 1</source>
         <translation type="unfinished">从头开始</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5884"/>
+        <location filename="../../source/MainWindow.cpp" line="5889"/>
         <source>Invalid Package</source>
         <translation type="unfinished">笔记本封装错误</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5885"/>
+        <location filename="../../source/MainWindow.cpp" line="5890"/>
         <source>The selected file is not a valid SpeedyNote package.</source>
         <translation type="unfinished">您选中的文件不是一个有效的SpeedyNote笔记本。</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5938"/>
+        <location filename="../../source/MainWindow.cpp" line="5943"/>
         <source>File Exists</source>
         <translation type="unfinished">文件已存在</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5939"/>
+        <location filename="../../source/MainWindow.cpp" line="5944"/>
         <source>A file with this name already exists. Please choose a different name.</source>
         <translation type="unfinished">具有相同命名的文件已经存在。请换一个文件名。</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5949"/>
+        <location filename="../../source/MainWindow.cpp" line="5954"/>
         <source>Creation Failed</source>
         <translation type="unfinished">创建失败</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5950"/>
+        <location filename="../../source/MainWindow.cpp" line="5955"/>
         <source>Failed to create the SpeedyNote package. Please check file permissions.</source>
         <translation type="unfinished">无法创建SpeedyNote笔记本封装。请检查文件权限。</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5989"/>
+        <location filename="../../source/MainWindow.cpp" line="5994"/>
         <source>Package Created</source>
         <translation type="unfinished">笔记本创建成功</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5990"/>
+        <location filename="../../source/MainWindow.cpp" line="5995"/>
         <source>New SpeedyNote package &apos;%1&apos; has been created successfully!</source>
         <translation type="unfinished">新SpeedyNote笔记本“%1”已经成功创建！</translation>
     </message>
@@ -1546,34 +1554,34 @@ Would you like to go directly to page %1, or start from page 1?</source>
         <translation type="unfinished">PR:%1 Hz</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="1563"/>
+        <location filename="../../source/MainWindow.cpp" line="1568"/>
         <source>Select Background Image</source>
         <translation type="unfinished">选择当页背景图像</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="1722"/>
+        <location filename="../../source/MainWindow.cpp" line="1727"/>
         <source>Cannot Load PDF</source>
         <translation type="unfinished">无法加载PDF</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="1723"/>
+        <location filename="../../source/MainWindow.cpp" line="1728"/>
         <source>Please select a permanent save folder before loading a PDF.
 
 Click the folder icon to choose a location for your notebook.</source>
         <translation type="unfinished">请按左数第二个文件夹键来给当前笔记本选定一个文件夹后再尝试加载PDF。</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="1727"/>
+        <location filename="../../source/MainWindow.cpp" line="1732"/>
         <source>Select PDF</source>
         <translation type="unfinished">选择PDF文档</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="1942"/>
+        <location filename="../../source/MainWindow.cpp" line="1947"/>
         <source>Notice</source>
         <translation type="unfinished">警告</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="1942"/>
+        <location filename="../../source/MainWindow.cpp" line="1947"/>
         <source>At least one tab must remain open.</source>
         <translation type="unfinished">至少保留一个选项卡。</translation>
     </message>
@@ -1588,8 +1596,8 @@ Please select a permanent folder to avoid data loss.</source>
 为防止数据丢失，请为这个笔记本选择一个目录。</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="2505"/>
-        <location filename="../../source/MainWindow.cpp" line="2508"/>
+        <location filename="../../source/MainWindow.cpp" line="2510"/>
+        <location filename="../../source/MainWindow.cpp" line="2513"/>
         <source>
 
 Page
@@ -1610,7 +1618,7 @@ Thickness
 %1</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="2531"/>
+        <location filename="../../source/MainWindow.cpp" line="2536"/>
         <source>
 
 Zoom
@@ -1651,7 +1659,7 @@ Adjust Blue
 %1</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="2539"/>
+        <location filename="../../source/MainWindow.cpp" line="2544"/>
         <source>
 
 
@@ -1662,7 +1670,7 @@ Pen</source>
 钢笔</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="2543"/>
+        <location filename="../../source/MainWindow.cpp" line="2548"/>
         <source>
 
 
@@ -1673,7 +1681,7 @@ Marker</source>
 记号笔</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="2547"/>
+        <location filename="../../source/MainWindow.cpp" line="2552"/>
         <source>
 
 
@@ -1684,7 +1692,7 @@ Eraser</source>
 橡皮</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="2557"/>
+        <location filename="../../source/MainWindow.cpp" line="2562"/>
         <source>
 
 Preset %1
@@ -1695,17 +1703,17 @@ Preset %1
 #%2</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="2564"/>
+        <location filename="../../source/MainWindow.cpp" line="2569"/>
         <source>Etr</source>
         <translation type="unfinished">进入</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="2564"/>
+        <location filename="../../source/MainWindow.cpp" line="2569"/>
         <source>Exit</source>
         <translation type="unfinished">退出</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="2565"/>
+        <location filename="../../source/MainWindow.cpp" line="2570"/>
         <source>
 
 Page %1
