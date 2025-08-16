@@ -321,6 +321,9 @@ public:
     QStringList getBookmarks() const;
     void setBookmarks(const QStringList &bookmarkList);
     
+    // ✅ Cache management
+    void invalidateCurrentPageCache(); // Invalidate cache for current page when modified
+    
 private:
     // ✅ Migration from old txt files to JSON
     void migrateOldMetadataFiles();
@@ -386,6 +389,7 @@ private:
     QPoint pictureInteractionStartPos;
     QRect pictureStartRect;
     QRect picturePreviousRect; // Track previous position to clear ghost images
+    QRect picturePreviewRect;  // Store preview position during drag/resize for performance
     int pictureResizeHandle = 0; // Store as int to avoid incomplete type issues
     
     // Picture interaction helper methods
@@ -410,7 +414,6 @@ private:
     void loadNotePageToCache(int pageNumber); // Load a single note page and add to cache
     void checkAndCacheAdjacentNotePages(int targetPage); // Check and cache adjacent note pages if needed
     QString getNotePageFilePath(int pageNumber) const; // Get file path for note page
-    void invalidateCurrentPageCache(); // Invalidate cache for current page when modified
     
 private slots:
     void processPendingTextSelection(); // Process pending text selection updates (throttled to 60 FPS)

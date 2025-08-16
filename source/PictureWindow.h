@@ -74,6 +74,7 @@ public:
     bool isClickOnDeleteButton(const QPoint &canvasPos) const;
     ResizeHandle getResizeHandleAtCanvasPos(const QPoint &canvasPos) const;
     bool isClickOnHeader(const QPoint &canvasPos) const;
+    bool isClickOnPictureBody(const QPoint &canvasPos) const;
     
     // Aspect ratio management
     bool getMaintainAspectRatio() const { return maintainAspectRatio; }

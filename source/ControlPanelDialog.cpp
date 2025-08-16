@@ -627,15 +627,15 @@ void ControlPanelDialog::createAboutTab() {
     // Application name
     QLabel *appNameLabel = new QLabel(tr("SpeedyNote"), aboutTab);
     appNameLabel->setAlignment(Qt::AlignCenter);
-    appNameLabel->setStyleSheet("font-size: 24px; font-weight: bold; color: #2c3e50;");
+    appNameLabel->setStyleSheet("font-size: 24px; font-weight: bold");
     layout->addWidget(appNameLabel);
     
     layout->addSpacing(5);
     
     // Version
-    QLabel *versionLabel = new QLabel(tr("Version 0.8.0"), aboutTab);
+    QLabel *versionLabel = new QLabel(tr("Version 0.8.1"), aboutTab);
     versionLabel->setAlignment(Qt::AlignCenter);
-    versionLabel->setStyleSheet("font-size: 14px; color: #7f8c8d;");
+    versionLabel->setStyleSheet("font-size: 14px");
     layout->addWidget(versionLabel);
     
     layout->addSpacing(15);
@@ -644,7 +644,7 @@ void ControlPanelDialog::createAboutTab() {
     QLabel *descriptionLabel = new QLabel(tr("A fast and intuitive note-taking application with PDF annotation support"), aboutTab);
     descriptionLabel->setAlignment(Qt::AlignCenter);
     descriptionLabel->setWordWrap(true);
-    descriptionLabel->setStyleSheet("font-size: 12px; color: #34495e; padding: 0 20px;");
+    descriptionLabel->setStyleSheet("font-size: 12px; padding: 0 20px;");
     layout->addWidget(descriptionLabel);
     
     layout->addSpacing(20);
@@ -652,7 +652,7 @@ void ControlPanelDialog::createAboutTab() {
     // Author information
     QLabel *authorLabel = new QLabel(tr("Developed by GitHub @alpha-liu-01 and various contributors"), aboutTab);
     authorLabel->setAlignment(Qt::AlignCenter);
-    authorLabel->setStyleSheet("font-size: 12px; color: #7f8c8d;");
+    authorLabel->setStyleSheet("font-size: 12px");
     layout->addWidget(authorLabel);
     
     layout->addSpacing(10);
@@ -660,7 +660,7 @@ void ControlPanelDialog::createAboutTab() {
     // Copyright
     QLabel *copyrightLabel = new QLabel(tr("© 2025 SpeedyNote. All rights reserved."), aboutTab);
     copyrightLabel->setAlignment(Qt::AlignCenter);
-    copyrightLabel->setStyleSheet("font-size: 10px; color: #95a5a6;");
+    copyrightLabel->setStyleSheet("font-size: 10px");
     layout->addWidget(copyrightLabel);
     
     // Add stretch to push everything to the top

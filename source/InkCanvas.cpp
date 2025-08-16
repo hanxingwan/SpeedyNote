@@ -431,6 +431,9 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
             pictureManager->renderPicturesToCanvas(painter);
         }
     }
+    
+    // ✅ PERFORMANCE: Draw outline preview during picture movement (after user strokes)
+    // This ensures the outline appears on top and doesn't interfere with background rendering
 
     // ✅ Draw user's strokes from the buffer (transparent overlay)
     painter.drawPixmap(0, 0, buffer);
@@ -616,6 +619,43 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
         }
         
         painter.restore(); // Restore painter state
+    }
+    
+    // ✅ PERFORMANCE: Draw outline preview during picture movement (on top of everything)
+    if (!picturePreviewRect.isEmpty() && (pictureDragging || pictureResizing)) {
+        // Reset transform to draw in canvas coordinates
+        painter.resetTransform();
+        painter.translate(centerOffsetX, centerOffsetY);
+        painter.scale(internalZoomFactor / 100.0, internalZoomFactor / 100.0);
+        painter.translate(-panOffsetX, -panOffsetY);
+        
+        painter.save();
+        
+        // ✅ HIGH CONTRAST OUTLINE: Use solid line with contrasting colors for better visibility
+        QPen previewPen(QColor(255, 140, 0), 2, Qt::SolidLine); // Solid orange outline (thinner)
+        painter.setPen(previewPen);
+        painter.setBrush(Qt::NoBrush);
+        
+        // Enable antialiasing for smoother outline
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        
+        // Draw the preview rectangle outline
+        painter.drawRect(picturePreviewRect);
+        
+        // Draw corner handles for resize preview
+        if (pictureResizing) {
+            painter.setBrush(QBrush(QColor(255, 140, 0, 200))); // More opaque orange
+            painter.setPen(QPen(QColor(255, 140, 0), 2, Qt::SolidLine));
+            int handleSize = 12; // ✅ TOUCH UX: Larger visual handles to match touch areas
+            
+            // Draw resize handles at corners
+            painter.drawEllipse(picturePreviewRect.topLeft() + QPoint(-handleSize/2, -handleSize/2), handleSize, handleSize);
+            painter.drawEllipse(picturePreviewRect.topRight() + QPoint(-handleSize/2, -handleSize/2), handleSize, handleSize);
+            painter.drawEllipse(picturePreviewRect.bottomLeft() + QPoint(-handleSize/2, -handleSize/2), handleSize, handleSize);
+            painter.drawEllipse(picturePreviewRect.bottomRight() + QPoint(-handleSize/2, -handleSize/2), handleSize, handleSize);
+        }
+        
+        painter.restore();
     }
 }
 
@@ -1129,12 +1169,15 @@ void InkCanvas::mousePressEvent(QMouseEvent *event) {
                 pictureInteractionStartPos = event->position().toPoint();
                 pictureStartRect = hitWindow->getCanvasRect();
                 picturePreviousRect = pictureStartRect; // Initialize previous rect
+                
+                // ✅ FAST MOTION FIX: Clear any existing outline artifacts before starting
+                update(); // Full update to ensure clean starting state
                 return;
             }
             
-            if (hitWindow->isClickOnHeader(canvasPos.toPoint())) {
-                // Header clicked - enter edit mode and start drag
-                // qDebug() << "Header clicked on picture window";
+            if (hitWindow->isClickOnHeader(canvasPos.toPoint()) || hitWindow->isClickOnPictureBody(canvasPos.toPoint())) {
+                // ✅ TOUCH UX: Header or picture body clicked - enter edit mode and start drag
+                // qDebug() << "Header or picture body clicked on picture window";
                 if (!hitWindow->isInEditMode()) {
                     hitWindow->enterEditMode();
                 }
@@ -1145,6 +1188,9 @@ void InkCanvas::mousePressEvent(QMouseEvent *event) {
                 pictureInteractionStartPos = event->position().toPoint();
                 pictureStartRect = hitWindow->getCanvasRect();
                 picturePreviousRect = pictureStartRect; // Initialize previous rect
+                
+                // ✅ FAST MOTION FIX: Clear any existing outline artifacts before starting
+                update(); // Full update to ensure clean starting state
                 return;
             }
             
@@ -1242,6 +1288,11 @@ void InkCanvas::mousePressEvent(QMouseEvent *event) {
                     
                     // Mark canvas as edited
                     setEdited(true);
+                    
+                    // ✅ CACHE FIX: Invalidate note cache when pictures are created
+                    // This ensures that when switching pages and coming back, the new picture is shown
+                    invalidateCurrentPageCache();
+                    
                     //qDebug() << "  Canvas marked as edited";
                 } else {
                     //qDebug() << "  ERROR: Failed to copy image to notebook!";
@@ -3533,29 +3584,97 @@ void InkCanvas::handlePictureMouseMove(QMouseEvent *event) {
         newRect.setHeight(canvasBounds.height() - newRect.y());
     }
     
-    // Update the picture window's canvas rect
-    activePictureWindow->setCanvasRect(newRect);
+    // ✅ PERFORMANCE OPTIMIZATION: Store the preview rect but don't update the actual window yet
+    picturePreviewRect = newRect;
     
-    // Only update the affected picture area instead of full canvas
-    // Use previous rect (from last frame) to clear ghost images properly
-    QRect widgetRect = mapCanvasToWidget(newRect);
-    QRect previousWidgetRect = mapCanvasToWidget(picturePreviousRect);
-    QRect combinedRect = widgetRect.united(previousWidgetRect);
-    update(combinedRect.adjusted(-10, -10, 10, 10)); // Padding for smooth edges
+    // ✅ PERFORMANCE: Adaptive throttling based on movement speed for fast motion
+    static QElapsedTimer updateTimer;
+    static bool timerInitialized = false;
+    static QPoint lastUpdatePos;
+    
+    if (!timerInitialized) {
+        updateTimer.start();
+        timerInitialized = true;
+        lastUpdatePos = newRect.center();
+    }
+    
+    // Calculate movement distance since last update for adaptive throttling
+    QPoint currentPos = newRect.center();
+    int movementDistance = (currentPos - lastUpdatePos).manhattanLength();
+    
+    // Adaptive throttling: faster updates for fast movement, slower for slow movement
+    int throttleInterval;
+    if (movementDistance > 50) {
+        throttleInterval = 8; // ~120 FPS for very fast movement
+    } else if (movementDistance > 20) {
+        throttleInterval = 12; // ~80 FPS for fast movement  
+    } else {
+        throttleInterval = 16; // ~60 FPS for normal movement
+    }
+    
+    // Update based on adaptive interval
+    if (updateTimer.elapsed() > throttleInterval) {
+        // ✅ AGGRESSIVE CLEARING: Update larger combined area to eliminate all outline artifacts
+        QRect widgetRect = mapCanvasToWidget(newRect);
+        QRect previousWidgetRect = mapCanvasToWidget(picturePreviousRect);
+        QRect combinedRect = widgetRect.united(previousWidgetRect);
+        
+        // ✅ FAST MOTION TRAIL CLEARING: For very fast movement, update a wider trail area
+        if (movementDistance > 50) {
+            // Create a trail rectangle that covers the entire movement path
+            QPoint startPoint = previousWidgetRect.center();
+            QPoint endPoint = widgetRect.center();
+            
+            // Calculate trail rectangle that encompasses the entire movement path
+            int trailWidth = qMax(widgetRect.width(), previousWidgetRect.width()) + 50;
+            int trailHeight = qMax(widgetRect.height(), previousWidgetRect.height()) + 50;
+            
+            QRect trailRect(
+                qMin(startPoint.x(), endPoint.x()) - trailWidth/2,
+                qMin(startPoint.y(), endPoint.y()) - trailHeight/2,
+                qAbs(endPoint.x() - startPoint.x()) + trailWidth,
+                qAbs(endPoint.y() - startPoint.y()) + trailHeight
+            );
+            
+            // Use the larger of combined rect or trail rect
+            combinedRect = combinedRect.united(trailRect);
+        }
+        
+        // Larger padding to ensure complete clearing of fast-moving outlines
+        update(combinedRect.adjusted(-30, -30, 30, 30)); // Even larger padding for fast motion
+        
+        updateTimer.restart();
+        lastUpdatePos = currentPos;
+    }
     
     // Update previous rect for next frame
     picturePreviousRect = newRect;
     
-    // Emit signals for saving
+    // ✅ PERFORMANCE: Don't emit signals during movement - only on release
+    // This prevents redundant saves and updates during dragging
+}
+
+void InkCanvas::handlePictureMouseRelease(QMouseEvent *event) {
+    if (!activePictureWindow) return;
+    
+    // ✅ PERFORMANCE: Apply the final position only on release for smooth interaction
+    if (!picturePreviewRect.isEmpty()) {
+        // Update the actual picture window position
+        activePictureWindow->setCanvasRect(picturePreviewRect);
+        
+        // ✅ FULL SCREEN UPDATE: Clear all orange outline artifacts and render final picture
+        update(); // Full canvas update to clear all accumulated outline frames
+        
+        // Clear the preview rect
+        picturePreviewRect = QRect();
+    }
+    
+    // ✅ Emit signals only on release to prevent redundant operations during movement
     if (pictureResizing) {
         emit activePictureWindow->windowResized(activePictureWindow);
     } else if (pictureDragging) {
         emit activePictureWindow->windowMoved(activePictureWindow);
     }
-}
-
-void InkCanvas::handlePictureMouseRelease(QMouseEvent *event) {
-    if (!activePictureWindow) return;
     
     // Reset interaction state
     activePictureWindow = nullptr;
@@ -3565,6 +3684,10 @@ void InkCanvas::handlePictureMouseRelease(QMouseEvent *event) {
     
     // Mark canvas as edited since picture was moved/resized
     setEdited(true);
+    
+    // ✅ CACHE FIX: Invalidate note cache when pictures are moved/resized
+    // This ensures that when switching pages and coming back, the updated picture positions are shown
+    invalidateCurrentPageCache();
     
     // Save current state
     if (pictureManager) {

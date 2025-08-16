@@ -455,6 +455,11 @@ void PictureWindowManager::clearCurrentPageWindows() {
     
     // Mark canvas as edited since we cleared pictures
     canvas->setEdited(true);
+    
+    // ✅ CACHE FIX: Invalidate note cache when pictures are cleared
+    // This ensures that when switching pages and coming back, the cleared pictures don't reappear
+    canvas->invalidateCurrentPageCache();
+    
     canvas->update(); // Trigger repaint to remove all pictures
     
     // Save the cleared state to disk
@@ -467,6 +472,10 @@ void PictureWindowManager::onWindowDeleteRequested(PictureWindow *window) {
     // Mark canvas as edited since we deleted a picture window
     if (canvas) {
         canvas->setEdited(true);
+        
+        // ✅ CACHE FIX: Invalidate note cache when pictures are deleted
+        // This ensures that when switching pages and coming back, the deleted pictures don't reappear
+        canvas->invalidateCurrentPageCache();
     }
     
     // Save current state
@@ -621,13 +630,14 @@ void PictureWindowManager::connectWindowSignals(PictureWindow *window) {
     // Connect existing signals
     connect(window, &PictureWindow::deleteRequested, this, &PictureWindowManager::onWindowDeleteRequested);
     connect(window, &PictureWindow::windowMoved, this, [this, window](PictureWindow*) {
-        // Mark canvas as edited since window was moved
+        // ✅ PERFORMANCE: Only mark as edited and save - don't trigger extra updates
+        // The canvas handles its own updates more efficiently during movement
         if (canvas) {
             canvas->setEdited(true);
-            // Only update the picture window's area instead of full canvas
-            QRect canvasRect = window->getCanvasRect();
-            QRect widgetRect = canvas->mapCanvasToWidget(canvasRect);
-            canvas->update(widgetRect.adjusted(-5, -5, 5, 5)); // Small padding for smooth edges
+            
+            // ✅ CACHE FIX: Invalidate note cache when pictures are moved programmatically
+            // (This is a backup - the main fix is in handlePictureMouseRelease)
+            canvas->invalidateCurrentPageCache();
             
             // Get current page and save windows
             int currentPage = canvas->getLastActivePage();
@@ -635,13 +645,14 @@ void PictureWindowManager::connectWindowSignals(PictureWindow *window) {
         }
     });
     connect(window, &PictureWindow::windowResized, this, [this, window](PictureWindow*) {
-        // Mark canvas as edited since window was resized
+        // ✅ PERFORMANCE: Only mark as edited and save - don't trigger extra updates
+        // The canvas handles its own updates more efficiently during resize
         if (canvas) {
             canvas->setEdited(true);
-            // Only update the picture window's area instead of full canvas
-            QRect canvasRect = window->getCanvasRect();
-            QRect widgetRect = canvas->mapCanvasToWidget(canvasRect);
-            canvas->update(widgetRect.adjusted(-5, -5, 5, 5)); // Small padding for smooth edges
+            
+            // ✅ CACHE FIX: Invalidate note cache when pictures are resized programmatically
+            // (This is a backup - the main fix is in handlePictureMouseRelease)
+            canvas->invalidateCurrentPageCache();
             
             // Get current page and save windows
             int currentPage = canvas->getLastActivePage();
