@@ -118,6 +118,30 @@ void MarkdownWindowManager::clearAllWindows() {
     pageWindows.clear();
 }
 
+void MarkdownWindowManager::clearCurrentPagePermanently(int pageNumber) {
+    // ✅ This method safely clears current page windows and permanently deletes their data
+    
+    // Stop transparency timer
+    transparencyTimer->stop();
+    currentlyFocusedWindow = nullptr;
+    windowsAreTransparent = false;
+    
+    // Clear current windows from memory (they're currently visible)
+    for (MarkdownWindow *window : currentWindows) {
+        window->deleteLater();
+    }
+    currentWindows.clear();
+    
+    // Remove this page from the pageWindows map (no need to delete widgets again)
+    pageWindows.remove(pageNumber);
+    
+    // Delete the persistent data file for this page
+    QString filePath = getWindowDataFilePath(pageNumber);
+    if (QFile::exists(filePath)) {
+        QFile::remove(filePath);
+    }
+}
+
 void MarkdownWindowManager::saveWindowsForPage(int pageNumber) {
     if (!canvas || currentWindows.isEmpty()) return;
     

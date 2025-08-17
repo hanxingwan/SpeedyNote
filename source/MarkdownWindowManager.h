@@ -23,6 +23,7 @@ public:
     MarkdownWindow* createMarkdownWindow(const QRect &rect);
     void removeMarkdownWindow(MarkdownWindow *window);
     void clearAllWindows();
+    void clearCurrentPagePermanently(int pageNumber); // ✅ Safely clear and permanently delete current page windows
     
     // Page lifecycle
     void saveWindowsForPage(int pageNumber);

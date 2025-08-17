@@ -15,6 +15,7 @@
 #include <QMessageBox>
 #include <QApplication>
 #include <QMetaObject>
+#include <QIcon>
 
 ControlPanelDialog::ControlPanelDialog(MainWindow *mainWindow, InkCanvas *targetCanvas, QWidget *parent)
     : QDialog(parent), canvas(targetCanvas), selectedColor(canvas->getBackgroundColor()), mainWindowRef(mainWindow) {
@@ -36,6 +37,7 @@ ControlPanelDialog::ControlPanelDialog(MainWindow *mainWindow, InkCanvas *target
     createControllerMappingTab();
     createKeyboardMappingTab();
     createThemeTab();
+    createCompatibilityTab();
     createAboutTab();
     // === Buttons ===
     applyButton = new QPushButton(tr("Apply"));
@@ -633,9 +635,9 @@ void ControlPanelDialog::createAboutTab() {
     layout->addSpacing(5);
     
     // Version
-    QLabel *versionLabel = new QLabel(tr("Version 0.8.1"), aboutTab);
+    QLabel *versionLabel = new QLabel(tr("Version 0.8.2"), aboutTab);
     versionLabel->setAlignment(Qt::AlignCenter);
-    versionLabel->setStyleSheet("font-size: 14px");
+    versionLabel->setStyleSheet("font-size: 14px; color: #7f8c8d;");
     layout->addWidget(versionLabel);
     
     layout->addSpacing(15);
@@ -660,7 +662,7 @@ void ControlPanelDialog::createAboutTab() {
     // Copyright
     QLabel *copyrightLabel = new QLabel(tr("© 2025 SpeedyNote. All rights reserved."), aboutTab);
     copyrightLabel->setAlignment(Qt::AlignCenter);
-    copyrightLabel->setStyleSheet("font-size: 10px");
+    copyrightLabel->setStyleSheet("font-size: 10px; color: #95a5a6;");
     layout->addWidget(copyrightLabel);
     
     // Add stretch to push everything to the top
@@ -675,4 +677,86 @@ void ControlPanelDialog::createAboutTab() {
     layout->addSpacing(10);
     
     tabWidget->addTab(aboutTab, tr("About"));
+}
+
+void ControlPanelDialog::createCompatibilityTab() {
+    compatibilityTab = new QWidget(this);
+    QVBoxLayout *layout = new QVBoxLayout(compatibilityTab);
+    
+    // Add some spacing at the top
+    layout->addSpacing(10);
+    
+    // Title and description
+    QLabel *titleLabel = new QLabel(tr("Compatibility Features"), compatibilityTab);
+    titleLabel->setStyleSheet("font-size: 16px; font-weight: bold; color: #2c3e50;");
+    layout->addWidget(titleLabel);
+    
+    layout->addSpacing(10);
+    
+    // Folder selection section
+    QLabel *folderSectionLabel = new QLabel(tr("Manual Folder Selection"), compatibilityTab);
+    folderSectionLabel->setStyleSheet("font-size: 14px; font-weight: bold; color: #34495e;");
+    layout->addWidget(folderSectionLabel);
+    
+    QLabel *folderDescriptionLabel = new QLabel(tr("This feature allows you to manually select a save folder for your notes. "
+                                                  "This is only for converting old folder-based notebooks to the new .spn format."), compatibilityTab);
+    folderDescriptionLabel->setWordWrap(true);
+    folderDescriptionLabel->setStyleSheet("font-size: 11px; margin-bottom: 10px;");
+    layout->addWidget(folderDescriptionLabel);
+    
+    // Folder selection button
+    selectFolderCompatibilityButton = new QPushButton(tr("Select Save Folder"), compatibilityTab);
+    selectFolderCompatibilityButton->setIcon(QIcon(":/resources/icons/folder.png"));
+    selectFolderCompatibilityButton->setMinimumHeight(40);
+    selectFolderCompatibilityButton->setStyleSheet(
+        "QPushButton {"
+        "    background-color: #3498db;"
+        "    color: white;"
+        "    border: none;"
+        "    padding: 8px 16px;"
+        "    border-radius: 4px;"
+        "    font-weight: bold;"
+        "}"
+        "QPushButton:hover {"
+        "    background-color: #2980b9;"
+        "}"
+        "QPushButton:pressed {"
+        "    background-color: #21618c;"
+        "}"
+    );
+    
+    connect(selectFolderCompatibilityButton, &QPushButton::clicked, this, &ControlPanelDialog::selectFolderCompatibility);
+    layout->addWidget(selectFolderCompatibilityButton);
+    
+    // Warning note
+    QLabel *warningLabel = new QLabel(tr("⚠️ Note: Make sure to select a folder that is empty or an old folder-based notebook. Otherwise, data may be lost."), compatibilityTab);
+    warningLabel->setWordWrap(true);
+    warningLabel->setStyleSheet("color: #e67e22; font-size: 10px; font-weight: bold; margin-top: 10px; "
+                               "background-color: #fef9e7; padding: 8px; border-radius: 4px; border: 1px solid #f39c12;");
+    layout->addWidget(warningLabel);
+    
+    // Add stretch to push everything to the top
+    layout->addStretch();
+    
+    tabWidget->addTab(compatibilityTab, tr("Compatibility"));
+}
+
+void ControlPanelDialog::selectFolderCompatibility() {
+    if (!mainWindowRef) {
+        QMessageBox::warning(this, tr("Error"), tr("MainWindow reference not available."));
+        return;
+    }
+    
+    // Call the existing selectFolder method from MainWindow
+    bool success = mainWindowRef->selectFolder();
+    
+    if (success) {
+        // Show a confirmation message only if successful
+        QMessageBox::information(this, tr("Folder Selection"), 
+            tr("Folder selection completed successfully. You can now start taking notes in the selected folder."));
+    } else {
+        // Show appropriate message for cancellation
+        QMessageBox::information(this, tr("Folder Selection Cancelled"), 
+            tr("Folder selection was cancelled. No changes were made."));
+    }
 }
