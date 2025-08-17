@@ -1956,12 +1956,12 @@ void InkCanvas::clearCurrentPage() {
         buffer.fill(Qt::transparent);
     }
     
-    // Clear all markdown windows from current page
+    // ✅ PERMANENTLY delete markdown windows for current page
     if (markdownManager) {
-        markdownManager->clearAllWindows();
+        markdownManager->clearCurrentPagePermanently(lastActivePage);
     }
     
-    // Clear all picture windows from current page
+    // Clear all picture windows from current page (already deletes files permanently)
     if (pictureManager) {
         pictureManager->clearCurrentPageWindows();
     }

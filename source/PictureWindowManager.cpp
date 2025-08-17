@@ -19,7 +19,7 @@
 #endif
 
 PictureWindowManager::PictureWindowManager(InkCanvas *canvas, QObject *parent)
-    : QObject(parent), canvas(canvas), selectionMode(false)
+    : QObject(parent), canvas(canvas), selectionMode(false), isDestroying(false)
 {
     // Connect to canvas signals to update window positions when canvas changes
     if (canvas) {
@@ -29,9 +29,15 @@ PictureWindowManager::PictureWindowManager(InkCanvas *canvas, QObject *parent)
 }
 
 PictureWindowManager::~PictureWindowManager() {
+    // ✅ Set destruction flag to prevent dangerous operations
+    isDestroying = true;
+    
+    // ✅ Clear windows first before cleanup
     clearAllWindows();
-    // ✅ Clean up any remaining unused images on destruction
-    cleanupUnusedImages();
+    
+    // ✅ Skip cleanup entirely during destruction to prevent crashes
+    // The canvas pointer may be dangling (pointing to freed memory)
+    // cleanupUnusedImages(); // Disabled - too dangerous during destruction
 }
 
 PictureWindow* PictureWindowManager::createPictureWindow(const QRect &rect, const QString &imagePath) {
@@ -375,6 +381,12 @@ QString PictureWindowManager::copyImageToNotebook(const QString &sourcePath, int
 
 void PictureWindowManager::cleanupUnusedImages() {
     // ✅ Clean up image files that are no longer referenced by any picture windows
+    // ✅ Safety check: Don't cleanup during destruction - canvas pointer may be dangling
+    if (isDestroying || !canvas) {
+        // qDebug() << "Skipping cleanup - object is being destroyed or canvas is null";
+        return;
+    }
+    
     QString saveFolder = getSaveFolder();
     if (saveFolder.isEmpty()) return;
     
@@ -421,7 +433,11 @@ void PictureWindowManager::cleanupUnusedImages() {
 }
 
 void PictureWindowManager::clearCurrentPageWindows() {
-    if (!canvas) return;
+    // ✅ Safety check to prevent crashes during destruction
+    if (isDestroying || !canvas) {
+        // qDebug() << "clearCurrentPageWindows: destroying or canvas is null, skipping";
+        return;
+    }
     
     int currentPage = canvas->getLastActivePage();
     
@@ -569,13 +585,19 @@ QList<PictureWindow*> PictureWindowManager::loadPictureData(int pageNumber) {
 }
 
 QString PictureWindowManager::getSaveFolder() const {
-    QString result = canvas ? canvas->getSaveFolder() : QString();
+    // ✅ Extra safety check to prevent crashes during destruction
+    if (isDestroying || !canvas) {
+        // qDebug() << "PictureWindowManager::getSaveFolder() - destroying or canvas is null";
+        return QString();
+    }
+    
+    QString result = canvas->getSaveFolder();
     // qDebug() << "PictureWindowManager::getSaveFolder() returning:" << result;
     return result;
 }
 
 QString PictureWindowManager::getNotebookId() const {
-    if (!canvas) return QString();
+    if (isDestroying || !canvas) return QString();
     
     // Try to get notebook ID from JSON metadata first
     QString notebookId = canvas->getNotebookId();

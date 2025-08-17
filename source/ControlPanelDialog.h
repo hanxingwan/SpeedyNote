@@ -34,6 +34,7 @@ private slots:
     void removeKeyboardMapping();    // New: remove keyboard shortcut
     void openControllerMapping();    // New: open controller mapping dialog
     void reconnectController();      // New: reconnect controller
+    void selectFolderCompatibility(); // New: compatibility folder selection
 
 private:
     InkCanvas *canvas;
@@ -92,9 +93,14 @@ private:
     // About tab widgets
     QWidget *aboutTab;
     
+    // Compatibility tab widgets
+    QWidget *compatibilityTab;
+    QPushButton *selectFolderCompatibilityButton;
+    
     void createThemeTab();
     void chooseAccentColor();
     void createAboutTab();            // New: create about tab
+    void createCompatibilityTab();    // New: create compatibility tab
     void updateControllerStatus();    // Update controller connection status display
 };
 

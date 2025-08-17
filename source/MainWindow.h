@@ -280,6 +280,7 @@ public:
     void updateThicknessSliderForCurrentTool(); // Update thickness slider to reflect current tool's thickness
     void updatePdfTextSelectButtonState(); // Update PDF text selection button state when switching tabs
     void updateBookmarkButtonState(); // Update bookmark toggle button state
+    bool selectFolder(); // Select save folder - moved to public for ControlPanelDialog access, returns true on success
 
 private slots:
     void toggleBenchmark();
@@ -289,13 +290,13 @@ private slots:
     void updateThickness(int value); // New function for thickness control
     void adjustThicknessForZoom(int oldZoom, int newZoom); // Adjust thickness when zoom changes
     void changeTool(int index);
-    void selectFolder(); // Select save folder
     void saveCanvas(); // Save canvas to file
     void saveAnnotated();
     void deleteCurrentPage();
 
     void loadPdf();
     void clearPdf();
+    void handleSmartPdfButton(); // ✅ Smart PDF button that handles all PDF operations
 
     void updateZoom();
     void onZoomSliderChanged(int value); // Handle manual zoom slider changes
@@ -364,6 +365,8 @@ private slots:
     void updateStraightLineButtonState();
     void updateRopeToolButtonState(); // New slot for rope tool button
     void updateMarkdownButtonState();
+    
+    
 public slots:
     void updatePictureButtonState(); // Public slot for picture button state
 

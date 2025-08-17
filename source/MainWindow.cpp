@@ -46,7 +46,7 @@ QSharedMemory *MainWindow::sharedMemory = nullptr;
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false), localServer(nullptr) {
 
-    setWindowTitle(tr("SpeedyNote Beta 0.8.1"));
+    setWindowTitle(tr("SpeedyNote Beta 0.8.2"));
 
     // Enable IME support for multi-language input
     setAttribute(Qt::WA_InputMethodEnabled, true);
@@ -162,13 +162,14 @@ void MainWindow::setupUi() {
     clearPdfButton->setIcon(pdfDeleteIcon);
     loadPdfButton->setStyleSheet(buttonStyle);
     clearPdfButton->setStyleSheet(buttonStyle);
-    loadPdfButton->setToolTip(tr("Load PDF"));
+    loadPdfButton->setToolTip(tr("Manage PDF"));
     clearPdfButton->setToolTip(tr("Clear PDF"));
-    connect(loadPdfButton, &QPushButton::clicked, this, &MainWindow::loadPdf);
+    clearPdfButton->setVisible(false); // ✅ Hide clearPdfButton to save space
+    connect(loadPdfButton, &QPushButton::clicked, this, &MainWindow::handleSmartPdfButton);
     connect(clearPdfButton, &QPushButton::clicked, this, &MainWindow::clearPdf);
 
     pdfTextSelectButton = new QPushButton(this);
-    pdfTextSelectButton->setFixedSize(26, 30);
+    pdfTextSelectButton->setFixedSize(14, 30);
     QIcon pdfTextIcon(loadThemedIcon("ibeam"));
     pdfTextSelectButton->setIcon(pdfTextIcon);
     pdfTextSelectButton->setStyleSheet(buttonStyle);
@@ -243,6 +244,7 @@ void MainWindow::setupUi() {
     selectFolderButton->setIcon(folderIcon);
     selectFolderButton->setStyleSheet(buttonStyle);
     selectFolderButton->setToolTip(tr("Select Save Folder"));
+    selectFolderButton->setVisible(false); // ✅ Hide deprecated folder selection button
     connect(selectFolderButton, &QPushButton::clicked, this, &MainWindow::selectFolder);
     
     
@@ -251,7 +253,7 @@ void MainWindow::setupUi() {
     QIcon saveIcon(loadThemedIcon("save"));  // Path to your icon in resources
     saveButton->setIcon(saveIcon);
     saveButton->setStyleSheet(buttonStyle);
-    saveButton->setToolTip(tr("Save Current Page"));
+    saveButton->setToolTip(tr("Save Notebook"));
     connect(saveButton, &QPushButton::clicked, this, &MainWindow::saveCurrentPage);
     
     saveAnnotatedButton = new QPushButton(this);
@@ -514,7 +516,7 @@ void MainWindow::setupUi() {
     });
     
     deletePageButton = new QPushButton(this);
-    deletePageButton->setFixedSize(26, 30);
+    deletePageButton->setFixedSize(22, 30);
     QIcon trashIcon(loadThemedIcon("trash"));  // Path to your icon in resources
     deletePageButton->setIcon(trashIcon);
     deletePageButton->setStyleSheet(buttonStyle);
@@ -824,14 +826,14 @@ void MainWindow::setupUi() {
 
     // Previous page button
     prevPageButton = new QPushButton(this);
-    prevPageButton->setFixedSize(26, 30);
+    prevPageButton->setFixedSize(24, 30);
     prevPageButton->setText("◀");
     prevPageButton->setStyleSheet(buttonStyle);
     prevPageButton->setToolTip(tr("Previous Page"));
     connect(prevPageButton, &QPushButton::clicked, this, &MainWindow::goToPreviousPage);
 
     pageInput = new QSpinBox(this);
-    pageInput->setFixedSize(42, 30);
+    pageInput->setFixedSize(36, 30);
     pageInput->setMinimum(1);
     pageInput->setMaximum(9999);
     pageInput->setValue(1);
@@ -840,7 +842,7 @@ void MainWindow::setupUi() {
 
     // Next page button
     nextPageButton = new QPushButton(this);
-    nextPageButton->setFixedSize(26, 30);
+    nextPageButton->setFixedSize(24, 30);
     nextPageButton->setText("▶");
     nextPageButton->setStyleSheet(buttonStyle);
     nextPageButton->setToolTip(tr("Next Page"));
@@ -1356,7 +1358,7 @@ void MainWindow::updateThicknessSliderForCurrentTool() {
     thicknessSlider->blockSignals(false);
 }
 
-void MainWindow::selectFolder() {
+bool MainWindow::selectFolder() {
     QString folder = QFileDialog::getExistingDirectory(this, tr("Select Save Folder"));
     if (!folder.isEmpty()) {
         InkCanvas *canvas = currentCanvas();
@@ -1376,7 +1378,7 @@ void MainWindow::selectFolder() {
             );
             
             if (reply == QMessageBox::Cancel) {
-                return; // User cancelled
+                return false; // User cancelled
             }
             
             QString finalPath = folder;
@@ -1399,7 +1401,7 @@ void MainWindow::selectFolder() {
             if (SpnPackageManager::isSpnPackage(finalPath)) {
                 if (!canvas->handleMissingPdf(this)) {
                     // User cancelled PDF relinking, don't continue
-                    return;
+                    return false;
                 }
             }
             
@@ -1415,8 +1417,10 @@ void MainWindow::selectFolder() {
         updateTabLabel();
             updateBookmarkButtonState(); // ✅ Update bookmark button state after loading notebook
             recentNotebooksManager->addRecentNotebook(canvas->getDisplayPath(), canvas); // Track the display path
-        }
     }
+        return true; // Success
+    }
+    return false; // User cancelled folder selection or no canvas available
 }
 
 void MainWindow::saveCanvas() {
@@ -1517,7 +1521,76 @@ void MainWindow::deleteCurrentPage() {
 }
 
 void MainWindow::saveCurrentPage() {
-    currentCanvas()->saveToFile(getCurrentPageForCanvas(currentCanvas()));
+    InkCanvas *canvas = currentCanvas();
+    if (!canvas) return;
+    
+    QString currentFolder = canvas->getSaveFolder();
+    QString tempFolder = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/temp_session";
+    
+    // ✅ Check if canvas is in temporary directory (not yet saved to .spn)
+    if (currentFolder.isEmpty() || currentFolder == tempFolder) {
+        // ✅ FIRST: Save the current page to temp folder (like pressing old save button)
+        // This ensures the current page is included in the .spn conversion
+        int currentPageNumber = getCurrentPageForCanvas(canvas);
+        canvas->saveToFile(currentPageNumber);
+        
+        // ✅ Also save markdown windows for the current page
+        if (canvas->getMarkdownManager()) {
+            canvas->getMarkdownManager()->saveWindowsForPage(currentPageNumber);
+        }
+        
+        // ✅ THEN: Check if there are any pages to save
+        QDir sourceDir(tempFolder);
+        QStringList pageFiles = sourceDir.entryList(QStringList() << "*.png", QDir::Files);
+
+        if (pageFiles.isEmpty()) {
+            QMessageBox::information(this, tr("Nothing to Save"), 
+                tr("There are no pages to save in this notebook."));
+            return;
+        }
+        
+        // Canvas is in temp directory - show Save As dialog directly
+        QString suggestedName = "MyNotebook.spn";
+        QString selectedSpnPath = QFileDialog::getSaveFileName(this, 
+            tr("Save SpeedyNote Package"), 
+            suggestedName, 
+            "SpeedyNote Package (*.spn)");
+            
+        if (selectedSpnPath.isEmpty()) {
+            // User cancelled save dialog
+            return;
+        }
+
+        // Ensure .spn extension
+        if (!selectedSpnPath.toLower().endsWith(".spn")) {
+            selectedSpnPath += ".spn";
+        }
+
+        // Create .spn package from temp folder contents
+        if (!SpnPackageManager::convertFolderToSpnPath(tempFolder, selectedSpnPath)) {
+            QMessageBox::critical(this, tr("Save Failed"), 
+                tr("Failed to save the notebook as a SpeedyNote Package.\nPlease try again or choose a different location."));
+            return;
+        }
+
+        // Update canvas to use the new .spn package
+        canvas->setSaveFolder(selectedSpnPath);
+        
+        // Update tab label to reflect the new save location
+        updateTabLabel();
+        
+        // Show success message
+        QMessageBox::information(this, tr("Saved"), 
+            tr("Notebook saved successfully as: %1").arg(QFileInfo(selectedSpnPath).fileName()));
+            
+    } else {
+        // Canvas is already tied to an .spn file - normal save behavior
+        canvas->saveToFile(getCurrentPageForCanvas(canvas));
+        
+        // Show brief confirmation for normal saves
+        QMessageBox::information(this, tr("Saved"), 
+            tr("Current page saved successfully."));
+    }
 }
 
 void MainWindow::saveCurrentPageConcurrent() {
@@ -1736,7 +1809,7 @@ void MainWindow::loadPdf() {
         // ✅ Load the current page to display the PDF immediately
         int currentPage = getCurrentPageForCanvas(currentCanvas());
         currentCanvas()->loadPdfPage(currentPage);
-        
+
         updateTabLabel(); // ✅ Update the tab name after assigning a PDF
         updateZoom(); // ✅ Update zoom and pan range after PDF is loaded
         
@@ -1767,6 +1840,52 @@ void MainWindow::clearPdf() {
     // ✅ Clear PDF outline if sidebar is visible
     if (outlineSidebarVisible) {
         loadPdfOutline(); // This will clear the outline since no PDF is loaded
+    }
+}
+
+void MainWindow::handleSmartPdfButton() {
+    InkCanvas *canvas = currentCanvas();
+    if (!canvas) return;
+    
+    QString currentFolder = canvas->getSaveFolder();
+    QString tempFolder = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/temp_session";
+    
+    // ✅ 1. Check if tab is not saved to .spn file - warn user
+    if (currentFolder.isEmpty() || currentFolder == tempFolder) {
+        QMessageBox::warning(this, tr("Cannot Manage PDF"), 
+            tr("Please save this notebook as a SpeedyNote Package (.spn) file before managing PDF.\n\n"
+               "Click the Save button to save your notebook first."));
+        return;
+    }
+    
+    // ✅ 2. Check if PDF is already loaded
+    bool hasPdf = canvas->isPdfLoadedFunc();
+    
+    if (!hasPdf) {
+        // ✅ 3. No PDF loaded - act like old loadPdfButton
+        loadPdf();
+    } else {
+        // ✅ 4. PDF already loaded - show Replace/Delete dialog
+        QMessageBox msgBox(this);
+        msgBox.setWindowTitle(tr("PDF Management"));
+        msgBox.setText(tr("A PDF is already loaded in this notebook."));
+        msgBox.setInformativeText(tr("What would you like to do?"));
+        
+        QPushButton *replaceButton = msgBox.addButton(tr("Replace PDF"), QMessageBox::ActionRole);
+        QPushButton *deleteButton = msgBox.addButton(tr("Remove PDF"), QMessageBox::DestructiveRole);
+        QPushButton *cancelButton = msgBox.addButton(QMessageBox::Cancel);
+        
+        msgBox.setDefaultButton(replaceButton);
+        msgBox.exec();
+        
+        if (msgBox.clickedButton() == replaceButton) {
+            // Replace PDF - call loadPdf which will replace the existing one
+            loadPdf();
+        } else if (msgBox.clickedButton() == deleteButton) {
+            // Delete PDF - call clearPdf
+            clearPdf();
+        }
+        // If Cancel, do nothing
     }
 }
 
@@ -1887,32 +2006,38 @@ void MainWindow::addNewTab() {
     // ✅ Handle tab closing when the button is clicked
     connect(closeButton, &QPushButton::clicked, this, [=]() { // newCanvas is now captured
 
-        // Find the index of the tab associated with this button's parent (tabWidget)
+        // ✅ Prevent multiple executions by disabling the button immediately
+        closeButton->setEnabled(false);
+        
+        // ✅ Safety check: Ensure the canvas still exists and is in the stack
+        if (!newCanvas || !canvasStack) {
+            qWarning() << "Canvas or canvas stack is null during tab close";
+            closeButton->setEnabled(true); // Re-enable on error
+            return;
+        }
+
+        // ✅ Find the index by directly searching for the canvas in canvasStack
+        // This is more reliable than trying to correlate tabList and canvasStack
         int indexToRemove = -1;
-        // newCanvas is captured by the lambda, representing the canvas of the tab being closed.
-        // tabWidget is also captured.
-        for (int i = 0; i < tabList->count(); ++i) {
-            if (tabList->itemWidget(tabList->item(i)) == tabWidget) {
+        for (int i = 0; i < canvasStack->count(); ++i) {
+            if (canvasStack->widget(i) == newCanvas) {
                 indexToRemove = i;
                 break;
             }
         }
 
         if (indexToRemove == -1) {
-            qWarning() << "Could not find tab to remove based on tabWidget.";
-            // Fallback or error handling if needed, though this shouldn't happen if tabWidget is valid.
-            // As a fallback, try to find the index based on newCanvas if lists are in sync.
-            for (int i = 0; i < canvasStack->count(); ++i) {
-                if (canvasStack->widget(i) == newCanvas) {
-                    indexToRemove = i;
-                    break;
-                }
-            }
-            if (indexToRemove == -1) {
-                 qWarning() << "Could not find tab to remove based on newCanvas either.";
-                 return; // Critical error, cannot proceed.
-            }
+            qWarning() << "Could not find canvas in canvasStack during tab close";
+            closeButton->setEnabled(true); // Re-enable on error
+            return; // Critical error, cannot proceed.
         }
+        
+        // ✅ Verify that tabList and canvasStack are in sync
+        if (indexToRemove >= tabList->count()) {
+            qWarning() << "Tab lists are out of sync! Canvas index:" << indexToRemove << "Tab count:" << tabList->count();
+            closeButton->setEnabled(true); // Re-enable on error
+                return;
+            }
         
         // At this point, newCanvas is the InkCanvas instance for the tab being closed.
         // And indexToRemove is its index in tabList and canvasStack.
@@ -1926,25 +2051,35 @@ void MainWindow::addNewTab() {
             if (newCanvas->getMarkdownManager()) {
                 newCanvas->getMarkdownManager()->saveWindowsForPage(pageNumber);
             }
+            
+            // ✅ Mark as not edited to prevent double-saving in destructor
+            newCanvas->setEdited(false);
         }
         
         // ✅ Save the last accessed page and bookmarks before closing tab
         if (newCanvas) {
-            int currentPage = getCurrentPageForCanvas(newCanvas);
-            newCanvas->setLastAccessedPage(currentPage);
-            
-            // ✅ Save current bookmarks to JSON metadata
-            saveBookmarks();
+            // ✅ Additional safety check before accessing canvas methods
+            try {
+                int currentPage = getCurrentPageForCanvas(newCanvas);
+                newCanvas->setLastAccessedPage(currentPage);
+                
+                // ✅ Save current bookmarks to JSON metadata
+                saveBookmarks();
+            } catch (...) {
+                qWarning() << "Exception occurred while saving last accessed page";
+            }
         }
 
         // ✅ 1. PRIORITY: Handle saving first - user can cancel here
         if (!ensureTabHasUniqueSaveFolder(newCanvas)) {
+            closeButton->setEnabled(true); // Re-enable on cancellation
             return; // User cancelled saving, don't close tab
         }
 
         // ✅ 2. ONLY AFTER SAVING: Check if it's the last remaining tab
         if (tabList->count() <= 1) {
             QMessageBox::information(this, tr("Notice"), tr("At least one tab must remain open."));
+            closeButton->setEnabled(true); // Re-enable if can't close last tab
             return;
         }
 
@@ -2106,7 +2241,7 @@ void MainWindow::removeTabAt(int index) {
         //         recentNotebooksManager->addRecentNotebook(folderPath, canvasInstance); // Moved to close button lambda
         //     }
         // }
-        delete canvasWidget; // Now delete the widget (and its InkCanvas)
+        canvasWidget->deleteLater(); // ✅ Use deleteLater() for safer deletion
     }
 
     // ✅ Select the previous tab (or first tab if none left)
@@ -2231,7 +2366,7 @@ void MainWindow::updateTabLabel() {
             tabName = elideTabText(spnInfo.fileName(), 90); // e.g., "MyNotebook.spn" (elided)
         } else {
             // For regular folders, use the folder name
-            QFileInfo folderInfo(folderPath);
+        QFileInfo folderInfo(folderPath);
             tabName = elideTabText(folderInfo.fileName(), 90); // e.g., "MyNotebook" (elided)
         }
     }
@@ -4117,14 +4252,14 @@ void MainWindow::openPdfFile(const QString &pdfPath) {
         QMessageBox::warning(this, tr("File Not Found"), tr("The PDF file could not be found:\n%1").arg(pdfPath));
         return;
     }
-    
+
     // First, check if there's already a valid notebook folder for this PDF
     QString existingFolderPath;
     if (PdfOpenDialog::hasValidNotebookFolder(pdfPath, existingFolderPath)) {
         // Found a valid notebook folder, open it directly without showing dialog
-        InkCanvas *canvas = currentCanvas();
-        if (!canvas) return;
-        
+    InkCanvas *canvas = currentCanvas();
+    if (!canvas) return;
+
         // Save current work if edited
         if (canvas->isEdited()) {
             saveCurrentPage();
@@ -4793,7 +4928,7 @@ void MainWindow::updateToolbarLayout() {
     int scaledWidth = width();
     
     // Dynamic threshold based on zoom button visibility
-    int threshold = areZoomButtonsVisible() ? 1474 : 1364;
+    int threshold = areZoomButtonsVisible() ? 1388 : 1278;
     
     // Debug output to understand what's happening
     // qDebug() << "Window width:" << scaledWidth << "Threshold:" << threshold << "Zoom buttons visible:" << areZoomButtonsVisible();
