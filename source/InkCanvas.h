@@ -327,6 +327,9 @@ public:
 private:
     // ✅ Migration from old txt files to JSON
     void migrateOldMetadataFiles();
+    
+    // ✅ Clipboard image paste functionality
+    QString pasteImageFromClipboard(); // Returns path to saved clipboard image or empty string on failure
 
     int pdfRenderDPI = 192;  // Default to 288 DPI
 

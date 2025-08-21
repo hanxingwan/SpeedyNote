@@ -36,6 +36,7 @@ ControlPanelDialog::ControlPanelDialog(MainWindow *mainWindow, InkCanvas *target
     createButtonMappingTab();
     createControllerMappingTab();
     createKeyboardMappingTab();
+    createMouseDialTab();
     createThemeTab();
     createCompatibilityTab();
     createAboutTab();
@@ -146,6 +147,13 @@ void ControlPanelDialog::applyChanges() {
         
         // ✅ Apply color palette setting
         mainWindowRef->setUseBrighterPalette(useBrighterPaletteCheckbox->isChecked());
+        
+        // ✅ Apply mouse dial mappings
+        for (const QString &combination : mouseDialMappingCombos.keys()) {
+            QString displayString = mouseDialMappingCombos[combination]->currentText();
+            QString internalKey = ButtonMappingHelper::displayToInternalKey(displayString, true); // true = isDialMode
+            mainWindowRef->setMouseDialMapping(combination, internalKey);
+        }
     }
 }
 
@@ -182,6 +190,14 @@ void ControlPanelDialog::loadFromCanvas() {
         
         // Load color palette setting
         useBrighterPaletteCheckbox->setChecked(mainWindowRef->isUsingBrighterPalette());
+        
+        // Load mouse dial mappings
+        for (const QString &combination : mouseDialMappingCombos.keys()) {
+            QString internalKey = mainWindowRef->getMouseDialMapping(combination);
+            QString displayString = ButtonMappingHelper::internalKeyToDisplay(internalKey, true); // true = isDialMode
+            int index = mouseDialMappingCombos[combination]->findText(displayString);
+            if (index >= 0) mouseDialMappingCombos[combination]->setCurrentIndex(index);
+        }
     }
 }
 
@@ -348,6 +364,84 @@ void ControlPanelDialog::createKeyboardMappingTab() {
     }
     
     tabWidget->addTab(keyboardTab, tr("Keyboard Shortcuts"));
+}
+
+void ControlPanelDialog::createMouseDialTab() {
+    mouseDialTab = new QWidget(this);
+    QVBoxLayout *layout = new QVBoxLayout(mouseDialTab);
+    
+    // Instructions
+    QLabel *instructionLabel = new QLabel(tr("Configure mouse button combinations for dial control:"), mouseDialTab);
+    instructionLabel->setWordWrap(true);
+    layout->addWidget(instructionLabel);
+    
+    QLabel *usageLabel = new QLabel(tr("Hold mouse button combination for 0.5+ seconds, then use mouse wheel to control the dial."), mouseDialTab);
+    usageLabel->setWordWrap(true);
+    usageLabel->setStyleSheet("color: gray; font-size: 11px; margin-bottom: 15px;");
+    layout->addWidget(usageLabel);
+    
+    // Available combinations and their mappings
+    QStringList combinations = {
+        tr("Right Button"),
+        tr("Side Button 1"),  
+        tr("Side Button 2"),
+        tr("Right + Side 1"),
+        tr("Right + Side 2"),
+        tr("Side 1 + Side 2")
+    };
+    
+    QStringList internalCombinations = {
+        "Right",
+        "Side1",
+        "Side2", 
+        "Right+Side1",
+        "Right+Side2",
+        "Side1+Side2"
+    };
+    
+    QStringList dialModes = ButtonMappingHelper::getTranslatedDialModes();
+    
+    for (int i = 0; i < combinations.size(); ++i) {
+        const QString &combination = combinations[i];
+        const QString &internalCombination = internalCombinations[i];
+        
+        QHBoxLayout *h = new QHBoxLayout();
+        
+        QLabel *label = new QLabel(combination + ":", mouseDialTab);
+        label->setMinimumWidth(120);
+        h->addWidget(label);
+        
+        QComboBox *combo = new QComboBox(mouseDialTab);
+        combo->addItems(dialModes);
+        mouseDialMappingCombos[internalCombination] = combo;
+        h->addWidget(combo);
+        
+        h->addStretch(); // Push everything to the left
+        layout->addLayout(h);
+    }
+    
+    // Add some spacing
+    layout->addSpacing(20);
+    
+    // Step size information
+    QLabel *stepLabel = new QLabel(tr("Mouse wheel step sizes per dial mode:"), mouseDialTab);
+    stepLabel->setStyleSheet("font-weight: bold;");
+    layout->addWidget(stepLabel);
+    
+    QLabel *stepInfo = new QLabel(
+        tr("• Page Switching: 45° per wheel step (8 pages per rotation)\n"
+           "• Color Presets: 60° per wheel step (6 presets per rotation)\n" 
+           "• Zoom Control: 30° per wheel step (12 steps per rotation)\n"
+           "• Thickness: 20° per wheel step (18 steps per rotation)\n"
+           "• Tool Switching: 90° per wheel step (4 tools per rotation)\n"
+           "• Pan & Scroll: 15° per wheel step (24 steps per rotation)"), mouseDialTab);
+    stepInfo->setWordWrap(true);
+    stepInfo->setStyleSheet("color: gray; font-size: 10px; margin: 5px 0px 15px 15px;");
+    layout->addWidget(stepInfo);
+    
+    layout->addStretch();
+    
+    tabWidget->addTab(mouseDialTab, tr("Mouse Dial Control"));
 }
 
 void ControlPanelDialog::createThemeTab() {
@@ -635,7 +729,7 @@ void ControlPanelDialog::createAboutTab() {
     layout->addSpacing(5);
     
     // Version
-    QLabel *versionLabel = new QLabel(tr("Version 0.8.2"), aboutTab);
+    QLabel *versionLabel = new QLabel(tr("Version 0.8.3"), aboutTab);
     versionLabel->setAlignment(Qt::AlignCenter);
     versionLabel->setStyleSheet("font-size: 14px; color: #7f8c8d;");
     layout->addWidget(versionLabel);

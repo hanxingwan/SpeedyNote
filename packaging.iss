@@ -1,7 +1,7 @@
 ; SpeedyNote Inno Setup Script
 [Setup]
 AppName=SpeedyNote
-AppVersion=0.8.2
+AppVersion=0.8.3
 DefaultDirName={autopf}\SpeedyNote
 DefaultGroupName=SpeedyNote
 OutputBaseFilename=SpeedyNoteInstaller
