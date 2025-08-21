@@ -433,7 +433,7 @@ void ControlPanelDialog::createMouseDialTab() {
            "• Color Presets: 60° per wheel step (6 presets per rotation)\n" 
            "• Zoom Control: 30° per wheel step (12 steps per rotation)\n"
            "• Thickness: 20° per wheel step (18 steps per rotation)\n"
-           "• Tool Switching: 90° per wheel step (4 tools per rotation)\n"
+           "• Tool Switching: 120° per wheel step (3 tools per rotation)\n"
            "• Pan & Scroll: 15° per wheel step (24 steps per rotation)"), mouseDialTab);
     stepInfo->setWordWrap(true);
     stepInfo->setStyleSheet("color: gray; font-size: 10px; margin: 5px 0px 15px 15px;");
