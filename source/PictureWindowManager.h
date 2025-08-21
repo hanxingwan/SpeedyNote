@@ -48,6 +48,8 @@ public:
     QString copyImageToNotebook(const QString &sourcePath, int pageNumber);
     void cleanupUnusedImages();
     void clearCurrentPageWindows(); // Clear all pictures from current page
+    QString getSaveFolder() const;
+    QString getNotebookId() const;
 
 signals:
     void windowCreated(PictureWindow *window);
@@ -63,8 +65,8 @@ private:
     void savePictureData(int pageNumber, const QList<PictureWindow*> &windows);
     QList<PictureWindow*> loadPictureData(int pageNumber);
     
-    QString getSaveFolder() const;
-    QString getNotebookId() const;
+    
+    
     QString generateImageFileName(const QString &originalPath, int pageNumber);
     
     void connectWindowSignals(PictureWindow *window);

@@ -28,6 +28,12 @@
 #include <QPainterPath>
 #include <QTimer>
 #include <QAction>
+#include <QClipboard>
+#include <QMimeData>
+#include <QBuffer>
+#include <QMessageBox>
+#include <QStandardPaths>
+#include <QUuid>
 
 #include <QtConcurrent/QtConcurrentRun>
 #include <QFuture>
@@ -1320,6 +1326,62 @@ void InkCanvas::mousePressEvent(QMouseEvent *event) {
         }
         if (mainWindow) {
             mainWindow->updatePictureButtonState();
+        }
+        
+        event->accept();
+        return;
+    }
+    
+    // ✅ NEW FEATURE: Handle right-click for clipboard paste when picture selection mode is active
+    if (pictureSelectionMode && event->button() == Qt::RightButton) {
+        // qDebug() << "InkCanvas::mousePressEvent() - Right-click in picture selection mode!";
+        
+        pictureSelecting = true;
+        pictureSelectionStart = event->pos();
+        
+        // Try to paste image from clipboard
+        QString clipboardImagePath = pasteImageFromClipboard();
+        
+        if (!clipboardImagePath.isEmpty()) {
+            // Create picture window with clipboard image
+            if (pictureManager) {
+                int currentPage = getLastActivePage();
+                
+                // Create picture window at clicked position
+                QRect initialRect(pictureSelectionStart, QSize(200, 150));
+                
+                PictureWindow* window = pictureManager->createPictureWindow(initialRect, clipboardImagePath);
+                
+                if (window) {
+                    // Save pictures for current page
+                    pictureManager->saveWindowsForPage(currentPage);
+                    
+                    // Disable picture selection mode after successful paste
+                    setPictureSelectionMode(false);
+                    
+                    // Update the main window button state
+                    MainWindow *mainWindow = qobject_cast<MainWindow*>(parent());
+                    if (!mainWindow) {
+                        // Try to find MainWindow through the widget hierarchy
+                        QWidget *current = this;
+                        while (current && !mainWindow) {
+                            current = current->parentWidget();
+                            mainWindow = qobject_cast<MainWindow*>(current);
+                        }
+                    }
+                    
+                    if (mainWindow) {
+                        mainWindow->updatePictureButtonState();
+                    }
+                    
+                    // ✅ CACHE FIX: Invalidate note cache when pictures are added
+                    invalidateCurrentPageCache();
+                    
+                    // Show brief success message
+                    QMessageBox::information(this, tr("Image Pasted"), 
+                        tr("Image from clipboard pasted successfully."));
+                }
+            }
         }
         
         event->accept();
@@ -3652,6 +3714,128 @@ void InkCanvas::handlePictureMouseMove(QMouseEvent *event) {
     
     // ✅ PERFORMANCE: Don't emit signals during movement - only on release
     // This prevents redundant saves and updates during dragging
+}
+
+// ✅ NEW FEATURE: Paste image from clipboard and save to notebook
+QString InkCanvas::pasteImageFromClipboard() {
+    // qDebug() << "InkCanvas::pasteImageFromClipboard() called";
+    
+    // Get the clipboard
+    QClipboard *clipboard = QApplication::clipboard();
+    if (!clipboard) {
+        qWarning() << "Failed to access clipboard";
+        QMessageBox::warning(this, tr("Clipboard Error"), 
+            tr("Failed to access system clipboard."));
+        return QString();
+    }
+    
+    const QMimeData *mimeData = clipboard->mimeData();
+    if (!mimeData) {
+        // qDebug() << "No mime data in clipboard";
+        QMessageBox::information(this, tr("No Clipboard Data"), 
+            tr("No data found in clipboard."));
+        return QString();
+    }
+    
+    // Check if clipboard contains image data
+    QImage clipboardImage;
+    
+    if (mimeData->hasImage()) {
+        // Direct image data
+        QVariant imageData = mimeData->imageData();
+        clipboardImage = qvariant_cast<QImage>(imageData);
+        // qDebug() << "Found image data in clipboard, size:" << clipboardImage.size();
+    } else if (mimeData->hasUrls()) {
+        // Check if any URLs point to image files
+        QList<QUrl> urls = mimeData->urls();
+        for (const QUrl &url : urls) {
+            if (url.isLocalFile()) {
+                QString filePath = url.toLocalFile();
+                QFileInfo fileInfo(filePath);
+                
+                // Check if it's an image file
+                QStringList imageExtensions = {"png", "jpg", "jpeg", "bmp", "gif", "tiff", "webp"};
+                if (imageExtensions.contains(fileInfo.suffix().toLower())) {
+                    clipboardImage.load(filePath);
+                    if (!clipboardImage.isNull()) {
+                        // qDebug() << "Loaded image from URL:" << filePath;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    
+    // Check if we successfully got an image
+    if (clipboardImage.isNull()) {
+        // qDebug() << "No valid image found in clipboard";
+        QMessageBox::information(this, tr("No Image in Clipboard"), 
+            tr("No image data found in clipboard.\n\nPlease copy an image to the clipboard first."));
+        return QString();
+    }
+    
+    // Validate image size (prevent extremely large images)
+    if (clipboardImage.width() > 8192 || clipboardImage.height() > 8192) {
+        QMessageBox::warning(this, tr("Image Too Large"), 
+            tr("The clipboard image is too large (max 8192x8192 pixels).\n\nPlease use a smaller image."));
+        return QString();
+    }
+    
+    // Get save folder from picture manager
+    QString saveFolder;
+    if (pictureManager) {
+        saveFolder = pictureManager->getSaveFolder();
+    }
+    
+    if (saveFolder.isEmpty()) {
+        // qDebug() << "No save folder available";
+        QMessageBox::warning(this, tr("No Notebook Open"), 
+            tr("Please save your notebook as a SpeedyNote Package (.spn) file before pasting images."));
+        return QString();
+    }
+    
+    // Generate unique filename for clipboard image
+    QString timestamp = QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss_zzz");
+    QString uniqueId = QUuid::createUuid().toString().mid(1, 8); // Remove braces and take first 8 chars
+    int currentPage = getLastActivePage();
+    
+    // Get notebook ID for consistent naming
+    QString notebookId = "notebook"; // Default fallback
+    if (pictureManager) {
+        QString managerId = pictureManager->getNotebookId();
+        if (!managerId.isEmpty()) {
+            notebookId = managerId;
+        }
+    }
+    
+    QString filename = QString("%1_clipboard_p%2_%3_%4.png")
+                      .arg(notebookId)
+                      .arg(currentPage, 5, 10, QChar('0'))
+                      .arg(timestamp)
+                      .arg(uniqueId);
+    
+    QString targetPath = saveFolder + "/" + filename;
+    
+    // qDebug() << "Saving clipboard image to:" << targetPath;
+    
+    // Save the image as PNG (lossless, good for clipboard content)
+    bool saved = clipboardImage.save(targetPath, "PNG", 95); // High quality PNG
+    
+    if (!saved) {
+        qWarning() << "Failed to save clipboard image to:" << targetPath;
+        QMessageBox::critical(this, tr("Save Error"), 
+            tr("Failed to save clipboard image to notebook.\n\nPath: %1").arg(targetPath));
+        return QString();
+    }
+    
+    // qDebug() << "Successfully saved clipboard image";
+    
+    #ifdef Q_OS_WIN
+    // Set hidden attribute on Windows for consistency with other notebook files
+    // SetFileAttributesW(reinterpret_cast<const wchar_t *>(targetPath.utf16()), FILE_ATTRIBUTE_HIDDEN);
+    #endif
+    
+    return targetPath;
 }
 
 void InkCanvas::handlePictureMouseRelease(QMouseEvent *event) {

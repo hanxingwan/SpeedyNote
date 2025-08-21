@@ -73,12 +73,17 @@ private:
     void createButtonMappingTab();
     void createControllerMappingTab(); // New: create controller mapping tab
     void createKeyboardMappingTab();  // New: keyboard mapping tab
+    void createMouseDialTab();        // New: mouse dial control tab
 
     // Keyboard mapping widgets
     QWidget *keyboardTab;
     QTableWidget *keyboardTable;
     QPushButton *addKeyboardMappingButton;
     QPushButton *removeKeyboardMappingButton;
+    
+    // Mouse dial control widgets
+    QWidget *mouseDialTab;
+    QMap<QString, QComboBox*> mouseDialMappingCombos;
     
     // Theme widgets
     QWidget *themeTab;

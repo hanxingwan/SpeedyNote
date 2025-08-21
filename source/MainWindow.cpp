@@ -33,6 +33,9 @@
 #include <QFutureWatcher>
 #include <QInputMethod>
 #include <QInputMethodEvent>
+#include <QSet>
+#include <QWheelEvent>
+#include <QTimer>
 // #include "HandwritingLineEdit.h"
 #include "ControlPanelDialog.h"
 #include "SDLControllerManager.h"
@@ -46,7 +49,7 @@ QSharedMemory *MainWindow::sharedMemory = nullptr;
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false), localServer(nullptr) {
 
-    setWindowTitle(tr("SpeedyNote Beta 0.8.2"));
+    setWindowTitle(tr("SpeedyNote Beta 0.8.3"));
 
     // Enable IME support for multi-language input
     setAttribute(Qt::WA_InputMethodEnabled, true);
@@ -88,6 +91,16 @@ MainWindow::MainWindow(QWidget *parent)
     controllerThread = new QThread(this);
 
     controllerManager->moveToThread(controllerThread);
+    
+    // ✅ Initialize mouse dial control system
+    mouseDialTimer = new QTimer(this);
+    mouseDialTimer->setSingleShot(true);
+    mouseDialTimer->setInterval(500); // 0.5 seconds
+    connect(mouseDialTimer, &QTimer::timeout, this, [this]() {
+        if (!pressedMouseButtons.isEmpty()) {
+            startMouseDialMode(mouseButtonCombinationToString(pressedMouseButtons));
+        }
+    });
     connect(controllerThread, &QThread::started, controllerManager, &SDLControllerManager::start);
     connect(controllerThread, &QThread::finished, controllerManager, &SDLControllerManager::deleteLater);
 
@@ -2589,6 +2602,7 @@ void MainWindow::toggleDial() {
     }
 
     loadButtonMappings();  // ✅ Load button mappings for the controller
+    loadMouseDialMappings(); // ✅ Load mouse dial mappings
 
     // Update button state to reflect dial visibility
     updateDialButtonState();
@@ -2940,6 +2954,9 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
         else if (event->type() == QEvent::MouseButtonPress) {
             QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
             
+            // ✅ Don't handle BackButton/ForwardButton here anymore - handled by mouse dial system
+            // They will handle short press page navigation and long press dial mode
+            /*
             // Mouse button 4 (Back button) - Previous page
             if (mouseEvent->button() == Qt::BackButton) {
                 if (prevPageButton) {
@@ -2954,9 +2971,16 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
                 }
                 return true; // Consume the event
             }
+            */
+            // ✅ Don't handle ExtraButton1/ExtraButton2 here anymore - handled by mouse dial system
         }
         // Handle wheel events for scrolling
         else if (event->type() == QEvent::Wheel) {
+            // ✅ Don't handle wheel events if mouse dial mode is active
+            if (mouseDialModeActive) {
+                return false; // Let the main window wheelEvent handle it
+            }
+            
             QWheelEvent* wheelEvent = static_cast<QWheelEvent*>(event);
             
             // Check if we need scrolling
@@ -6247,4 +6271,201 @@ void MainWindow::openFileInNewTab(const QString &filePath)
     } else if (filePath.toLower().endsWith(".spn")) {
         openSpnPackage(filePath);
     }
+}
+
+// ✅ MOUSE DIAL CONTROL IMPLEMENTATION
+
+void MainWindow::mousePressEvent(QMouseEvent *event) {
+    // Only track side buttons and right button for dial combinations
+    if (event->button() == Qt::RightButton || 
+        event->button() == Qt::BackButton || 
+        event->button() == Qt::ForwardButton) {
+        
+        pressedMouseButtons.insert(event->button());
+        
+        // Start timer for long press detection
+        if (!mouseDialTimer->isActive()) {
+            mouseDialTimer->start();
+        }
+    }
+    
+    QMainWindow::mousePressEvent(event);
+}
+
+void MainWindow::mouseReleaseEvent(QMouseEvent *event) {
+    if (pressedMouseButtons.contains(event->button())) {
+        // Check if this was a short press (timer still running) for page navigation
+        bool wasShortPress = mouseDialTimer->isActive();
+        
+        pressedMouseButtons.remove(event->button());
+        
+        // If this was the last button released and we're in dial mode, stop it
+        if (pressedMouseButtons.isEmpty()) {
+            mouseDialTimer->stop();
+            if (mouseDialModeActive) {
+                stopMouseDialMode();
+            } else if (wasShortPress) {
+                // Handle short press page navigation for side buttons only
+                if (event->button() == Qt::BackButton) {
+                    goToPreviousPage();
+                } else if (event->button() == Qt::ForwardButton) {
+                    goToNextPage();
+                }
+            }
+        }
+    }
+    
+    QMainWindow::mouseReleaseEvent(event);
+}
+
+void MainWindow::wheelEvent(QWheelEvent *event) {
+    // Only handle wheel events if mouse dial mode is active
+    if (mouseDialModeActive) {
+        handleMouseWheelDial(event->angleDelta().y());
+        event->accept();
+        return;
+    }
+    
+    QMainWindow::wheelEvent(event);
+}
+
+QString MainWindow::mouseButtonCombinationToString(const QSet<Qt::MouseButton> &buttons) const {
+    QStringList buttonNames;
+    
+    if (buttons.contains(Qt::RightButton)) {
+        buttonNames << "Right";
+    }
+    if (buttons.contains(Qt::BackButton)) {
+        buttonNames << "Side1";
+    }
+    if (buttons.contains(Qt::ForwardButton)) {
+        buttonNames << "Side2";
+    }
+    
+    // Sort to ensure consistent combination strings
+    buttonNames.sort();
+    return buttonNames.join("+");
+}
+
+void MainWindow::startMouseDialMode(const QString &combination) {
+    if (mouseDialMappings.contains(combination)) {
+        QString dialModeKey = mouseDialMappings[combination];
+        DialMode mode = dialModeFromString(dialModeKey);
+        
+        mouseDialModeActive = true;
+        currentMouseDialCombination = combination;
+        setTemporaryDialMode(mode);
+        
+        // Show brief tooltip to indicate mode activation
+        QToolTip::showText(QCursor::pos(), 
+            tr("Mouse Dial: %1").arg(ButtonMappingHelper::internalKeyToDisplay(dialModeKey, true)),
+            this, QRect(), 1500);
+    }
+}
+
+void MainWindow::stopMouseDialMode() {
+    if (mouseDialModeActive) {
+        // ✅ Trigger the appropriate dial release function before stopping
+        if (pageDial) {
+            // Emit the sliderReleased signal to trigger the current mode's release function
+            emit pageDial->sliderReleased();
+        }
+        
+        mouseDialModeActive = false;
+        currentMouseDialCombination.clear();
+        clearTemporaryDialMode();
+    }
+}
+
+void MainWindow::handleMouseWheelDial(int delta) {
+    if (!mouseDialModeActive || !dialContainer) return;
+    
+    // Calculate step size based on current dial mode
+    int stepDegrees = 15; // Default step
+    
+    switch (currentDialMode) {
+        case PageSwitching:
+            stepDegrees = 45; // 45 degrees per page (8 pages per full rotation)
+            break;
+        case PresetSelection:
+            stepDegrees = 60; // 60 degrees per preset (6 presets per full rotation)
+            break;
+        case ZoomControl:
+            stepDegrees = 30; // 30 degrees per zoom step (12 steps per rotation)
+            break;
+        case ThicknessControl:
+            stepDegrees = 20; // 20 degrees per thickness step (18 steps per rotation)
+            break;
+        case ToolSwitching:
+            stepDegrees = 120; // 120 degrees per tool (3 tools per rotation)
+            break;
+        case PanAndPageScroll:
+            stepDegrees = 15; // 15 degrees per pan step (24 steps per rotation)
+            break;
+        default:
+            stepDegrees = 15;
+            break;
+    }
+    
+    // Convert wheel delta to dial angle change
+    int angleChange = (delta > 0) ? stepDegrees : -stepDegrees;
+    
+    // Apply the angle change to the dial
+    int currentAngle = pageDial->value();
+    int newAngle = (currentAngle + angleChange + 360) % 360;
+    
+    pageDial->setValue(newAngle);
+    
+    // Trigger the dial input handling
+    handleDialInput(newAngle);
+}
+
+void MainWindow::setMouseDialMapping(const QString &combination, const QString &dialMode) {
+    mouseDialMappings[combination] = dialMode;
+    saveMouseDialMappings();
+}
+
+QString MainWindow::getMouseDialMapping(const QString &combination) const {
+    return mouseDialMappings.value(combination, "none");
+}
+
+QMap<QString, QString> MainWindow::getMouseDialMappings() const {
+    return mouseDialMappings;
+}
+
+void MainWindow::saveMouseDialMappings() {
+    QSettings settings("SpeedyNote", "App");
+    settings.beginGroup("MouseDialMappings");
+    
+    for (auto it = mouseDialMappings.begin(); it != mouseDialMappings.end(); ++it) {
+        settings.setValue(it.key(), it.value());
+    }
+    
+    settings.endGroup();
+}
+
+void MainWindow::loadMouseDialMappings() {
+    QSettings settings("SpeedyNote", "App");
+    settings.beginGroup("MouseDialMappings");
+    
+    QStringList keys = settings.allKeys();
+    
+    if (keys.isEmpty()) {
+        // Set default mappings
+        mouseDialMappings["Right"] = "page_switching";
+        mouseDialMappings["Side1"] = "zoom_control";
+        mouseDialMappings["Side2"] = "thickness_control";
+        mouseDialMappings["Right+Side1"] = "tool_switching";
+        mouseDialMappings["Right+Side2"] = "preset_selection";
+        mouseDialMappings["Side1+Side2"] = "pan_and_page_scroll"; // ✅ Added 6th combination
+        
+        saveMouseDialMappings(); // Save defaults
+    } else {
+        // Load saved mappings
+        for (const QString &key : keys) {
+            mouseDialMappings[key] = settings.value(key).toString();
+        }
+    }
+    
+    settings.endGroup();
 }

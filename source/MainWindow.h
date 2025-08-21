@@ -222,6 +222,13 @@ public:
     void setHoldMapping(const QString &buttonName, const QString &dialMode);
     void setPressMapping(const QString &buttonName, const QString &action);
     DialMode dialModeFromString(const QString &mode);
+    
+    // ✅ Mouse dial mapping management
+    void setMouseDialMapping(const QString &combination, const QString &dialMode);
+    QString getMouseDialMapping(const QString &combination) const;
+    QMap<QString, QString> getMouseDialMappings() const;
+    void saveMouseDialMappings();
+    void loadMouseDialMappings();
 
 
     void openPdfFile(const QString &pdfPath); // ✅ Open PDF file directly
@@ -510,6 +517,13 @@ private:
     
     DialMode currentDialMode = PanAndPageScroll; // ✅ Default mode
     DialMode temporaryDialMode = None;
+    
+    // ✅ Mouse dial control system
+    QTimer *mouseDialTimer;
+    QSet<Qt::MouseButton> pressedMouseButtons;
+    bool mouseDialModeActive = false;
+    QString currentMouseDialCombination;
+    QMap<QString, QString> mouseDialMappings; // combination -> dial mode
 
     QComboBox *dialModeSelector; // ✅ Mode selector
 
@@ -548,6 +562,17 @@ private:
 
     void setTemporaryDialMode(DialMode mode);
     void clearTemporaryDialMode();
+    
+    // ✅ Mouse dial controls
+    void startMouseDialMode(const QString &combination);
+    void stopMouseDialMode();
+    void handleMouseWheelDial(int delta);
+    QString mouseButtonCombinationToString(const QSet<Qt::MouseButton> &buttons) const;
+    
+    // ✅ Override mouse events for dial control
+    void mousePressEvent(QMouseEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
+    void wheelEvent(QWheelEvent *event) override;
 
     bool controlBarVisible = true;  // Track controlBar visibility state
     void toggleControlBar();        // Function to toggle controlBar visibility
