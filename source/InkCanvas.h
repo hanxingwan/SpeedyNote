@@ -162,6 +162,7 @@ public:
     void deleteRopeSelection(); // Delete the current rope tool selection
     void cancelRopeSelection(); // Cancel the current rope tool selection
     void copyRopeSelection(); // Copy the current rope tool selection
+    void copyRopeSelectionToClipboard(); // Copy the current rope tool selection to clipboard
     
     // Markdown integration
     MarkdownWindowManager* getMarkdownManager() const { return markdownManager; }

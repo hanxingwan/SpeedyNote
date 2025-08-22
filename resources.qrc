@@ -98,6 +98,8 @@
     <file>resources/icons/recent_reversed.png</file>
     <file>resources/icons/hand.png</file>
     <file>resources/icons/hand_reversed.png</file>
+    <file>resources/icons/clipboard.png</file>
+    <file>resources/icons/clipboard_reversed.png</file>
     <file>resources/reversed_icons/color_reversed.png</file>
     <file>resources/reversed_icons/bookpage_reversed.png</file>
     <file>resources/reversed_icons/zoom_reversed.png</file>
