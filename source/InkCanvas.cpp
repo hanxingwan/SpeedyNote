@@ -2570,6 +2570,29 @@ void InkCanvas::copyRopeSelection() {
     }
 }
 
+void InkCanvas::copyRopeSelectionToClipboard() {
+    if (!selectionBuffer.isNull() && !selectionRect.isEmpty()) {
+        // Get the clipboard
+        QClipboard *clipboard = QApplication::clipboard();
+        if (!clipboard) {
+            qWarning() << "Failed to access clipboard";
+            QMessageBox::warning(this, tr("Clipboard Error"), 
+                tr("Failed to access clipboard for copying rope selection."));
+        return;
+    }
+
+        // Copy the selection buffer (which contains the selected area) to clipboard
+        clipboard->setPixmap(selectionBuffer);
+        
+        // Optional: Show a brief confirmation message
+        QMessageBox::information(this, tr("Copied to Clipboard"), 
+            tr("Selected area has been copied to clipboard.\n\nYou can now paste it on other pages or tabs using the picture paste feature."));
+        
+        // Keep the selection active so user can still move it or perform other operations
+        // Don't clear the selection state like we do in copyRopeSelection()
+    }
+}
+
 // PDF text selection implementation
 void InkCanvas::clearPdfTextSelection() {
     // Clear selection state

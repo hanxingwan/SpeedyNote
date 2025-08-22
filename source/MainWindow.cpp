@@ -5494,9 +5494,9 @@ void MainWindow::onOutlineItemClicked(QTreeWidgetItem *item, int column) {
     if (pageData.isValid()) {
         int pageNumber = pageData.toInt();
         if (pageNumber >= 0) {
-            // Switch to the selected page (convert from 0-based to 1-based)
-            switchPage(pageNumber + 1);
-            pageInput->setValue(pageNumber + 1);
+            // Switch to the selected page (pageNumber is already 1-based from PDF outline)
+            switchPage(pageNumber);
+            pageInput->setValue(pageNumber);
         }
     }
 }
@@ -5519,7 +5519,7 @@ void MainWindow::loadPdfOutline() {
         for (int i = 0; i < pageCount; ++i) {
             QTreeWidgetItem* item = new QTreeWidgetItem(outlineTree);
             item->setText(0, QString(tr("Page %1")).arg(i + 1));
-            item->setData(0, Qt::UserRole, i); // Store 0-based page index
+            item->setData(0, Qt::UserRole, i + 1); // Store 1-based page index to match outline behavior
         }
     } else {
         // Process the actual PDF outline
@@ -5552,9 +5552,9 @@ void MainWindow::addOutlineItem(const Poppler::OutlineItem& outlineItem, QTreeWi
         pageNumber = destination->pageNumber();
     }
     
-    // Store the page number (1-based) in the item data
+    // Store the page number (already 1-based from PDF) in the item data
     if (pageNumber >= 0) {
-        item->setData(0, Qt::UserRole, pageNumber + 1); // Convert to 1-based
+        item->setData(0, Qt::UserRole, pageNumber); // pageNumber is already 1-based from PDF outline
     }
     
     // Add child items recursively
@@ -5612,6 +5612,15 @@ void MainWindow::showRopeSelectionMenu(const QPoint &position) {
     connect(copyAction, &QAction::triggered, this, [this]() {
         if (currentCanvas()) {
             currentCanvas()->copyRopeSelection();
+        }
+    });
+    
+    // Add Copy to Clipboard action
+    QAction *copyToClipboardAction = contextMenu->addAction(tr("Copy to Clipboard"));
+    copyToClipboardAction->setIcon(loadThemedIcon("clipboard"));
+    connect(copyToClipboardAction, &QAction::triggered, this, [this]() {
+        if (currentCanvas()) {
+            currentCanvas()->copyRopeSelectionToClipboard();
         }
     });
     
