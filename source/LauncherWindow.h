@@ -28,6 +28,11 @@ class LauncherWindow : public QMainWindow
 public:
     explicit LauncherWindow(QWidget *parent = nullptr);
     ~LauncherWindow();
+    
+    // Public methods for external access
+    void refreshRecentNotebooks();
+    void refreshStarredNotebooks();
+    void invalidatePixmapCacheForPath(const QString &path);
 
 private slots:
     void onTabChanged(int index);
@@ -37,8 +42,6 @@ private slots:
     void onRecentNotebookClicked();
     void onStarredNotebookClicked();
     void onNotebookRightClicked(const QPoint &pos);
-    void refreshRecentNotebooks();
-    void refreshStarredNotebooks();
 
 private:
     void setupUi();
@@ -50,6 +53,9 @@ private:
     void setupStarredTab();
     void populateRecentGrid();
     void populateStarredGrid();
+    void clearRecentGrid();
+    void clearStarredGrid();
+    void clearPixmapCache();
     QPushButton* createNotebookButton(const QString &path, bool isStarred = false);
     void openNotebook(const QString &path);
     void toggleStarredStatus(const QString &path);
@@ -64,6 +70,8 @@ private:
 
 protected:
     void resizeEvent(QResizeEvent *event) override;
+    void showEvent(QShowEvent *event) override;
+    void hideEvent(QHideEvent *event) override;
 
     // UI Components
     QWidget *centralWidget;
@@ -96,6 +104,9 @@ protected:
     
     // Current right-clicked notebook path
     QString rightClickedPath;
+    
+    // Pixmap cache to prevent memory leaks from repeated image loading
+    mutable QHash<QString, QPixmap> pixmapCache;
     
     static const int GRID_COLUMNS = 4;
     static const int BUTTON_SIZE = 200;

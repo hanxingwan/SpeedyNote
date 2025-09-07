@@ -29,12 +29,15 @@
 #include <QDesktopServices>
 #include <QUrl>
 #include <QResizeEvent>
+#include <QHideEvent>
+#include <QShowEvent>
 #include <QGuiApplication>
 #include <QScreen>
 #include <QScroller>
+#include <QHash>
 
 LauncherWindow::LauncherWindow(QWidget *parent)
-    : QMainWindow(parent), notebookManager(new RecentNotebooksManager(this)), lastCalculatedWidth(0)
+    : QMainWindow(parent), notebookManager(nullptr), lastCalculatedWidth(0)
 {
     setupUi();
     applyModernStyling();
@@ -50,16 +53,37 @@ LauncherWindow::LauncherWindow(QWidget *parent)
     // Set window icon
     setWindowIcon(QIcon(":/resources/icons/mainicon.png"));
     
-    // Defer grid population until after window is properly shown and sized
-    QTimer::singleShot(0, this, [this]() {
-        refreshRecentNotebooks();
-        refreshStarredNotebooks();
-    });
+    // Use singleton instance of RecentNotebooksManager
+    notebookManager = RecentNotebooksManager::getInstance(this);
+    
+    // Connect to thumbnail update signal to invalidate pixmap cache
+    connect(notebookManager, &RecentNotebooksManager::thumbnailUpdated,
+            this, [this](const QString& folderPath, const QString& coverImagePath) {
+                invalidatePixmapCacheForPath(coverImagePath);
+                // Don't repopulate entire grids here - that causes memory leaks!
+                // The cache invalidation is enough; thumbnails will refresh on next launcher open
+            });
+    
+    // Don't populate grids in constructor - showEvent will handle it
+    // This prevents double population (constructor + showEvent)
 }
 
 LauncherWindow::~LauncherWindow()
 {
+    // Clean up QScroller instances to prevent memory leaks
+    if (recentScrollArea && recentScrollArea->viewport()) {
+        QScroller::ungrabGesture(recentScrollArea->viewport());
+    }
+    if (starredScrollArea && starredScrollArea->viewport()) {
+        QScroller::ungrabGesture(starredScrollArea->viewport());
+    }
+    
+    // Clear grids and pixmap cache before destruction
+    clearRecentGrid();
+    clearStarredGrid();
+    clearPixmapCache();
 }
+
 
 void LauncherWindow::setupUi()
 {
@@ -324,10 +348,14 @@ void LauncherWindow::setupStarredTab()
 
 void LauncherWindow::populateRecentGrid()
 {
-    // Clear existing widgets
+    // Clear existing widgets more thoroughly
     QLayoutItem *child;
     while ((child = recentGridLayout->takeAt(0)) != nullptr) {
-        delete child->widget();
+        if (child->widget()) {
+            // Disconnect all signals to prevent memory leaks
+            child->widget()->disconnect();
+            child->widget()->deleteLater(); // Use deleteLater for safer deletion
+        }
         delete child;
     }
     
@@ -364,10 +392,14 @@ void LauncherWindow::populateRecentGrid()
 
 void LauncherWindow::populateStarredGrid()
 {
-    // Clear existing widgets
+    // Clear existing widgets more thoroughly
     QLayoutItem *child;
     while ((child = starredGridLayout->takeAt(0)) != nullptr) {
-        delete child->widget();
+        if (child->widget()) {
+            // Disconnect all signals to prevent memory leaks
+            child->widget()->disconnect();
+            child->widget()->deleteLater(); // Use deleteLater for safer deletion
+        }
         delete child;
     }
     
@@ -441,19 +473,38 @@ QPushButton* LauncherWindow::createNotebookButton(const QString &path, bool isSt
     
     QString coverPath = notebookManager->getCoverImagePathForNotebook(path);
     if (!coverPath.isEmpty()) {
-        QPixmap coverPixmap(coverPath);
-        if (!coverPixmap.isNull()) {
-            // Scale to fill the entire label area, cropping if necessary
-            QPixmap scaledPixmap = coverPixmap.scaled(coverLabel->size(), Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
-            
-            // If the scaled pixmap is larger than the label, crop it to center
-            if (scaledPixmap.size() != coverLabel->size()) {
-                int x = (scaledPixmap.width() - coverLabel->width()) / 2;
-                int y = (scaledPixmap.height() - coverLabel->height()) / 2;
-                scaledPixmap = scaledPixmap.copy(x, y, coverLabel->width(), coverLabel->height());
+        // Use cached pixmap if available to prevent memory leaks
+        QString cacheKey = QString("%1_%2x%3").arg(coverPath).arg(coverLabel->width()).arg(coverLabel->height());
+        
+        QPixmap finalPixmap;
+        if (pixmapCache.contains(cacheKey)) {
+            // Use cached version
+            finalPixmap = pixmapCache.value(cacheKey);
+        } else {
+            // Load and process new pixmap
+            QPixmap coverPixmap(coverPath);
+            if (!coverPixmap.isNull()) {
+                // Scale to fill the entire label area, cropping if necessary
+                QPixmap scaledPixmap = coverPixmap.scaled(coverLabel->size(), Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
+                
+                // If the scaled pixmap is larger than the label, crop it to center
+                if (scaledPixmap.size() != coverLabel->size()) {
+                    int x = (scaledPixmap.width() - coverLabel->width()) / 2;
+                    int y = (scaledPixmap.height() - coverLabel->height()) / 2;
+                    scaledPixmap = scaledPixmap.copy(x, y, coverLabel->width(), coverLabel->height());
+                }
+                
+                finalPixmap = scaledPixmap;
+                
+                // Cache the processed pixmap (but limit cache size to prevent unbounded growth)
+                if (pixmapCache.size() < 20) { // Limit cache to 20 items to reduce memory usage
+                    pixmapCache.insert(cacheKey, finalPixmap);
+                }
             }
-            
-            coverLabel->setPixmap(scaledPixmap);
+        }
+        
+        if (!finalPixmap.isNull()) {
+            coverLabel->setPixmap(finalPixmap);
         } else {
             coverLabel->setText(tr("No Preview"));
             QString textColor = isDarkMode ? "#cccccc" : "#666";
@@ -763,12 +814,34 @@ void LauncherWindow::removeFromRecent(const QString &path)
 
 void LauncherWindow::refreshRecentNotebooks()
 {
-    populateRecentGrid();
+    // Always update the data, but only refresh UI if visible
+    if (isVisible()) {
+        // Just repopulate - don't clear cache as it might be needed
+        populateRecentGrid();
+        
+        // Simple UI update
+        if (recentScrollArea) {
+            recentScrollArea->update();
+        }
+        update();
+    }
+    // If hidden, the data is still updated and showEvent will refresh UI
 }
 
 void LauncherWindow::refreshStarredNotebooks()
 {
-    populateStarredGrid();
+    // Always update the data, but only refresh UI if visible
+    if (isVisible()) {
+        // Just repopulate - don't clear cache as it might be needed
+        populateStarredGrid();
+        
+        // Simple UI update
+        if (starredScrollArea) {
+            starredScrollArea->update();
+        }
+        update();
+    }
+    // If hidden, the data is still updated and showEvent will refresh UI
 }
 
 void LauncherWindow::applyModernStyling()
@@ -802,13 +875,12 @@ void LauncherWindow::applyModernStyling()
     setStyleSheet(QString(R"(
         QMainWindow {
             background-color: %1;
-        }").arg(mainBg)
-        + QString(R"(
+        }
         
         QListWidget#sidebarTabList {
-            background-color: %1;
+            background-color: %2;
             border: none;
-            border-right: 1px solid %2;
+            border-right: 1px solid %3;
             outline: none;
             font-size: 14px;
             padding: 10px 0px;
@@ -851,23 +923,22 @@ void LauncherWindow::applyModernStyling()
         }
         
         QPushButton#primaryButton:hover {
-            background-color: %7;
+            background-color: %6;
         }
         
         QPushButton#primaryButton:pressed {
-            background-color: %8;
+            background-color: %7;
         }
         
         QPushButton#notebookButton {
-            background-color: %1;
-            border: 1px solid %2;
+            background-color: %2;
+            border: 1px solid %3;
             border-radius: 12px;
             padding: 0px;
         }
         
         QPushButton#notebookButton:hover {
-            border-color: %9;
-            box-shadow: 0 4px 8px rgba(0,123,255,0.1);
+            border-color: %8;
         }
         
         QPushButton#notebookButton:pressed {
@@ -880,19 +951,19 @@ void LauncherWindow::applyModernStyling()
         }
         
         QScrollBar:vertical {
-            background-color: %10;
+            background-color: %9;
             width: 12px;
             border-radius: 6px;
         }
         
         QScrollBar::handle:vertical {
-            background-color: %11;
+            background-color: %10;
             border-radius: 6px;
             min-height: 30px;
         }
         
         QScrollBar::handle:vertical:hover {
-            background-color: %12;
+            background-color: %11;
         }
         
         QScrollBar::add-line:vertical,
@@ -900,10 +971,17 @@ void LauncherWindow::applyModernStyling()
             border: none;
             background: none;
         }
-    )").arg(cardBg).arg(borderColor).arg(selectedBg).arg(hoverBg)
-       .arg(isDarkMode ? "#005a9e" : "#0056b3")
-       .arg(isDarkMode ? "#004578" : "#004085").arg(hoverBorderColor)
-       .arg(scrollBg).arg(scrollHandle).arg(scrollHandleHover));
+    )").arg(mainBg)                                    // %1
+       .arg(cardBg)                                    // %2
+       .arg(borderColor)                               // %3
+       .arg(selectedBg)                                // %4
+       .arg(hoverBg)                                   // %5
+       .arg(isDarkMode ? "#005a9e" : "#0056b3")        // %6
+       .arg(isDarkMode ? "#004578" : "#004085")        // %7
+       .arg(hoverBorderColor)                          // %8
+       .arg(scrollBg)                                  // %9
+       .arg(scrollHandle)                              // %10
+       .arg(scrollHandleHover));                       // %11
 }
 
 void LauncherWindow::resizeEvent(QResizeEvent *event)
@@ -914,11 +992,39 @@ void LauncherWindow::resizeEvent(QResizeEvent *event)
     if (event->oldSize().isValid() && 
         abs(event->size().width() - event->oldSize().width()) > 50) {
         // Recalculate grids when window is resized significantly
-        QTimer::singleShot(100, this, [this]() {
-            populateRecentGrid();
-            populateStarredGrid();
-        });
+        // Use direct calls instead of timer to avoid timer accumulation
+        populateRecentGrid();
+        populateStarredGrid();
     }
+}
+
+void LauncherWindow::showEvent(QShowEvent *event)
+{
+    QMainWindow::showEvent(event);
+    
+    // Rebuild UI when becoming visible since hideEvent clears everything
+    // Use direct calls instead of timer to avoid timer accumulation
+    populateRecentGrid();
+    populateStarredGrid();
+    
+    // Simple UI update
+    update();
+}
+
+void LauncherWindow::hideEvent(QHideEvent *event)
+{
+    QMainWindow::hideEvent(event);
+    
+    // Clear grids when hiding to free UI widgets immediately
+    // This prevents widget accumulation when launcher is opened/closed repeatedly
+    clearRecentGrid();
+    clearStarredGrid();
+    
+    // Don't clear pixmap cache - keep thumbnails cached to avoid reload/memory churn
+    // The cache is size-limited (50 items) so it won't grow unbounded
+    
+    // Reset width cache to force recalculation next time
+    lastCalculatedWidth = 0;
 }
 
 bool LauncherWindow::isDarkMode() const
@@ -957,22 +1063,36 @@ void LauncherWindow::onTabChanged(int index)
                     // No existing window, stay on launcher
                     QMessageBox::information(this, tr("No Document"), 
                         tr("There is no previous document to return to."));
-                    // Reset to Recent tab
-                    tabList->setCurrentRow(4);
                 }
+                // Reset to Recent tab to allow clicking Return again
+                QTimer::singleShot(50, this, [this]() {
+                    tabList->setCurrentRow(4);
+                });
             }
             break;
             
         case 1: // New tab - direct action
             onNewNotebookClicked();
+            // Reset to Recent tab to allow clicking New again
+            QTimer::singleShot(50, this, [this]() {
+                tabList->setCurrentRow(4);
+            });
             break;
             
         case 2: // Open PDF tab - direct action
             onOpenPdfClicked();
+            // Reset to Recent tab to allow clicking Open PDF again
+            QTimer::singleShot(50, this, [this]() {
+                tabList->setCurrentRow(4);
+            });
             break;
             
         case 3: // Open Notebook tab - direct action
             onOpenNotebookClicked();
+            // Reset to Recent tab to allow clicking Open Notebook again
+            QTimer::singleShot(50, this, [this]() {
+                tabList->setCurrentRow(4);
+            });
             break;
             
         case 4: // Recent tab - show content
@@ -981,5 +1101,56 @@ void LauncherWindow::onTabChanged(int index)
             // Show the corresponding content page
             contentStack->setCurrentIndex(index);
             break;
+    }
+}
+
+void LauncherWindow::clearRecentGrid()
+{
+    if (!recentGridLayout) return;
+    
+    // Clear all widgets from the recent grid
+    QLayoutItem *child;
+    while ((child = recentGridLayout->takeAt(0)) != nullptr) {
+        if (child->widget()) {
+            child->widget()->disconnect();
+            child->widget()->deleteLater();
+        }
+        delete child;
+    }
+}
+
+void LauncherWindow::clearStarredGrid()
+{
+    if (!starredGridLayout) return;
+    
+    // Clear all widgets from the starred grid
+    QLayoutItem *child;
+    while ((child = starredGridLayout->takeAt(0)) != nullptr) {
+        if (child->widget()) {
+            child->widget()->disconnect();
+            child->widget()->deleteLater();
+        }
+        delete child;
+    }
+}
+
+void LauncherWindow::clearPixmapCache()
+{
+    // Clear the pixmap cache to free memory
+    pixmapCache.clear();
+}
+
+void LauncherWindow::invalidatePixmapCacheForPath(const QString &path)
+{
+    // Remove all cache entries that match this path (different sizes)
+    QStringList keysToRemove;
+    for (auto it = pixmapCache.constBegin(); it != pixmapCache.constEnd(); ++it) {
+        if (it.key().startsWith(path + "_")) {
+            keysToRemove.append(it.key());
+        }
+    }
+    
+    for (const QString &key : keysToRemove) {
+        pixmapCache.remove(key);
     }
 }

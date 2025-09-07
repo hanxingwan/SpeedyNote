@@ -206,8 +206,10 @@ int main(int argc, char *argv[]) {
         return app.exec();
     } else {
         // No file specified - show the launcher window
-        LauncherWindow launcher;
-        launcher.show();
+        // Create the launcher and set it as the shared instance
+        LauncherWindow *launcher = new LauncherWindow();
+        MainWindow::sharedLauncher = launcher; // Set as shared instance
+        launcher->show();
         return app.exec();
     }
 }

@@ -4,14 +4,21 @@
 #include <QStringList>
 #include <QSettings>
 #include <QObject>
+#include <QHash>
 
 class InkCanvas; // Forward declaration
 
 class RecentNotebooksManager : public QObject {
     Q_OBJECT
 
+signals:
+    void thumbnailUpdated(const QString& folderPath, const QString& coverImagePath);
+
 public:
     explicit RecentNotebooksManager(QObject *parent = nullptr);
+    
+    // Singleton pattern for shared instance
+    static RecentNotebooksManager* getInstance(QObject *parent = nullptr);
 
     void addRecentNotebook(const QString& folderPath, InkCanvas* canvasForPreview = nullptr);
     void removeRecentNotebook(const QString& folderPath);
@@ -39,7 +46,16 @@ private:
     QStringList recentNotebookPaths;
     QStringList starredNotebookPaths;
     const int MAX_RECENT_NOTEBOOKS = 16;
+    
+    // Singleton instance
+    static RecentNotebooksManager* instance;
     QSettings settings;
+    
+    // Removed pendingThumbnails - no longer using delayed thumbnail generation
+    
+    // Caches for expensive operations to prevent repeated .spn extraction
+    mutable QHash<QString, QString> pdfPathCache;
+    mutable QHash<QString, QString> displayNameCache;
 };
 
 #endif // RECENTNOTEBOOKSMANAGER_H 
