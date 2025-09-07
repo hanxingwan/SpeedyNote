@@ -1,3 +1,5 @@
+// ⚠️ DEPRECATED: This dialog has been replaced by LauncherWindow
+// The functionality is now integrated into the main launcher interface
 #ifndef RECENTNOTEBOOKSDIALOG_H
 #define RECENTNOTEBOOKSDIALOG_H
 

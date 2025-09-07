@@ -39,7 +39,7 @@
 // #include "HandwritingLineEdit.h"
 #include "ControlPanelDialog.h"
 #include "SDLControllerManager.h"
-#include "RecentNotebooksDialog.h" // Added
+#include "LauncherWindow.h" // Added for launcher access
 #include "PdfOpenDialog.h" // Added for PDF file association
 #include <poppler-qt6.h> // For PDF outline parsing
 
@@ -49,7 +49,7 @@ QSharedMemory *MainWindow::sharedMemory = nullptr;
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false), localServer(nullptr) {
 
-    setWindowTitle(tr("SpeedyNote Beta 0.8.3"));
+    setWindowTitle(tr("SpeedyNote Beta 0.9.0"));
 
     // Enable IME support for multi-language input
     setAttribute(Qt::WA_InputMethodEnabled, true);
@@ -69,12 +69,6 @@ MainWindow::MainWindow(QWidget *parent)
     setWindowIcon(QIcon(":/resources/icons/mainicon.png"));
     
 
-    // ✅ Get screen size & adjust window size
-    QScreen *screen = QGuiApplication::primaryScreen();
-    if (screen) {
-        QSize logicalSize = screen->availableGeometry().size() * 0.89;
-        resize(logicalSize);
-    }
     // ✅ Create a stacked widget to hold multiple canvases
     canvasStack = new QStackedWidget(this);
     setCentralWidget(canvasStack);
@@ -984,9 +978,9 @@ void MainWindow::setupUi() {
     openRecentNotebooksButton = new QPushButton(this); // Create button
     openRecentNotebooksButton->setIcon(loadThemedIcon("recent")); // Replace with actual icon if available
     openRecentNotebooksButton->setStyleSheet(buttonStyle);
-    openRecentNotebooksButton->setToolTip(tr("Open Recent Notebooks"));
+    openRecentNotebooksButton->setToolTip(tr("Return to Launcher"));
     openRecentNotebooksButton->setFixedSize(26, 30);
-    connect(openRecentNotebooksButton, &QPushButton::clicked, this, &MainWindow::openRecentNotebooksDialog);
+    connect(openRecentNotebooksButton, &QPushButton::clicked, this, &MainWindow::returnToLauncher);
 
     customColorButton = new QPushButton(this);
     customColorButton->setFixedSize(62, 30);
@@ -4920,9 +4914,33 @@ void MainWindow::handleEdgeProximity(InkCanvas* canvas, const QPoint& pos) {
     }
 }
 
-void MainWindow::openRecentNotebooksDialog() {
-    RecentNotebooksDialog dialog(this, recentNotebooksManager, this);
-    dialog.exec();
+void MainWindow::returnToLauncher() {
+    // Save current work before returning to launcher
+    if (currentCanvas() && currentCanvas()->isEdited()) {
+        saveCurrentPage();
+    }
+    
+    // Create and show launcher window
+    LauncherWindow *launcher = new LauncherWindow();
+    
+    // Preserve window state
+    if (isMaximized()) {
+        launcher->showMaximized();
+    } else if (isFullScreen()) {
+        launcher->showFullScreen();
+    } else {
+        launcher->resize(size());
+        launcher->move(pos());
+        launcher->show();
+    }
+    
+    // Hide this main window
+    hide();
+    
+    // Connect to handle when launcher closes - show this window again
+    connect(launcher, &LauncherWindow::destroyed, this, [this]() {
+        show();
+    });
 }
 
 void MainWindow::resizeEvent(QResizeEvent *event) {

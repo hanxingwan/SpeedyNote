@@ -122,7 +122,6 @@ add_executable(${PROJECT_NAME}
         source/SDLControllerManager.cpp
         source/ButtonMappingTypes.cpp
         source/RecentNotebooksManager.cpp
-        source/RecentNotebooksDialog.cpp
         source/KeyCaptureDialog.cpp
         source/ControllerMappingDialog.cpp
         source/MarkdownWindow.cpp
@@ -132,6 +131,7 @@ add_executable(${PROJECT_NAME}
         source/PdfOpenDialog.cpp
 	  source/PdfRelinkDialog.cpp
     	  source/SpnPackageManager.cpp
+    	  source/LauncherWindow.cpp
         ${QRCC_FILES}
         ${QMARKDOWNTEXTEDIT_SOURCES}
         ${QMARKDOWNTEXTEDIT_UI_HEADERS}

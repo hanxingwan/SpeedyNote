@@ -289,6 +289,8 @@ public:
     void updateBookmarkButtonState(); // Update bookmark toggle button state
     bool selectFolder(); // Select save folder - moved to public for ControlPanelDialog access, returns true on success
 
+    void addNewTab();
+
 private slots:
     void toggleBenchmark();
     void updateBenchmarkDisplay();
@@ -317,7 +319,7 @@ private slots:
     void forceUIRefresh();
 
     void switchTab(int index);
-    void addNewTab();
+    
     void removeTabAt(int index);
     void toggleZoomSlider();
     void toggleThicknessSlider(); // Added function to toggle thickness slider
@@ -387,7 +389,7 @@ private:
     QColor getContrastingTextColor(const QColor &backgroundColor);
     void updateCustomColorButtonStyle(const QColor &color);
     
-    void openRecentNotebooksDialog(); // Added slot
+    void returnToLauncher(); // Return to launcher window
     
     void showPendingTooltip(); // Show tooltip with throttling
     
