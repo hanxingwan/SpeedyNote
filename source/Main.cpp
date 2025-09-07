@@ -10,6 +10,7 @@
 #include <QSettings>
 #include <QColor>
 #include "MainWindow.h"
+#include "LauncherWindow.h"
 #include "SpnPackageManager.h"
 #include "InkCanvas.h" // For BackgroundStyle enum
 
@@ -174,8 +175,10 @@ int main(int argc, char *argv[]) {
         return 0;
     }
 
-    MainWindow w;
+    // Determine which window to show based on command line arguments
     if (!inputFile.isEmpty()) {
+        // If a file is specified, go directly to MainWindow
+        MainWindow w;
         if (createNewPackage) {
             // Handle --create-new command
             if (inputFile.toLower().endsWith(".spn")) {
@@ -200,8 +203,11 @@ int main(int argc, char *argv[]) {
                 w.show();
             }
         }
+        return app.exec();
     } else {
-        w.show();
+        // No file specified - show the launcher window
+        LauncherWindow launcher;
+        launcher.show();
+        return app.exec();
     }
-    return app.exec();
 }

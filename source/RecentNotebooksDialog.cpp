@@ -1,3 +1,5 @@
+// ⚠️ DEPRECATED: This dialog has been replaced by LauncherWindow
+// The functionality is now integrated into the main launcher interface
 #include "RecentNotebooksDialog.h"
 #include "MainWindow.h" // For selectFolder functionality
 #include <QPushButton>

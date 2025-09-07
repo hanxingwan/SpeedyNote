@@ -20,6 +20,7 @@ RecentNotebooksManager::RecentNotebooksManager(QObject *parent)
     : QObject(parent), settings("SpeedyNote", "App") {
     QDir().mkpath(getCoverImageDir()); // Ensure cover image directory exists
     loadRecentNotebooks();
+    loadStarredNotebooks();
 }
 
 void RecentNotebooksManager::addRecentNotebook(const QString& folderPath, InkCanvas* canvasForPreview) {
@@ -106,6 +107,23 @@ void RecentNotebooksManager::addRecentNotebook(const QString& folderPath, InkCan
 
 QStringList RecentNotebooksManager::getRecentNotebooks() const {
     return recentNotebookPaths;
+}
+
+void RecentNotebooksManager::removeRecentNotebook(const QString& folderPath) {
+    if (folderPath.isEmpty()) return;
+    
+    // ✅ Normalize path for comparison
+    QString normalizedPath = QDir::toNativeSeparators(QFileInfo(folderPath).absoluteFilePath());
+    
+    // Remove all matching entries (there might be multiple due to different path formats)
+    if (recentNotebookPaths.removeAll(normalizedPath) > 0) {
+        saveRecentNotebooks();
+    }
+    
+    // Also try to remove the original path in case normalization changed it
+    if (recentNotebookPaths.removeAll(folderPath) > 0) {
+        saveRecentNotebooks();
+    }
 }
 
 void RecentNotebooksManager::loadRecentNotebooks() {
@@ -491,4 +509,58 @@ QString RecentNotebooksManager::getNotebookDisplayName(const QString& folderPath
     
     // Fallback to folder name
     return QFileInfo(folderPath).fileName();
+}
+
+// Starred notebooks functionality
+void RecentNotebooksManager::addStarred(const QString& folderPath) {
+    if (folderPath.isEmpty()) return;
+    
+    // ✅ Normalize path to prevent duplicates
+    QString normalizedPath = QDir::toNativeSeparators(QFileInfo(folderPath).absoluteFilePath());
+    
+    if (!starredNotebookPaths.contains(normalizedPath)) {
+        starredNotebookPaths.append(normalizedPath);
+        saveStarredNotebooks();
+    }
+}
+
+void RecentNotebooksManager::removeStarred(const QString& folderPath) {
+    if (folderPath.isEmpty()) return;
+    
+    // ✅ Normalize path for comparison
+    QString normalizedPath = QDir::toNativeSeparators(QFileInfo(folderPath).absoluteFilePath());
+    
+    if (starredNotebookPaths.removeAll(normalizedPath) > 0) {
+        saveStarredNotebooks();
+    }
+}
+
+bool RecentNotebooksManager::isStarred(const QString& folderPath) const {
+    if (folderPath.isEmpty()) return false;
+    
+    // ✅ Normalize path for comparison
+    QString normalizedPath = QDir::toNativeSeparators(QFileInfo(folderPath).absoluteFilePath());
+    
+    return starredNotebookPaths.contains(normalizedPath);
+}
+
+QStringList RecentNotebooksManager::getStarredNotebooks() const {
+    return starredNotebookPaths;
+}
+
+void RecentNotebooksManager::loadStarredNotebooks() {
+    QStringList rawPaths = settings.value("starredNotebooks").toStringList();
+    
+    // ✅ Normalize all loaded paths to prevent separator inconsistencies
+    starredNotebookPaths.clear();
+    for (const QString& path : rawPaths) {
+        if (!path.isEmpty()) {
+            QString normalizedPath = QDir::toNativeSeparators(QFileInfo(path).absoluteFilePath());
+            starredNotebookPaths.append(normalizedPath);
+        }
+    }
+}
+
+void RecentNotebooksManager::saveStarredNotebooks() {
+    settings.setValue("starredNotebooks", starredNotebookPaths);
 } 
