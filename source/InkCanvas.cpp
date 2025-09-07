@@ -83,8 +83,7 @@ InkCanvas::InkCanvas(QWidget *parent)
     }
     
     initializeBuffer();
-    QCache<int, QPixmap> pdfCache(10);
-    pdfCache.setMaxCost(10);  // ✅ Ensures the cache holds at most 5 pages
+    pdfCache.setMaxCost(6);  // ✅ Ensures the cache holds at most 6 pages
     // No need to set auto-delete, QCache will handle deletion automatically
     
     // Initialize PDF text selection throttling timer (60 FPS = ~16.67ms)
@@ -98,7 +97,7 @@ InkCanvas::InkCanvas(QWidget *parent)
     currentCachedPage = -1;
     
     // Initialize note page cache system
-    noteCache.setMaxCost(15); // Cache up to 15 note pages (more than PDF since they're smaller)
+    noteCache.setMaxCost(6); // Cache up to 6 note pages
     noteCacheTimer = nullptr;
     currentCachedNotePage = -1;
     
@@ -128,6 +127,62 @@ InkCanvas::~InkCanvas() {
         if (pictureManager) {
             pictureManager->saveWindowsForPage(lastActivePage);
         }
+    }
+    
+    // ✅ Cleanup PDF resources
+    if (pdfDocument) {
+        pdfDocument.reset();
+        pdfDocument = nullptr;
+    }
+    
+    // ✅ Clear caches to free memory
+    pdfCache.clear();
+    noteCache.clear();
+    
+    // ✅ Stop and clean up timers
+    if (pdfCacheTimer) {
+        pdfCacheTimer->stop();
+        // Timer will be deleted automatically as child of this
+    }
+    if (noteCacheTimer) {
+        noteCacheTimer->stop();
+        // Timer will be deleted automatically as child of this
+    }
+    if (pdfTextSelectionTimer) {
+        pdfTextSelectionTimer->stop();
+        // Timer will be deleted automatically as child of this
+    }
+    
+    // ✅ Cancel and clean up any active PDF watchers
+    for (QFutureWatcher<void>* watcher : activePdfWatchers) {
+        if (watcher && !watcher->isFinished()) {
+            watcher->cancel();
+        }
+        watcher->deleteLater();
+    }
+    activePdfWatchers.clear();
+    
+    // ✅ Cancel and clean up any active note cache watchers
+    for (QFutureWatcher<void>* watcher : activeNoteWatchers) {
+        if (watcher && !watcher->isFinished()) {
+            watcher->cancel();
+        }
+        watcher->deleteLater();
+    }
+    activeNoteWatchers.clear();
+    
+    // ✅ Clear PDF text boxes
+    qDeleteAll(currentPdfTextBoxes);
+    currentPdfTextBoxes.clear();
+    
+    // ✅ Explicitly clean up window managers to prevent memory leaks
+    if (markdownManager) {
+        markdownManager->deleteLater();
+        markdownManager = nullptr;
+    }
+    if (pictureManager) {
+        pictureManager->deleteLater();
+        pictureManager = nullptr;
     }
     
     // ✅ Sync .spn package and cleanup temp directory
@@ -668,7 +723,7 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
 void InkCanvas::tabletEvent(QTabletEvent *event) {
     // Skip tablet event handling when a picture window is in edit mode
     if (pictureWindowEditMode) {
-        qDebug() << "InkCanvas: Skipping tablet event due to picture window edit mode";
+        // qDebug() << "InkCanvas: Skipping tablet event due to picture window edit mode";
         event->ignore();
         return;
     }
@@ -2931,8 +2986,8 @@ void InkCanvas::renderPdfPageToCache(int pageNumber) {
         return;
     }
     
-    // Ensure the cache holds only 10 pages max
-    if (pdfCache.count() >= 10) {
+    // Ensure the cache holds only 6 pages max
+    if (pdfCache.count() >= 6) {
         auto oldestKey = pdfCache.keys().first();
         pdfCache.remove(oldestKey);
     }
@@ -3058,7 +3113,7 @@ void InkCanvas::loadNotePageToCache(int pageNumber) {
     }
     
     // Ensure the cache doesn't exceed its limit
-    if (noteCache.count() >= 15) {
+    if (noteCache.count() >= 6) {
         // QCache will automatically remove least recently used items
         // but we can be explicit about it
         auto keys = noteCache.keys();

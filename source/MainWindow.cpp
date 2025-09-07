@@ -42,14 +42,16 @@
 #include "LauncherWindow.h" // Added for launcher access
 #include "PdfOpenDialog.h" // Added for PDF file association
 #include <poppler-qt6.h> // For PDF outline parsing
+#include <memory> // For std::shared_ptr
 
 // Static member definition for single instance
 QSharedMemory *MainWindow::sharedMemory = nullptr;
+LauncherWindow *MainWindow::sharedLauncher = nullptr;
 
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false), localServer(nullptr) {
 
-    setWindowTitle(tr("SpeedyNote Beta 0.9.0"));
+    setWindowTitle(tr("SpeedyNote Beta 0.9.1"));
 
     // Enable IME support for multi-language input
     setAttribute(Qt::WA_InputMethodEnabled, true);
@@ -69,6 +71,12 @@ MainWindow::MainWindow(QWidget *parent)
     setWindowIcon(QIcon(":/resources/icons/mainicon.png"));
     
 
+    // ✅ Get screen size & adjust window size
+    QScreen *screen = QGuiApplication::primaryScreen();
+    if (screen) {
+        QSize logicalSize = screen->availableGeometry().size() * 0.89;
+        resize(logicalSize);
+    }
     // ✅ Create a stacked widget to hold multiple canvases
     canvasStack = new QStackedWidget(this);
     setCentralWidget(canvasStack);
@@ -113,7 +121,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     setBenchmarkControlsVisible(false);
     
-    recentNotebooksManager = new RecentNotebooksManager(this); // Initialize manager
+    recentNotebooksManager = RecentNotebooksManager::getInstance(this); // Use singleton instance
 
     // Show dial by default after UI is fully initialized
     QTimer::singleShot(200, this, [this]() {
@@ -1187,6 +1195,12 @@ MainWindow::~MainWindow() {
     saveButtonMappings();  // ✅ Save on exit, as backup
     delete canvas;
     
+    // Cleanup shared launcher instance
+    if (sharedLauncher) {
+        sharedLauncher->deleteLater();
+        sharedLauncher = nullptr;
+    }
+    
     // Cleanup single instance resources
     if (localServer) {
         localServer->close();
@@ -1962,6 +1976,18 @@ void MainWindow::switchTab(int index) {
             if (bookmarksSidebarVisible) {
                 loadBookmarks();
             }
+            
+            // ✅ Update recent notebooks when switching to a tab to bump it to the top
+            QString folderPath = canvas->getSaveFolder();
+            QString tempDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/temp_session";
+            if (!folderPath.isEmpty() && folderPath != tempDir && recentNotebooksManager) {
+                    // Add to recent notebooks to bump it to the top
+                    recentNotebooksManager->addRecentNotebook(folderPath, canvas);
+                    // Refresh shared launcher if it exists and is visible
+                    if (sharedLauncher && sharedLauncher->isVisible()) {
+                        sharedLauncher->refreshRecentNotebooks();
+                    }
+            }
         }
     }
 }
@@ -2090,15 +2116,25 @@ void MainWindow::addNewTab() {
             return;
         }
 
-        // 2. Get the final save folder path
+        // 2. Get the final save folder path and update recent notebooks EARLY
         QString folderPath = newCanvas->getSaveFolder();
         QString tempDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/temp_session";
 
-        // 3. Update cover preview and recent list if it's a permanent notebook
+        // 3. EARLY: Update cover preview and recent list BEFORE any UI changes
         if (!folderPath.isEmpty() && folderPath != tempDir && recentNotebooksManager) {
+            // Force canvas to update and render current state before thumbnail generation
+            newCanvas->update();
+            newCanvas->repaint();
+            QApplication::processEvents(); // Ensure all pending updates are processed
+            
+            // Generate thumbnail IMMEDIATELY while canvas is guaranteed to be valid
             recentNotebooksManager->generateAndSaveCoverPreview(folderPath, newCanvas);
             // Add/update in recent list. This also moves it to the top.
             recentNotebooksManager->addRecentNotebook(folderPath, newCanvas);
+            // Refresh shared launcher if it exists (but only if visible to avoid issues)
+            if (sharedLauncher && sharedLauncher->isVisible()) {
+                sharedLauncher->refreshRecentNotebooks();
+            }
         }
         
         // 4. Update the tab's label directly as folderPath might have changed
@@ -2235,20 +2271,21 @@ void MainWindow::removeTabAt(int index) {
     delete item;
 
     // ✅ Remove and delete the canvas safely
-    QWidget *canvasWidget = canvasStack->widget(index); // Get widget before removal
-    // ensureTabHasUniqueSaveFolder(currentCanvas()); // Moved to the close button lambda
+        QWidget *canvasWidget = canvasStack->widget(index); // Get widget before removal
+        // ensureTabHasUniqueSaveFolder(currentCanvas()); // Moved to the close button lambda
 
-    if (canvasWidget) {
-        canvasStack->removeWidget(canvasWidget); // Remove from stack
-        // InkCanvas *canvasInstance = qobject_cast<InkCanvas*>(canvasWidget);
-        // if (canvasInstance) {
-        //     QString folderPath = canvasInstance->getSaveFolder();
-        //     QString tempDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/temp_session";
-        //     if (!folderPath.isEmpty() && folderPath != tempDir && recentNotebooksManager) {
-        //         recentNotebooksManager->addRecentNotebook(folderPath, canvasInstance); // Moved to close button lambda
-        //     }
-        // }
-        canvasWidget->deleteLater(); // ✅ Use deleteLater() for safer deletion
+        if (canvasWidget) {
+            // ✅ Disconnect all signals from this canvas to prevent memory leaks
+            InkCanvas *canvasInstance = qobject_cast<InkCanvas*>(canvasWidget);
+            if (canvasInstance) {
+                // Disconnect all signals between this canvas and MainWindow
+                disconnect(canvasInstance, nullptr, this, nullptr);
+                // Remove event filter
+                canvasInstance->removeEventFilter(this);
+            }
+            
+            canvasStack->removeWidget(canvasWidget); // Remove from stack
+            canvasWidget->deleteLater(); // ✅ Use deleteLater() for safer deletion
     }
 
     // ✅ Select the previous tab (or first tab if none left)
@@ -4305,15 +4342,38 @@ void MainWindow::openPdfFile(const QString &pdfPath) {
         updateZoom();
         updatePanRange();
         
-        // ✅ Add to recent notebooks AFTER page is loaded to ensure proper thumbnail generation
+        // ✅ Add to recent notebooks AFTER PDF is loaded to ensure proper thumbnail generation
         if (recentNotebooksManager) {
             // Use QPointer to safely handle canvas deletion
             QPointer<InkCanvas> canvasPtr(canvas);
-            QTimer::singleShot(100, this, [this, existingFolderPath, canvasPtr]() {
-                if (recentNotebooksManager && canvasPtr && !canvasPtr.isNull()) {
-                    recentNotebooksManager->addRecentNotebook(existingFolderPath, canvasPtr.data());
+            
+            // Check if PDF is already loaded
+            if (canvasPtr && canvasPtr->isPdfLoadedFunc()) {
+                // PDF is already loaded, add to recent notebooks immediately
+                recentNotebooksManager->addRecentNotebook(existingFolderPath, canvasPtr.data());
+                // Refresh shared launcher if it exists and is visible
+                if (sharedLauncher && sharedLauncher->isVisible()) {
+                    sharedLauncher->refreshRecentNotebooks();
                 }
-            });
+            } else {
+                // PDF is still loading, wait for pdfLoaded signal
+                // Use a shared_ptr to safely manage the connection lifetime
+                auto connection = std::make_shared<QMetaObject::Connection>();
+                *connection = connect(canvasPtr.data(), &InkCanvas::pdfLoaded, this, [this, existingFolderPath, canvasPtr, connection]() {
+                    if (recentNotebooksManager && canvasPtr && !canvasPtr.isNull()) {
+                        // Add to recent notebooks immediately - RecentNotebooksManager handles delayed thumbnail generation
+                        recentNotebooksManager->addRecentNotebook(existingFolderPath, canvasPtr.data());
+                        // Refresh shared launcher if it exists and is visible
+                        if (sharedLauncher && sharedLauncher->isVisible()) {
+                            sharedLauncher->refreshRecentNotebooks();
+                        }
+                    }
+                    // Disconnect the signal to avoid multiple calls
+                    if (connection && *connection) {
+                        disconnect(*connection);
+                    }
+                });
+            }
         }
         
         return; // Exit early, no need to show dialog
@@ -4357,15 +4417,34 @@ void MainWindow::openPdfFile(const QString &pdfPath) {
         updateZoom();
         updatePanRange();
         
-        // ✅ Add to recent notebooks AFTER page is loaded to ensure proper thumbnail generation
+        // ✅ Add to recent notebooks AFTER PDF is loaded to ensure proper thumbnail generation
         if (recentNotebooksManager) {
             // Use QPointer to safely handle canvas deletion
             QPointer<InkCanvas> canvasPtr(canvas);
-            QTimer::singleShot(100, this, [this, selectedFolder, canvasPtr]() {
-                if (recentNotebooksManager && canvasPtr && !canvasPtr.isNull()) {
-                    recentNotebooksManager->addRecentNotebook(selectedFolder, canvasPtr.data());
+            
+            // Check if PDF is already loaded
+            if (canvasPtr && canvasPtr->isPdfLoadedFunc()) {
+                // PDF is already loaded, add to recent notebooks immediately
+                recentNotebooksManager->addRecentNotebook(selectedFolder, canvasPtr.data());
+                // Refresh shared launcher if it exists and is visible
+                if (sharedLauncher && sharedLauncher->isVisible()) {
+                    sharedLauncher->refreshRecentNotebooks();
                 }
-            });
+            } else {
+                // PDF is still loading, wait for pdfLoaded signal
+                // Use a shared_ptr to safely manage the connection lifetime
+                auto connection = std::make_shared<QMetaObject::Connection>();
+                *connection = connect(canvasPtr.data(), &InkCanvas::pdfLoaded, this, [this, selectedFolder, canvasPtr, connection]() {
+                    if (recentNotebooksManager && canvasPtr && !canvasPtr.isNull()) {
+                        // Add to recent notebooks immediately - RecentNotebooksManager handles delayed thumbnail generation
+                        recentNotebooksManager->addRecentNotebook(selectedFolder, canvasPtr.data());
+                    }
+                    // Disconnect the signal to avoid multiple calls
+                    if (connection && *connection) {
+                        disconnect(*connection);
+                    }
+                });
+            }
         }
         
     } else if (result == PdfOpenDialog::UseExistingFolder) {
@@ -4425,15 +4504,34 @@ void MainWindow::openPdfFile(const QString &pdfPath) {
         updateZoom();
         updatePanRange();
         
-        // ✅ Add to recent notebooks AFTER page is loaded to ensure proper thumbnail generation
+        // ✅ Add to recent notebooks AFTER PDF is loaded to ensure proper thumbnail generation
         if (recentNotebooksManager) {
             // Use QPointer to safely handle canvas deletion
             QPointer<InkCanvas> canvasPtr(canvas);
-            QTimer::singleShot(100, this, [this, selectedFolder, canvasPtr]() {
-                if (recentNotebooksManager && canvasPtr && !canvasPtr.isNull()) {
-                    recentNotebooksManager->addRecentNotebook(selectedFolder, canvasPtr.data());
+            
+            // Check if PDF is already loaded
+            if (canvasPtr && canvasPtr->isPdfLoadedFunc()) {
+                // PDF is already loaded, add to recent notebooks immediately
+                recentNotebooksManager->addRecentNotebook(selectedFolder, canvasPtr.data());
+                // Refresh shared launcher if it exists and is visible
+                if (sharedLauncher && sharedLauncher->isVisible()) {
+                    sharedLauncher->refreshRecentNotebooks();
                 }
-            });
+            } else {
+                // PDF is still loading, wait for pdfLoaded signal
+                // Use a shared_ptr to safely manage the connection lifetime
+                auto connection = std::make_shared<QMetaObject::Connection>();
+                *connection = connect(canvasPtr.data(), &InkCanvas::pdfLoaded, this, [this, selectedFolder, canvasPtr, connection]() {
+                    if (recentNotebooksManager && canvasPtr && !canvasPtr.isNull()) {
+                        // Add to recent notebooks immediately - RecentNotebooksManager handles delayed thumbnail generation
+                        recentNotebooksManager->addRecentNotebook(selectedFolder, canvasPtr.data());
+                    }
+                    // Disconnect the signal to avoid multiple calls
+                    if (connection && *connection) {
+                        disconnect(*connection);
+                    }
+                });
+            }
         }
     }
 }
@@ -4920,27 +5018,32 @@ void MainWindow::returnToLauncher() {
         saveCurrentPage();
     }
     
-    // Create and show launcher window
-    LauncherWindow *launcher = new LauncherWindow();
+    // Use shared launcher instance to prevent memory leaks
+    if (!sharedLauncher) {
+        sharedLauncher = new LauncherWindow();
+        
+        // Connect to handle when launcher is destroyed - clean up static reference
+        connect(sharedLauncher, &LauncherWindow::destroyed, []() {
+            MainWindow::sharedLauncher = nullptr;
+        });
+    }
     
     // Preserve window state
     if (isMaximized()) {
-        launcher->showMaximized();
+        sharedLauncher->showMaximized();
     } else if (isFullScreen()) {
-        launcher->showFullScreen();
+        sharedLauncher->showFullScreen();
     } else {
-        launcher->resize(size());
-        launcher->move(pos());
-        launcher->show();
+        sharedLauncher->resize(size());
+        sharedLauncher->move(pos());
+        sharedLauncher->show();
     }
+    
+    // Don't refresh here - showEvent will handle it automatically
+    // This prevents double population (returnToLauncher + showEvent)
     
     // Hide this main window
     hide();
-    
-    // Connect to handle when launcher closes - show this window again
-    connect(launcher, &LauncherWindow::destroyed, this, [this]() {
-        show();
-    });
 }
 
 void MainWindow::resizeEvent(QResizeEvent *event) {
@@ -6110,16 +6213,15 @@ void MainWindow::openSpnPackage(const QString &spnPath)
     updateZoom();
     updatePanRange();
     
+    // 🔍 TEMPORARY: Comment out addRecentNotebook to test if it's the source of memory leak
     // ✅ Add to recent notebooks AFTER page is loaded to ensure proper thumbnail generation
-    if (recentNotebooksManager) {
-        // Use QPointer to safely handle canvas deletion
-        QPointer<InkCanvas> canvasPtr(canvas);
-        QTimer::singleShot(100, this, [this, spnPath, canvasPtr]() {
-            if (recentNotebooksManager && canvasPtr && !canvasPtr.isNull()) {
-                recentNotebooksManager->addRecentNotebook(spnPath, canvasPtr.data());
-            }
-        });
-    }
+    // if (recentNotebooksManager) {
+    //     recentNotebooksManager->addRecentNotebook(spnPath, canvas);
+    //     // Refresh shared launcher if it exists and is visible
+    //     if (sharedLauncher && sharedLauncher->isVisible()) {
+    //         sharedLauncher->refreshRecentNotebooks();
+    //     }
+    // }
 }
 
 void MainWindow::createNewSpnPackage(const QString &spnPath)
@@ -6168,12 +6270,11 @@ void MainWindow::createNewSpnPackage(const QString &spnPath)
     
     // Add to recent notebooks
     if (recentNotebooksManager) {
-        QPointer<InkCanvas> canvasPtr(canvas);
-        QTimer::singleShot(100, this, [this, spnPath, canvasPtr]() {
-            if (recentNotebooksManager && canvasPtr && !canvasPtr.isNull()) {
-                recentNotebooksManager->addRecentNotebook(spnPath, canvasPtr.data());
-            }
-        });
+        recentNotebooksManager->addRecentNotebook(spnPath, canvas);
+        // Refresh shared launcher if it exists and is visible
+        if (sharedLauncher && sharedLauncher->isVisible()) {
+            sharedLauncher->refreshRecentNotebooks();
+        }
     }
     
     // Show success message

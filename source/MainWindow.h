@@ -166,6 +166,9 @@ static ControllerAction stringToAction(const QString &str) {
     return ControllerAction::None;
 }
 
+// Forward declarations
+class LauncherWindow;
+
 class MainWindow : public QMainWindow {
     Q_OBJECT
 
@@ -291,6 +294,9 @@ public:
 
     void addNewTab();
 
+    // Shared launcher instance to prevent memory leaks (moved from private)
+    static LauncherWindow *sharedLauncher;
+
 private slots:
     void toggleBenchmark();
     void updateBenchmarkDisplay();
@@ -376,6 +382,8 @@ private slots:
     void updateMarkdownButtonState();
     
     
+    
+
 public slots:
     void updatePictureButtonState(); // Public slot for picture button state
 

@@ -16,11 +16,22 @@
 #include <QTimer>
 #include <QPointer>
 
+// Initialize static member
+RecentNotebooksManager* RecentNotebooksManager::instance = nullptr;
+
 RecentNotebooksManager::RecentNotebooksManager(QObject *parent)
     : QObject(parent), settings("SpeedyNote", "App") {
     QDir().mkpath(getCoverImageDir()); // Ensure cover image directory exists
     loadRecentNotebooks();
     loadStarredNotebooks();
+}
+
+RecentNotebooksManager* RecentNotebooksManager::getInstance(QObject *parent)
+{
+    if (!instance) {
+        instance = new RecentNotebooksManager(parent);
+    }
+    return instance;
 }
 
 void RecentNotebooksManager::addRecentNotebook(const QString& folderPath, InkCanvas* canvasForPreview) {
@@ -34,6 +45,7 @@ void RecentNotebooksManager::addRecentNotebook(const QString& folderPath, InkCan
     
     // ✅ Normalize path separators to prevent duplicates
     displayPath = QDir::toNativeSeparators(QFileInfo(displayPath).absoluteFilePath());
+    
 
     // ✅ More aggressive deduplication - remove any entries that might be related
     QString pdfPath;
@@ -89,20 +101,14 @@ void RecentNotebooksManager::addRecentNotebook(const QString& folderPath, InkCan
         recentNotebookPaths.removeLast();
     }
 
-    // ✅ Generate thumbnail immediately, but also schedule a delayed one for better content
+
+    // ✅ Invalidate caches for the added notebook (file might have changed)
+    pdfPathCache.remove(displayPath);
+    displayNameCache.remove(displayPath);
+    
+    // ✅ Generate thumbnail once - no delayed generation to avoid memory leaks
     generateAndSaveCoverPreview(displayPath, canvasForPreview);
     saveRecentNotebooks();
-    
-    // ✅ Schedule a delayed thumbnail generation to capture content after page loads
-    if (canvasForPreview) {
-        // Use QPointer to safely handle canvas deletion
-        QPointer<InkCanvas> canvasPtr(canvasForPreview);
-        QTimer::singleShot(500, this, [this, displayPath, canvasPtr]() {
-            if (canvasPtr && !canvasPtr.isNull()) { // Safe check for canvas validity
-                generateAndSaveCoverPreview(displayPath, canvasPtr.data());
-            }
-        });
-    }
 }
 
 QStringList RecentNotebooksManager::getRecentNotebooks() const {
@@ -117,6 +123,9 @@ void RecentNotebooksManager::removeRecentNotebook(const QString& folderPath) {
     
     // Remove all matching entries (there might be multiple due to different path formats)
     if (recentNotebookPaths.removeAll(normalizedPath) > 0) {
+        // Invalidate caches for the removed notebook
+        pdfPathCache.remove(normalizedPath);
+        displayNameCache.remove(normalizedPath);
         saveRecentNotebooks();
     }
     
@@ -322,6 +331,10 @@ void RecentNotebooksManager::generateAndSaveCoverPreview(const QString& folderPa
         }
     }
     coverImage.save(coverFilePath, "PNG");
+    
+    // ✅ Emit signal to notify that thumbnail was updated
+    // This allows the launcher to invalidate its pixmap cache
+    emit thumbnailUpdated(folderPath, coverFilePath);
 }
 
 QString RecentNotebooksManager::getCoverImagePathForNotebook(const QString& folderPath) const {
@@ -335,6 +348,11 @@ QString RecentNotebooksManager::getCoverImagePathForNotebook(const QString& fold
 }
 
 QString RecentNotebooksManager::getPdfPathFromNotebook(const QString& folderPath) const {
+    // Check cache first to avoid expensive .spn extraction
+    if (pdfPathCache.contains(folderPath)) {
+        return pdfPathCache.value(folderPath);
+    }
+    
     QString actualFolderPath = folderPath;
     bool needsCleanup = false;
     
@@ -414,6 +432,9 @@ QString RecentNotebooksManager::getPdfPathFromNotebook(const QString& folderPath
         QDir tempDir(actualFolderPath);
         tempDir.removeRecursively();
     }
+    
+    // Cache the result to avoid repeated expensive extraction
+    pdfPathCache[folderPath] = pdfPath;
     
     return pdfPath;
 }
@@ -495,20 +516,36 @@ QString RecentNotebooksManager::getNotebookIdFromPath(const QString& folderPath)
     // ✅ Clean up temp directory if we extracted an .spn file
     if (needsCleanup && actualFolderPath.contains("/speedynote_id_check_")) {
         QDir tempDir(actualFolderPath);
-        tempDir.removeRecursively();
+        if (tempDir.exists()) {
+            bool removed = tempDir.removeRecursively();
+            if (!removed) {
+                qWarning() << "Failed to clean up temporary directory:" << actualFolderPath;
+            }
+        }
     }
     
     return notebookId;
 }
 
 QString RecentNotebooksManager::getNotebookDisplayName(const QString& folderPath) const {
-    QString pdfPath = getPdfPathFromNotebook(folderPath);
-    if (!pdfPath.isEmpty()) {
-        return QFileInfo(pdfPath).fileName();
+    // Check cache first to avoid expensive operations
+    if (displayNameCache.contains(folderPath)) {
+        return displayNameCache.value(folderPath);
     }
     
-    // Fallback to folder name
-    return QFileInfo(folderPath).fileName();
+    QString displayName;
+    QString pdfPath = getPdfPathFromNotebook(folderPath);
+    if (!pdfPath.isEmpty()) {
+        displayName = QFileInfo(pdfPath).fileName();
+    } else {
+        // Fallback to folder name
+        displayName = QFileInfo(folderPath).fileName();
+    }
+    
+    // Cache the result
+    displayNameCache[folderPath] = displayName;
+    
+    return displayName;
 }
 
 // Starred notebooks functionality
