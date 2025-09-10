@@ -16,6 +16,7 @@ NC='\033[0m' # No Color
 PKGNAME="speedynote"
 PKGVER="0.7.1"
 PKGREL="1"
+PKGARCH=$(uname -m)
 MAINTAINER="SpeedyNote Team"
 DESCRIPTION="A fast note-taking application with PDF annotation support and controller input"
 URL="https://github.com/alpha-liu-01/SpeedyNote"
@@ -536,7 +537,7 @@ create_deb_package() {
     cat > "$PKG_DIR/DEBIAN/control" << EOF
 Package: $PKGNAME
 Version: $PKGVER-$PKGREL
-Architecture: amd64
+Architecture: $(dpkg --print-architecture)
 Maintainer: $MAINTAINER
 Depends: $(get_dependencies deb)
 Section: editors
@@ -609,9 +610,9 @@ EOF
     create_file_templates "$PKG_DIR"
     
     # Build package
-    dpkg-deb --build "$PKG_DIR" "${PKGNAME}_${PKGVER}-${PKGREL}_amd64.deb"
-    
-    echo -e "${GREEN}DEB package created: ${PKGNAME}_${PKGVER}-${PKGREL}_amd64.deb${NC}"
+    dpkg-deb --build "$PKG_DIR" "${PKGNAME}_${PKGVER}-${PKGREL}_$(dpkg --print-architecture).deb"
+
+    echo -e "${GREEN}DEB package created: ${PKGNAME}_${PKGVER}-${PKGREL}_$(dpkg --print-architecture).deb${NC}"
 }
 
 # Function to create RPM package
@@ -770,7 +771,7 @@ EOF
     rpmbuild -ba ~/rpmbuild/SPECS/${PKGNAME}.spec
     
     # Copy to current directory
-    cp ~/rpmbuild/RPMS/x86_64/${PKGNAME}-${PKGVER}-${PKGREL}.*.rpm .
+    cp ~/rpmbuild/RPMS/${PKGARCH}/${PKGNAME}-${PKGVER}-${PKGREL}.*.rpm .
     
     echo -e "${GREEN}RPM package created: ${PKGNAME}-${PKGVER}-${PKGREL}.*.rpm${NC}"
 }
@@ -796,7 +797,7 @@ pkgname=$PKGNAME
 pkgver=$PKGVER
 pkgrel=$PKGREL
 pkgdesc="$DESCRIPTION"
-arch=('x86_64')
+arch=("$PKGARCH")
 url="$URL"
 license=('MIT')
 depends=($(get_dependencies arch | tr ',' ' '))
@@ -899,7 +900,7 @@ EOF
     # Build package
     makepkg -f
     
-    echo -e "${GREEN}Arch package created: ${PKGNAME}-${PKGVER}-${PKGREL}-x86_64.pkg.tar.zst${NC}"
+    echo -e "${GREEN}Arch package created: ${PKGNAME}-${PKGVER}-${PKGREL}-${PKGARCH}.pkg.tar.zst${NC}"
 }
 
 # Function to create Alpine package
@@ -1037,8 +1038,8 @@ show_package_info() {
     for format in "${PACKAGE_FORMATS[@]}"; do
         case $format in
             deb)
-                if [[ -f "${PKGNAME}_${PKGVER}-${PKGREL}_amd64.deb" ]]; then
-                    echo -e "DEB: ${PKGNAME}_${PKGVER}-${PKGREL}_amd64.deb ($(du -h "${PKGNAME}_${PKGVER}-${PKGREL}_amd64.deb" | cut -f1))"
+                if [[ -f "${PKGNAME}_${PKGVER}-${PKGREL}_$(dpkg --print-architecture).deb" ]]; then
+                    echo -e "DEB: ${PKGNAME}_${PKGVER}-${PKGREL}_$(dpkg --print-architecture).deb ($(du -h "${PKGNAME}_${PKGVER}-${PKGREL}_$(dpkg --print-architecture).deb" | cut -f1))"
                 fi
                 ;;
             rpm)
@@ -1048,8 +1049,8 @@ show_package_info() {
                 fi
                 ;;
             arch)
-                if [[ -f "${PKGNAME}-${PKGVER}-${PKGREL}-x86_64.pkg.tar.zst" ]]; then
-                    echo -e "Arch: ${PKGNAME}-${PKGVER}-${PKGREL}-x86_64.pkg.tar.zst ($(du -h "${PKGNAME}-${PKGVER}-${PKGREL}-x86_64.pkg.tar.zst" | cut -f1))"
+                if [[ -f "${PKGNAME}-${PKGVER}-${PKGREL}-${PKGARCH}.pkg.tar.zst" ]]; then
+                    echo -e "Arch: ${PKGNAME}-${PKGVER}-${PKGREL}-${PKGARCH}.pkg.tar.zst ($(du -h "${PKGNAME}-${PKGVER}-${PKGREL}-${PKGARCH}.pkg.tar.zst" | cut -f1))"
                 fi
                 ;;
             apk)
