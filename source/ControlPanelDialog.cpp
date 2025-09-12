@@ -38,6 +38,7 @@ ControlPanelDialog::ControlPanelDialog(MainWindow *mainWindow, InkCanvas *target
     createKeyboardMappingTab();
     createMouseDialTab();
     createThemeTab();
+    createLanguageTab();
     createCompatibilityTab();
     createAboutTab();
     // === Buttons ===
@@ -153,6 +154,14 @@ void ControlPanelDialog::applyChanges() {
             QString displayString = mouseDialMappingCombos[combination]->currentText();
             QString internalKey = ButtonMappingHelper::displayToInternalKey(displayString, true); // true = isDialMode
             mainWindowRef->setMouseDialMapping(combination, internalKey);
+        }
+        
+        // ✅ Apply language settings
+        QSettings settings("SpeedyNote", "App");
+        settings.setValue("useSystemLanguage", useSystemLanguageCheckbox->isChecked());
+        if (!useSystemLanguageCheckbox->isChecked()) {
+            QString selectedLang = languageCombo->currentData().toString();
+            settings.setValue("languageOverride", selectedLang);
         }
     }
 }
@@ -729,7 +738,7 @@ void ControlPanelDialog::createAboutTab() {
     layout->addSpacing(5);
     
     // Version
-    QLabel *versionLabel = new QLabel(tr("Version 0.9.1"), aboutTab);
+    QLabel *versionLabel = new QLabel(tr("Version 0.9.2"), aboutTab);
     versionLabel->setAlignment(Qt::AlignCenter);
     versionLabel->setStyleSheet("font-size: 14px; color: #7f8c8d;");
     layout->addWidget(versionLabel);
@@ -771,6 +780,93 @@ void ControlPanelDialog::createAboutTab() {
     layout->addSpacing(10);
     
     tabWidget->addTab(aboutTab, tr("About"));
+}
+
+void ControlPanelDialog::createLanguageTab() {
+    languageTab = new QWidget(this);
+    QVBoxLayout *layout = new QVBoxLayout(languageTab);
+    
+    // Add some spacing at the top
+    layout->addSpacing(10);
+    
+    // Title and description
+    QLabel *titleLabel = new QLabel(tr("Language Settings"), languageTab);
+    titleLabel->setStyleSheet("font-size: 16px; font-weight: bold; color: #2c3e50;");
+    layout->addWidget(titleLabel);
+    
+    layout->addSpacing(10);
+    
+    // Use system language checkbox
+    useSystemLanguageCheckbox = new QCheckBox(tr("Use System Language (Auto-detect)"), languageTab);
+    layout->addWidget(useSystemLanguageCheckbox);
+    
+    QLabel *systemNote = new QLabel(tr("When enabled, SpeedyNote will automatically detect and use your system's language setting."), languageTab);
+    systemNote->setWordWrap(true);
+    systemNote->setStyleSheet("color: gray; font-size: 11px; margin-bottom: 15px;");
+    layout->addWidget(systemNote);
+    
+    // Manual language selection
+    QLabel *manualLabel = new QLabel(tr("Manual Language Override:"), languageTab);
+    manualLabel->setStyleSheet("font-weight: bold;");
+    layout->addWidget(manualLabel);
+    
+    languageCombo = new QComboBox(languageTab);
+    languageCombo->addItem(tr("English"), "en");
+    languageCombo->addItem(tr("Español (Spanish)"), "es");
+    languageCombo->addItem(tr("Français (French)"), "fr");
+    languageCombo->addItem(tr("中文 (Chinese Simplified)"), "zh");
+    layout->addWidget(languageCombo);
+    
+    QLabel *manualNote = new QLabel(tr("Select a specific language to override the system setting. Changes take effect after restarting the application."), languageTab);
+    manualNote->setWordWrap(true);
+    manualNote->setStyleSheet("color: gray; font-size: 11px; margin-bottom: 15px;");
+    layout->addWidget(manualNote);
+    
+    // Current language status
+    QLabel *statusLabel = new QLabel(tr("Current Language Status:"), languageTab);
+    statusLabel->setStyleSheet("font-weight: bold; margin-top: 20px;");
+    layout->addWidget(statusLabel);
+    
+    // Show current language
+    QString currentLocale = QLocale::system().name();
+    QString currentLangCode = currentLocale.section('_', 0, 0);
+    QString currentLangName;
+    if (currentLangCode == "es") currentLangName = tr("Spanish");
+    else if (currentLangCode == "fr") currentLangName = tr("French");
+    else if (currentLangCode == "zh") currentLangName = tr("Chinese Simplified");
+    else currentLangName = tr("English");
+    
+    QLabel *currentLabel = new QLabel(tr("System Language: %1 (%2)").arg(currentLangName).arg(currentLocale), languageTab);
+    currentLabel->setStyleSheet("margin-left: 10px;");
+    layout->addWidget(currentLabel);
+    
+    // Load current settings
+    if (mainWindowRef) {
+        QSettings settings("SpeedyNote", "App");
+        bool useSystemLang = settings.value("useSystemLanguage", true).toBool();
+        QString overrideLang = settings.value("languageOverride", "en").toString();
+        
+        useSystemLanguageCheckbox->setChecked(useSystemLang);
+        languageCombo->setEnabled(!useSystemLang);
+        
+        // Set combo to current override language
+        for (int i = 0; i < languageCombo->count(); ++i) {
+            if (languageCombo->itemData(i).toString() == overrideLang) {
+                languageCombo->setCurrentIndex(i);
+                break;
+            }
+        }
+    }
+    
+    // Connect checkbox to enable/disable combo
+    connect(useSystemLanguageCheckbox, &QCheckBox::toggled, this, [this](bool checked) {
+        languageCombo->setEnabled(!checked);
+    });
+    
+    // Add stretch to push everything to the top
+    layout->addStretch();
+    
+    tabWidget->addTab(languageTab, tr("Language"));
 }
 
 void ControlPanelDialog::createCompatibilityTab() {

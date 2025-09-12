@@ -8,6 +8,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QSettings>
+#include <QStandardPaths>
 #include <QColor>
 #include "MainWindow.h"
 #include "LauncherWindow.h"
@@ -64,8 +65,20 @@ int main(int argc, char *argv[]) {
 
     
     QTranslator translator;
-    QString locale = QLocale::system().name(); // e.g., "zh_CN", "es_ES"
-    QString langCode = locale.section('_', 0, 0); // e.g., "zh"
+    
+    // Check for manual language override
+    QSettings settings("SpeedyNote", "App");
+    bool useSystemLanguage = settings.value("useSystemLanguage", true).toBool();
+    QString langCode;
+    
+    if (useSystemLanguage) {
+        // Use system language
+        QString locale = QLocale::system().name(); // e.g., "zh_CN", "es_ES"
+        langCode = locale.section('_', 0, 0); // e.g., "zh"
+    } else {
+        // Use manual override
+        langCode = settings.value("languageOverride", "en").toString();
+    }
 
     // Debug: Uncomment these lines to debug translation loading issues
     // printf("Locale: %s\n", locale.toStdString().c_str());
@@ -73,9 +86,12 @@ int main(int argc, char *argv[]) {
 
     // Try multiple paths to find translation files
     QStringList translationPaths = {
-        QCoreApplication::applicationDirPath(),  // Same directory as executable
-        QCoreApplication::applicationDirPath() + "/translations",  // translations subdirectory
-        ":/resources/translations"  // Qt resource system
+        QCoreApplication::applicationDirPath(),  // Same directory as executable (Windows/portable)
+        QCoreApplication::applicationDirPath() + "/translations",  // translations subdirectory (Windows)
+        "/usr/share/speedynote/translations",  // Standard Linux installation path
+        "/usr/local/share/speedynote/translations",  // Local Linux installation path
+        QStandardPaths::locate(QStandardPaths::GenericDataLocation, "speedynote/translations", QStandardPaths::LocateDirectory),  // XDG data directories
+        ":/resources/translations"  // Qt resource system (fallback)
     };
     
     bool translationLoaded = false;

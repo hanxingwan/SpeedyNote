@@ -48,7 +48,7 @@ vintage hardware._
 2. *(Optitonal)* Click the PDF button on the tool bar to import a PDF document
 3. Start writing/drawing using your stylus
 4. Use the **MagicDial** or **Joy-Con** to change tools, zoom, scroll, or switch pages
-5. Click the `×` on the tab and save the notebook as a `spn` package
+5. Click the `×` on the tab and save the notebook as a `.spn` package
 
 ###### OR
 
@@ -82,10 +82,10 @@ SpeedyNote supports controller input, ideal for tablet users:
 
 #### Windows
 
-1. Install dependent.
+1. Install dependency.
 
     - QT6
-    - DSL2
+    - SDL2
     - Poppler
     - Compiler(e.g. Mingw GCC/Mingw llvm clang, or MSVC(Visual Studio))
     - CMake
@@ -114,7 +114,7 @@ SpeedyNote supports controller input, ideal for tablet users:
 
     The compilation product is usually in `./build/NoteApp.exe`
 
-5. If you want to make a Installer, try to use `InnerSetup`
+5. If you want to make a Installer, try to use `InnoSetup`
 
 #### Linux
 
@@ -136,6 +136,6 @@ SpeedyNote supports controller input, ideal for tablet users:
 ##### Native Packages
 
 1. run `./compile.sh` and `./build-package.sh`
-2. Install the packages for your Linux distro. Note that the dependencies for Fedora and RedHat are not yet tested.
-   `.deb`,`.pkg.tar.zst` and `.apk` are tested and working.
+2. Install the packages for your Linux distro.
+   `.deb`, `rpm`, `.pkg.tar.zst` and `.apk` are tested and working.
    

@@ -20,7 +20,6 @@
 #include <QTextStream>
 #include <QInputDialog>
 #include <QDial>
-#include <QSoundEffect>
 #include <QFontDatabase>
 #include <QStandardPaths>
 #include <QSettings>
@@ -86,7 +85,7 @@ void setupLinuxSignalHandlers() {
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false), localServer(nullptr) {
 
-    setWindowTitle(tr("SpeedyNote Beta 0.9.1"));
+    setWindowTitle(tr("SpeedyNote Beta 0.9.2"));
 
 #ifdef Q_OS_LINUX
     // Setup signal handlers for proper cleanup on Linux
@@ -3153,8 +3152,10 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
 
 void MainWindow::initializeDialSound() {
     if (!dialClickSound) {
-        dialClickSound = new QSoundEffect(this);
-        dialClickSound->setSource(QUrl::fromLocalFile(":/resources/sounds/dial_click.wav")); // ✅ Path to the sound file
+        dialClickSound = new SimpleAudio();
+        if (!dialClickSound->loadWavFile(":/resources/sounds/dial_click.wav")) {
+            qWarning() << "Failed to load dial click sound - audio will be disabled";
+        }
         dialClickSound->setVolume(0.8);  // ✅ Set volume (0.0 - 1.0)
     }
 }

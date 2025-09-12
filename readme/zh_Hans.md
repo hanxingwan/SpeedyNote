@@ -25,11 +25,6 @@
 
 - 支持中文、英文、法语、西班牙语并可以在未来扩展更多语言支持，用户可覆盖半个地球
 
-# 网站
-
----
-
-SpeedyNote 有一个项目官网 [SpeedyNote](https://alpha-liu-01.up.railway.app/projects)
 
 # 安装
 
@@ -71,9 +66,9 @@ SpeedyNote 有一个项目官网 [SpeedyNote](https://alpha-liu-01.up.railway.ap
 
 - 在Phosh桌面上似乎会因为设备映射问题经常崩溃。
 
-- Markdown即时贴无法嵌入图片
+- ~~Markdown即时贴无法嵌入图片~~ 当前可以直接在画布中插入来自本地或者剪贴板的图片。
 
-- 套索选中的区域无法跨页面复制粘贴
+- ~~套索选中的区域无法跨页面复制粘贴~~ 在0.8 版本已经得到了修复。
 
 # 翻译
 
@@ -136,7 +131,7 @@ SOFTWARE.
 1. 安装依赖
 
     - QT6
-    - DSL2
+    - SDL2
     - Poppler
     - Compiler(e.g. Mingw GCC/Mingw llvm clang, or MSVC(Visual Studio))
     - CMake
@@ -165,7 +160,7 @@ SOFTWARE.
 
    通常情况下，编译产物可能在 `./build/NoteApp.exe`
 
-5. 要是想做成安装程序，考虑使用 `InnerSetup`
+5. 要是想做成安装程序，考虑使用 `InnoSetup`
 
 #### Linux
 
@@ -185,4 +180,4 @@ SOFTWARE.
 ##### 本地软件包
 
 1. 运行 `./compile.sh` 以及 `./build-package.sh`
-2. 安装适用您 Linux 发行版的软件包。（注：Fedora系和RedHat系Linux软件包未经测试）
+2. 安装适用您 Linux 发行版的软件包。

@@ -14,7 +14,7 @@ NC='\033[0m' # No Color
 
 # Configuration
 PKGNAME="speedynote"
-PKGVER="0.9.1"
+PKGVER="0.9.2"
 PKGREL="1"
 PKGARCH=$(uname -m)
 MAINTAINER="SpeedyNote Team"
@@ -148,16 +148,16 @@ get_dependencies() {
     local format=$1
     case $format in
         deb)
-            echo "libqt6core6t64, libqt6gui6t64, libqt6widgets6t64, libqt6multimedia6, libpoppler-qt6-3t64, libsdl2-2.0-0"
+            echo "libqt6core6t64, libqt6gui6t64, libqt6widgets6t64, libpoppler-qt6-3t64, libsdl2-2.0-0, libasound2"
             ;;
         rpm)
-            echo "qt6-qtbase, qt6-qtmultimedia, poppler-qt6, SDL2"
+            echo "qt6-qtbase, poppler-qt6, SDL2, alsa-lib"
             ;;
         arch)
-            echo "qt6-base, qt6-multimedia, poppler-qt6, sdl2-compat"
+            echo "qt6-base, poppler-qt6, sdl2-compat, alsa-lib"
             ;;
         apk)
-            echo "qt6-qtbase, qt6-qtmultimedia, poppler-qt6, sdl2"
+            echo "qt6-qtbase, poppler-qt6, sdl2, alsa-lib"
             ;;
     esac
 }
@@ -167,16 +167,16 @@ get_build_dependencies() {
     local format=$1
     case $format in
         deb)
-            echo "cmake, make, pkg-config, qt6-base-dev, libqt6gui6t64, libqt6widgets6t64, qt6-multimedia-dev, qt6-tools-dev, libpoppler-qt6-dev, libsdl2-dev"
+            echo "cmake, make, pkg-config, qt6-base-dev, libqt6gui6t64, libqt6widgets6t64, qt6-tools-dev, libpoppler-qt6-dev, libsdl2-dev, libasound2-dev"
             ;;
         rpm)
-            echo "cmake, make, pkgconf, qt6-qtbase-devel, qt6-qtmultimedia-devel, qt6-qttools-devel, poppler-qt6-devel, SDL2-devel"
+            echo "cmake, make, pkgconf, qt6-qtbase-devel, qt6-qttools-devel, poppler-qt6-devel, SDL2-devel, alsa-lib-devel"
             ;;
         arch)
-            echo "cmake, make, pkgconf, qt6-base, qt6-multimedia, qt6-tools, poppler-qt6, sdl2-compat"
+            echo "cmake, make, pkgconf, qt6-base, qt6-tools, poppler-qt6, sdl2-compat, alsa-lib"
             ;;
         apk)
-            echo "cmake, make, pkgconf, qt6-qtbase-dev, qt6-qtmultimedia-dev, qt6-qttools-dev, poppler-qt5-dev, sdl2-dev"
+            echo "cmake, make, pkgconf, qt6-qtbase-dev, qt6-qttools-dev, poppler-qt5-dev, sdl2-dev, alsa-lib-dev"
             ;;
     esac
 }
@@ -594,6 +594,12 @@ EOF
     cp resources/icons/mainicon.png "$PKG_DIR/usr/share/pixmaps/speedynote.png"
     cp README.md "$PKG_DIR/usr/share/doc/$PKGNAME/"
     
+    # Install translation files
+    mkdir -p "$PKG_DIR/usr/share/speedynote/translations"
+    if [ -d "resources/translations" ]; then
+        cp resources/translations/*.qm "$PKG_DIR/usr/share/speedynote/translations/" 2>/dev/null || true
+    fi
+    
     # Create desktop file with PDF association
     create_desktop_file "$PKG_DIR/usr/share/applications/speedynote.desktop"
     
@@ -662,6 +668,12 @@ install -m755 %{_vpath_builddir}/NoteApp %{buildroot}/usr/bin/speedynote
 install -m644 resources/icons/mainicon.png %{buildroot}/usr/share/pixmaps/speedynote.png
 install -m644 README.md %{buildroot}/usr/share/doc/%{name}/
 
+# Install translation files
+mkdir -p %{buildroot}/usr/share/speedynote/translations
+if [ -d "resources/translations" ]; then
+    cp resources/translations/*.qm %{buildroot}/usr/share/speedynote/translations/ 2>/dev/null || true
+fi
+
 # File manager integrations removed - using launcher instead
 
 cat > %{buildroot}/usr/share/applications/speedynote.desktop << EOFDESKTOP
@@ -710,6 +722,7 @@ EOFMIME
 /usr/share/pixmaps/speedynote.png
 /usr/share/doc/%{name}/README.md
 /usr/share/mime/packages/application-x-speedynote-package.xml
+/usr/share/speedynote/translations/
 
 %changelog
 * $(date '+%a %b %d %Y') $MAINTAINER - $PKGVER-$PKGREL
@@ -765,6 +778,16 @@ package() {
     install -Dm755 "build/NoteApp" "\$pkgdir/usr/bin/speedynote"
     install -Dm644 "resources/icons/mainicon.png" "\$pkgdir/usr/share/pixmaps/speedynote.png"
     install -Dm644 README.md "\$pkgdir/usr/share/doc/\$pkgname/README.md"
+    
+    # Install translation files
+    if [ -d "resources/translations" ]; then
+        install -dm755 "\$pkgdir/usr/share/speedynote/translations"
+        for qm_file in resources/translations/*.qm; do
+            if [ -f "\$qm_file" ]; then
+                install -m644 "\$qm_file" "\$pkgdir/usr/share/speedynote/translations/"
+            fi
+        done
+    fi
     
     install -Dm644 /dev/stdin "\$pkgdir/usr/share/applications/speedynote.desktop" << EOFDESKTOP
 [Desktop Entry]

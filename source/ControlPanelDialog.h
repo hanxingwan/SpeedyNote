@@ -102,10 +102,16 @@ private:
     QWidget *compatibilityTab;
     QPushButton *selectFolderCompatibilityButton;
     
+    // Language tab widgets
+    QWidget *languageTab;
+    QComboBox *languageCombo;
+    QCheckBox *useSystemLanguageCheckbox;
+    
     void createThemeTab();
     void chooseAccentColor();
     void createAboutTab();            // New: create about tab
     void createCompatibilityTab();    // New: create compatibility tab
+    void createLanguageTab();         // New: create language tab
     void updateControllerStatus();    // Update controller connection status display
 };
 
