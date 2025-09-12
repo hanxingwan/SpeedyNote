@@ -791,7 +791,7 @@ void ControlPanelDialog::createLanguageTab() {
     
     // Title and description
     QLabel *titleLabel = new QLabel(tr("Language Settings"), languageTab);
-    titleLabel->setStyleSheet("font-size: 16px; font-weight: bold; color: #2c3e50;");
+    titleLabel->setStyleSheet("font-size: 16px; font-weight: bold;");
     layout->addWidget(titleLabel);
     
     layout->addSpacing(10);
