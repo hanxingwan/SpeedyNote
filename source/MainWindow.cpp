@@ -44,14 +44,54 @@
 #include <poppler-qt6.h> // For PDF outline parsing
 #include <memory> // For std::shared_ptr
 
+// Linux-specific includes for signal handling
+#ifdef Q_OS_LINUX
+#include <signal.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <QProcess>
+#endif
+
 // Static member definition for single instance
 QSharedMemory *MainWindow::sharedMemory = nullptr;
 LauncherWindow *MainWindow::sharedLauncher = nullptr;
+
+#ifdef Q_OS_LINUX
+// Linux-specific signal handler for cleanup
+void linuxSignalHandler(int signal) {
+    Q_UNUSED(signal);
+    
+    // Only do minimal cleanup in signal handler to avoid Qt conflicts
+    // The main cleanup will happen in the destructor
+    if (MainWindow::sharedMemory && MainWindow::sharedMemory->isAttached()) {
+        MainWindow::sharedMemory->detach();
+    }
+    
+    // Remove local server
+    QLocalServer::removeServer("SpeedyNote_SingleInstance");
+    
+    // Exit immediately - don't call QApplication::quit() from signal handler
+    // as it can interfere with Qt's event system
+    _exit(0);
+}
+
+// Function to setup Linux signal handlers
+void setupLinuxSignalHandlers() {
+    // Only handle SIGTERM and SIGINT, avoid SIGHUP as it can interfere with Qt
+    signal(SIGTERM, linuxSignalHandler);
+    signal(SIGINT, linuxSignalHandler);
+}
+#endif
 
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false), localServer(nullptr) {
 
     setWindowTitle(tr("SpeedyNote Beta 0.9.1"));
+
+#ifdef Q_OS_LINUX
+    // Setup signal handlers for proper cleanup on Linux
+    setupLinuxSignalHandlers();
+#endif
 
     // Enable IME support for multi-language input
     setAttribute(Qt::WA_InputMethodEnabled, true);
@@ -1204,14 +1244,11 @@ MainWindow::~MainWindow() {
     // Cleanup single instance resources
     if (localServer) {
         localServer->close();
-        QLocalServer::removeServer("SpeedyNote_SingleInstance");
+        localServer = nullptr;
     }
     
-    if (sharedMemory) {
-        sharedMemory->detach();
-        delete sharedMemory;
-        sharedMemory = nullptr;
-    }
+    // Use static cleanup method for consistent cleanup
+    cleanupSharedResources();
 }
 
 void MainWindow::toggleBenchmark() {
@@ -6292,14 +6329,78 @@ bool MainWindow::isInstanceRunning()
         sharedMemory = new QSharedMemory("SpeedyNote_SingleInstance");
     }
     
-    // Try to create shared memory segment
+    // First, try to create shared memory segment
     if (sharedMemory->create(1)) {
         // Successfully created, we're the first instance
         return false;
-    } else {
-        // Failed to create, another instance is running
-        return true;
     }
+    
+    // Creation failed, check why
+    QSharedMemory::SharedMemoryError error = sharedMemory->error();
+    
+#ifdef Q_OS_LINUX
+    // On Linux, handle the alternating crash pattern by being more aggressive with cleanup
+    if (error == QSharedMemory::AlreadyExists) {
+        // Try to connect to the local server to see if instance is actually running
+        QLocalSocket testSocket;
+        testSocket.connectToServer("SpeedyNote_SingleInstance");
+        
+        // Wait briefly for connection - reduced timeout for faster response
+        if (!testSocket.waitForConnected(500)) {
+            // No server responding, definitely stale shared memory
+            // qDebug() << "Detected stale shared memory on Linux, attempting cleanup...";
+            
+            // Delete current shared memory object and create a fresh one
+            delete sharedMemory;
+            sharedMemory = new QSharedMemory("SpeedyNote_SingleInstance");
+            
+            // Try to attach to the existing segment and then detach to clean it up
+            if (sharedMemory->attach()) {
+                sharedMemory->detach();
+                
+                // Create a new shared memory object again after cleanup
+                delete sharedMemory;
+                sharedMemory = new QSharedMemory("SpeedyNote_SingleInstance");
+                
+                // Now try to create again
+                if (sharedMemory->create(1)) {
+                    // qDebug() << "Successfully cleaned up stale shared memory on Linux";
+                    return false; // We're now the first instance
+                }
+            }
+            
+            // If attach failed, try more aggressive cleanup
+            // This handles the case where the segment exists but is corrupted
+            delete sharedMemory;
+            sharedMemory = nullptr;
+            
+            // Use system command to remove stale shared memory (last resort)
+            // Run this asynchronously to avoid blocking the startup
+            QProcess *cleanupProcess = new QProcess();
+            cleanupProcess->start("sh", QStringList() << "-c" << "ipcs -m | grep $(whoami) | awk '/SpeedyNote/{print $2}' | xargs -r ipcrm -m");
+            
+            // Clean up the process when it finishes
+            QObject::connect(cleanupProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+                           cleanupProcess, &QProcess::deleteLater);
+            
+            // Create fresh shared memory object
+            sharedMemory = new QSharedMemory("SpeedyNote_SingleInstance");
+            if (sharedMemory->create(1)) {
+                // qDebug() << "Cleaned up stale shared memory using system command";
+                return false;
+            }
+            
+            // If we still can't create, log the issue
+            qWarning() << "Failed to clean up stale shared memory on Linux. Manual cleanup may be required.";
+        } else {
+            // Server is responding, there's actually another instance running
+            testSocket.disconnectFromServer();
+        }
+    }
+#endif
+    
+    // Another instance is running (or cleanup failed)
+    return true;
 }
 
 bool MainWindow::sendToExistingInstance(const QString &filePath)
@@ -6348,30 +6449,46 @@ void MainWindow::onNewConnection()
     // Use QPointer for safe access in lambdas
     QPointer<QLocalSocket> socketPtr(clientSocket);
     
-    // Handle data reception
+    // Handle data reception with improved error handling
     connect(clientSocket, &QLocalSocket::readyRead, this, [this, socketPtr]() {
-        if (!socketPtr) return; // Socket was already deleted
+        if (!socketPtr || socketPtr->state() != QLocalSocket::ConnectedState) {
+            return; // Socket was deleted or disconnected
+        }
         
         QByteArray data = socketPtr->readAll();
         QString command = QString::fromUtf8(data);
         
         if (!command.isEmpty()) {
-            // Bring window to front and focus (already on main thread)
-            raise();
-            activateWindow();
-            
-            // Parse command
-            if (command.startsWith("--create-new|")) {
-                // Handle create new package command
-                QString filePath = command.mid(13); // Remove "--create-new|" prefix
-                createNewSpnPackage(filePath);
-            } else {
-                // Regular file opening
-                openFileInNewTab(command);
-            }
+            // Use QTimer::singleShot to defer processing to avoid signal/slot conflicts
+            QTimer::singleShot(0, this, [this, command]() {
+                // Bring window to front and focus (already on main thread)
+                raise();
+                activateWindow();
+                
+                // Parse command
+                if (command.startsWith("--create-new|")) {
+                    // Handle create new package command
+                    QString filePath = command.mid(13); // Remove "--create-new|" prefix
+                    createNewSpnPackage(filePath);
+                } else {
+                    // Regular file opening
+                    openFileInNewTab(command);
+                }
+            });
         }
         
-        // Close the connection after processing
+        // Close the connection after processing with a small delay
+        QTimer::singleShot(10, this, [socketPtr]() {
+            if (socketPtr && socketPtr->state() == QLocalSocket::ConnectedState) {
+                socketPtr->disconnectFromServer();
+            }
+        });
+    });
+    
+    // Handle connection errors
+    connect(clientSocket, QOverload<QLocalSocket::LocalSocketError>::of(&QLocalSocket::errorOccurred),
+            this, [socketPtr](QLocalSocket::LocalSocketError error) {
+        Q_UNUSED(error);
         if (socketPtr) {
             socketPtr->disconnectFromServer();
         }
@@ -6386,6 +6503,28 @@ void MainWindow::onNewConnection()
             socketPtr->disconnectFromServer();
         }
     });
+}
+
+// Static cleanup method for signal handlers and emergency cleanup
+void MainWindow::cleanupSharedResources()
+{
+    // Minimal cleanup to avoid Qt conflicts
+    if (sharedMemory) {
+        if (sharedMemory->isAttached()) {
+            sharedMemory->detach();
+        }
+        delete sharedMemory;
+        sharedMemory = nullptr;
+    }
+    
+    // Remove local server
+    QLocalServer::removeServer("SpeedyNote_SingleInstance");
+    
+#ifdef Q_OS_LINUX
+    // On Linux, try to clean up stale shared memory segments
+    // Use system() instead of QProcess to avoid Qt dependencies in cleanup
+    system("ipcs -m | grep $(whoami) | awk '/SpeedyNote/{print $2}' | xargs -r ipcrm -m 2>/dev/null");
+#endif
 }
 
 void MainWindow::openFileInNewTab(const QString &filePath)

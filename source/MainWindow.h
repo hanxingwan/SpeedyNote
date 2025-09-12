@@ -297,6 +297,11 @@ public:
     // Shared launcher instance to prevent memory leaks (moved from private)
     static LauncherWindow *sharedLauncher;
 
+    static QSharedMemory *sharedMemory;
+    
+    // Static cleanup method for signal handlers
+    static void cleanupSharedResources();
+
 private slots:
     void toggleBenchmark();
     void updateBenchmarkDisplay();
@@ -625,7 +630,7 @@ private:
     
     // Single instance support
     QLocalServer *localServer;
-    static QSharedMemory *sharedMemory;
+    
 
     void setupUi();
 
