@@ -3157,6 +3157,7 @@ void MainWindow::initializeDialSound() {
             qWarning() << "Failed to load dial click sound - audio will be disabled";
         }
         dialClickSound->setVolume(0.8);  // ✅ Set volume (0.0 - 1.0)
+        dialClickSound->setMinimumInterval(30); // ✅ Optimize for fast dial rotation (30ms minimum)
     }
 }
 

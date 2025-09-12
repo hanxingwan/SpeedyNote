@@ -25,6 +25,9 @@ public:
     // Check if audio is available on this system
     static bool isAudioAvailable();
     
+    // Set minimum interval between sounds (for rate limiting)
+    void setMinimumInterval(int milliseconds);
+    
 private:
     class SimpleAudioPrivate;
     SimpleAudioPrivate* d;

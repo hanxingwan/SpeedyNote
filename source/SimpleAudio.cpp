@@ -16,7 +16,7 @@
 class SimpleAudio::SimpleAudioPrivate
 {
 public:
-    SimpleAudioPrivate() : volume(0.8f), audioData(nullptr), audioSize(0) {}
+    SimpleAudioPrivate() : volume(0.8f), audioData(nullptr), audioSize(0), minimumInterval(50) {}
     ~SimpleAudioPrivate() {
         cleanup();
     }
@@ -40,6 +40,7 @@ public:
     float volume;
     char* audioData;
     size_t audioSize;
+    int minimumInterval; // Minimum interval between sounds in milliseconds
     
 #ifdef __linux__
     // WAV format info
@@ -151,8 +152,21 @@ void SimpleAudio::play()
     }
     
 #ifdef _WIN32
-    // Use PlaySound with SND_MEMORY flag for immediate playback
-    DWORD flags = SND_MEMORY | SND_ASYNC | SND_NODEFAULT;
+    // Rate limiting: Don't play if we just played recently (prevents CPU spikes)
+    static DWORD lastPlayTime = 0;
+    DWORD currentTime = GetTickCount();
+    DWORD minInterval = static_cast<DWORD>(d->minimumInterval);
+    
+    if (currentTime - lastPlayTime < minInterval) {
+        return; // Skip this play request to prevent audio spam
+    }
+    lastPlayTime = currentTime;
+    
+    // Stop any currently playing sound first to prevent overlapping
+    PlaySoundA(nullptr, nullptr, SND_PURGE);
+    
+    // Use optimized flags for better performance
+    DWORD flags = SND_MEMORY | SND_ASYNC | SND_NODEFAULT | SND_NOWAIT;
     PlaySoundA(d->audioData, nullptr, flags);
     
 #elif defined(__linux__)
@@ -202,6 +216,11 @@ void SimpleAudio::setVolume(float volume)
     d->volume = qBound(0.0f, volume, 1.0f);
     // Note: Volume control would require more complex implementation
     // For simplicity, we'll just store the value but not apply it
+}
+
+void SimpleAudio::setMinimumInterval(int milliseconds)
+{
+    d->minimumInterval = qBound(10, milliseconds, 1000); // Between 10ms and 1000ms
 }
 
 bool SimpleAudio::isAudioAvailable()
