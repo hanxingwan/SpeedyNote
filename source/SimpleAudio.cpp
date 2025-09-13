@@ -1,6 +1,8 @@
 #include "SimpleAudio.h"
 #include <QFile>
 #include <QDebug>
+#include <cmath>
+#include <algorithm>
 
 #ifdef _WIN32
     #include <windows.h>
@@ -24,6 +26,9 @@ public:
         soundBuffer = nullptr;
         directSoundInitialized = false;
         memset(&waveFormat, 0, sizeof(WAVEFORMATEX));
+        sampleRate = 44100;
+        channels = 1;
+        bitsPerSample = 16;
 #endif
     }
     ~SimpleAudioPrivate() {
@@ -68,18 +73,37 @@ public:
         // Create DirectSound object
         HRESULT hr = DirectSoundCreate8(NULL, &directSound, NULL);
         if (FAILED(hr)) {
-            qWarning() << "SimpleAudio: Failed to create DirectSound object";
+            qWarning() << "SimpleAudio: Failed to create DirectSound object, HRESULT:" << QString::number(hr, 16);
             return false;
         }
         
-        // Set cooperative level
-        HWND hwnd = GetDesktopWindow(); // Use desktop window as fallback
-        hr = directSound->SetCooperativeLevel(hwnd, DSSCL_PRIORITY);
+        
+        // Set cooperative level - use DSSCL_NORMAL for better compatibility
+        HWND hwnd = GetDesktopWindow();
+        hr = directSound->SetCooperativeLevel(hwnd, DSSCL_NORMAL);
         if (FAILED(hr)) {
-            qWarning() << "SimpleAudio: Failed to set DirectSound cooperative level";
-            return false;
+            qWarning() << "SimpleAudio: Failed to set DirectSound cooperative level, HRESULT:" << QString::number(hr, 16);
+            // Try with DSSCL_PRIORITY as fallback
+            hr = directSound->SetCooperativeLevel(hwnd, DSSCL_PRIORITY);
+            if (FAILED(hr)) {
+                qWarning() << "SimpleAudio: Failed to set DirectSound cooperative level (priority), HRESULT:" << QString::number(hr, 16);
+                directSound->Release();
+                directSound = nullptr;
+                return false;
+            }
         }
         
+        
+        // Create primary buffer to ensure proper setup
+        DSBUFFERDESC primaryDesc;
+        memset(&primaryDesc, 0, sizeof(DSBUFFERDESC));
+        primaryDesc.dwSize = sizeof(DSBUFFERDESC);
+        primaryDesc.dwFlags = DSBCAPS_PRIMARYBUFFER;
+        primaryDesc.dwBufferBytes = 0;
+        primaryDesc.lpwfxFormat = NULL;
+        
+        hr = directSound->CreateSoundBuffer(&primaryDesc, &primaryBuffer, NULL);
+        // Continue regardless of primary buffer creation result
         directSoundInitialized = true;
         return true;
     }
@@ -93,27 +117,29 @@ public:
             soundBuffer = nullptr;
         }
         
-        // Set up wave format
+        // Set up wave format using actual WAV file format
         waveFormat.wFormatTag = WAVE_FORMAT_PCM;
-        waveFormat.nChannels = 1; // Mono for click sounds
-        waveFormat.nSamplesPerSec = 44100; // Standard sample rate
-        waveFormat.wBitsPerSample = 16;
+        waveFormat.nChannels = channels;
+        waveFormat.nSamplesPerSec = sampleRate;
+        waveFormat.wBitsPerSample = bitsPerSample;
         waveFormat.nBlockAlign = waveFormat.nChannels * waveFormat.wBitsPerSample / 8;
         waveFormat.nAvgBytesPerSec = waveFormat.nSamplesPerSec * waveFormat.nBlockAlign;
         waveFormat.cbSize = 0;
+        
         
         // Create buffer description
         DSBUFFERDESC bufferDesc;
         memset(&bufferDesc, 0, sizeof(DSBUFFERDESC));
         bufferDesc.dwSize = sizeof(DSBUFFERDESC);
-        bufferDesc.dwFlags = DSBCAPS_CTRLVOLUME | DSBCAPS_STATIC;
+        bufferDesc.dwFlags = DSBCAPS_CTRLVOLUME | DSBCAPS_LOCSOFTWARE | DSBCAPS_GLOBALFOCUS;
         bufferDesc.dwBufferBytes = audioSize;
         bufferDesc.lpwfxFormat = &waveFormat;
+        
         
         // Create the sound buffer
         HRESULT hr = directSound->CreateSoundBuffer(&bufferDesc, &soundBuffer, NULL);
         if (FAILED(hr)) {
-            qWarning() << "SimpleAudio: Failed to create DirectSound buffer";
+            qWarning() << "SimpleAudio: Failed to create DirectSound buffer, HRESULT:" << QString::number(hr, 16);
             return false;
         }
         
@@ -123,7 +149,7 @@ public:
         
         hr = soundBuffer->Lock(0, audioSize, &audioPtr1, &audioBytes1, &audioPtr2, &audioBytes2, DSBLOCK_ENTIREBUFFER);
         if (FAILED(hr)) {
-            qWarning() << "SimpleAudio: Failed to lock DirectSound buffer";
+            qWarning() << "SimpleAudio: Failed to lock DirectSound buffer, HRESULT:" << QString::number(hr, 16);
             return false;
         }
         
@@ -134,7 +160,11 @@ public:
         }
         
         // Unlock the buffer
-        soundBuffer->Unlock(audioPtr1, audioBytes1, audioPtr2, audioBytes2);
+        hr = soundBuffer->Unlock(audioPtr1, audioBytes1, audioPtr2, audioBytes2);
+        if (FAILED(hr)) {
+            qWarning() << "SimpleAudio: Failed to unlock DirectSound buffer";
+            return false;
+        }
         
         return true;
     }
@@ -152,6 +182,11 @@ public:
     LPDIRECTSOUNDBUFFER soundBuffer;
     WAVEFORMATEX waveFormat;
     bool directSoundInitialized;
+    
+    // WAV format info (needed for Windows too)
+    int sampleRate;
+    int channels;
+    int bitsPerSample;
 #endif
     
 #ifdef __linux__
@@ -198,11 +233,45 @@ bool SimpleAudio::loadWavFile(const QString& filePath)
     d->cleanup();
     
 #ifdef _WIN32
-    // For DirectSound, we need to extract just the PCM data from the WAV file
+    // For DirectSound, we need to parse the WAV file format and extract PCM data
     const char* data = fileData.constData();
     
-    // Find the "data" chunk to get the actual PCM audio data
+    // First, find the "fmt " chunk to get format information
     size_t pos = 12;
+    bool formatFound = false;
+    while (pos < fileData.size() - 8 && !formatFound) {
+        if (memcmp(data + pos, "fmt ", 4) == 0) {
+            uint32_t chunkSize = *reinterpret_cast<const uint32_t*>(data + pos + 4);
+            if (chunkSize >= 16) {
+                uint16_t audioFormat = *reinterpret_cast<const uint16_t*>(data + pos + 8);
+                if (audioFormat != 1) { // PCM
+                    qWarning() << "SimpleAudio: Only PCM format supported, got format:" << audioFormat;
+                    return false;
+                }
+                
+                d->channels = *reinterpret_cast<const uint16_t*>(data + pos + 10);
+                d->sampleRate = *reinterpret_cast<const uint32_t*>(data + pos + 12);
+                d->bitsPerSample = *reinterpret_cast<const uint16_t*>(data + pos + 22);
+                
+                if (d->bitsPerSample != 16) {
+                    qWarning() << "SimpleAudio: Only 16-bit samples supported, got:" << d->bitsPerSample;
+                    return false;
+                }
+                formatFound = true;
+            }
+        }
+        if (!formatFound) {
+            pos += 8 + *reinterpret_cast<const uint32_t*>(data + pos + 4);
+        }
+    }
+    
+    if (!formatFound) {
+        qWarning() << "SimpleAudio: Could not find fmt chunk in WAV file";
+        return false;
+    }
+    
+    // Now find the "data" chunk to get the actual PCM audio data
+    pos = 12;
     while (pos < fileData.size() - 8) {
         if (memcmp(data + pos, "data", 4) == 0) {
             uint32_t dataSize = *reinterpret_cast<const uint32_t*>(data + pos + 4);
@@ -221,6 +290,12 @@ bool SimpleAudio::loadWavFile(const QString& filePath)
             if (!d->createSoundBuffer()) {
                 return false;
             }
+            
+            // Apply the current volume setting to the new buffer
+            // This ensures volume is set immediately after buffer creation
+            float currentVolume = d->volume;
+            d->volume = -1.0f; // Force volume update
+            setVolume(currentVolume);
             
             return true;
         }
@@ -291,28 +366,34 @@ void SimpleAudio::play()
     
 #ifdef _WIN32
     // DirectSound can handle rapid playback much better than PlaySound
-    // No need for aggressive rate limiting anymore
     static DWORD lastPlayTime = 0;
     DWORD currentTime = GetTickCount();
     
-    // Very minimal rate limiting (just to prevent extreme spam)
-    if (currentTime - lastPlayTime < 5) { // Only 5ms minimum
+    // Apply minimum interval rate limiting
+    if (currentTime - lastPlayTime < static_cast<DWORD>(d->minimumInterval)) {
         return;
     }
     lastPlayTime = currentTime;
     
     if (!d->soundBuffer) {
-        return; // Buffer not initialized
+        return;
     }
     
-    // Reset the play position to the beginning and start playing
-    HRESULT hr = d->soundBuffer->SetCurrentPosition(0);
-    if (SUCCEEDED(hr)) {
-        hr = d->soundBuffer->Play(0, 0, 0); // Play once, no looping
-        if (FAILED(hr)) {
-            qWarning() << "SimpleAudio: Failed to play DirectSound buffer";
-        }
+    // Check if the buffer is currently playing and stop it
+    DWORD status;
+    HRESULT hr = d->soundBuffer->GetStatus(&status);
+    if (SUCCEEDED(hr) && (status & DSBSTATUS_PLAYING)) {
+        d->soundBuffer->Stop();
     }
+    
+    // Reset the play position to the beginning
+    hr = d->soundBuffer->SetCurrentPosition(0);
+    if (FAILED(hr)) {
+        return;
+    }
+    
+    // Start playing
+    d->soundBuffer->Play(0, 0, 0); // Play once, no looping
     
 #elif defined(__linux__)
     // Use ALSA for Linux playback in a separate thread
@@ -359,8 +440,25 @@ void SimpleAudio::play()
 void SimpleAudio::setVolume(float volume)
 {
     d->volume = qBound(0.0f, volume, 1.0f);
-    // Note: Volume control would require more complex implementation
-    // For simplicity, we'll just store the value but not apply it
+    
+#ifdef _WIN32
+    // Apply volume to DirectSound buffer if available
+    if (d->soundBuffer) {
+        // DirectSound volume is in hundredths of decibels (centibels)
+        // Range: DSBVOLUME_MIN (-10000) to DSBVOLUME_MAX (0)
+        // 0 = full volume, -10000 = silence
+        LONG dsVolume;
+        if (d->volume <= 0.0f) {
+            dsVolume = DSBVOLUME_MIN; // Silence
+        } else {
+            // Just use full volume (0) and let the system volume control it
+            // This eliminates the complexity of DirectSound volume conversion
+            dsVolume = DSBVOLUME_MAX; // Always full volume (0 decibels)
+        }
+        
+        d->soundBuffer->SetVolume(dsVolume);
+    }
+#endif
 }
 
 void SimpleAudio::setMinimumInterval(int milliseconds)

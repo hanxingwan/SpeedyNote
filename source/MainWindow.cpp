@@ -2855,7 +2855,9 @@ void MainWindow::handleDialInput(int angle) {
             tempClicks = currentClicks;
             updateDialDisplay();
     
-            if (isLowResPreviewEnabled()) {
+            // Only load PDF previews for page-switching dial modes
+            if (isLowResPreviewEnabled() && 
+                (currentDialMode == PageSwitching || currentDialMode == PanAndPageScroll)) {
                 int previewPage = qBound(1, getCurrentPageForCanvas(currentCanvas()) + currentClicks, 99999);
                 currentCanvas()->loadPdfPreviewAsync(previewPage);
             }
@@ -6565,6 +6567,8 @@ void MainWindow::mouseReleaseEvent(QMouseEvent *event) {
     if (pressedMouseButtons.contains(event->button())) {
         // Check if this was a short press (timer still running) for page navigation
         bool wasShortPress = mouseDialTimer->isActive();
+        // Check if this button was part of a combination (more than one button pressed)
+        bool wasPartOfCombination = pressedMouseButtons.size() > 1;
         
         pressedMouseButtons.remove(event->button());
         
@@ -6573,8 +6577,8 @@ void MainWindow::mouseReleaseEvent(QMouseEvent *event) {
             mouseDialTimer->stop();
             if (mouseDialModeActive) {
                 stopMouseDialMode();
-            } else if (wasShortPress) {
-                // Handle short press page navigation for side buttons only
+            } else if (wasShortPress && !wasPartOfCombination) {
+                // Only handle short press if it was NOT part of a combination
                 if (event->button() == Qt::BackButton) {
                     goToPreviousPage();
                 } else if (event->button() == Qt::ForwardButton) {
