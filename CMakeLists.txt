@@ -45,14 +45,14 @@ if (WIN32)
     set(WIN_RESOURCES app_icon.rc)
 
     # Find dependencies for Windows
-    find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Multimedia Concurrent Xml Network)
+    find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Concurrent Xml Network)
     find_package(Poppler REQUIRED)
     find_package(SDL2 REQUIRED CONFIG)
     unset(SDL2main CACHE)
 elseif (UNIX)
     # Linux-specific configuration
     # Use system paths for Linux
-    find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Multimedia Concurrent Xml Network)
+    find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Concurrent Xml Network)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(POPPLER REQUIRED IMPORTED_TARGET poppler-qt6)
 
@@ -118,6 +118,7 @@ add_executable(${PROJECT_NAME}
         source/Main.cpp
         source/MainWindow.cpp
         source/InkCanvas.cpp
+        source/SimpleAudio.cpp
         source/ControlPanelDialog.cpp
         source/SDLControllerManager.cpp
         source/ButtonMappingTypes.cpp
@@ -173,15 +174,18 @@ add_compile_definitions(QT_NO_DEPRECATED_WARNINGS)
 # ✅ Link libraries - platform specific
 if (WIN32)
     target_link_libraries(NoteApp
-            Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Multimedia Qt6::Concurrent Qt6::Xml Qt6::Network
+            Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Concurrent Qt6::Xml Qt6::Network
             SDL2::SDL2
             ${POPPLER_LIBRARIES}
+            dsound  # For DirectSound API
+            dxguid  # For DirectSound GUIDs
     )
 elseif (UNIX)
     target_link_libraries(NoteApp
-            Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Multimedia Qt6::Concurrent Qt6::Xml Qt6::Network
+            Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Concurrent Qt6::Xml Qt6::Network
             PkgConfig::SDL2
             PkgConfig::POPPLER
+            asound  # For ALSA audio
     )
 endif ()
 
@@ -198,6 +202,12 @@ if (UNIX)
     # Install translation files if they exist
     if (QM_FILES)
         install(FILES ${QM_FILES} DESTINATION share/speedynote/translations)
+    endif ()
+    
+    # Also install resource translation files
+    file(GLOB RESOURCE_QM_FILES "resources/translations/*.qm")
+    if (RESOURCE_QM_FILES)
+        install(FILES ${RESOURCE_QM_FILES} DESTINATION share/speedynote/translations)
     endif ()
 
     # Install icon with app ID name for proper Flatpak desktop integration

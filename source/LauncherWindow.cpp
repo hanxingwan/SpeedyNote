@@ -521,8 +521,14 @@ QPushButton* LauncherWindow::createNotebookButton(const QString &path, bool isSt
     // Title
     QLabel *titleLabel = new QLabel(notebookManager->getNotebookDisplayName(path));
     titleLabel->setAlignment(Qt::AlignCenter);
-    titleLabel->setWordWrap(true);
-    titleLabel->setMaximumHeight(40);
+    titleLabel->setWordWrap(false); // Disable word wrap to keep single line
+    titleLabel->setMaximumHeight(20); // Reduce height to enforce single line
+    titleLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed); // Allow text to be clipped
+    
+    // Set elide mode to show ellipsis when text is too long
+    QFontMetrics fontMetrics(titleLabel->font());
+    QString elidedText = fontMetrics.elidedText(titleLabel->text(), Qt::ElideRight, BUTTON_SIZE - 20);
+    titleLabel->setText(elidedText);
     titleLabel->setStyleSheet("font-weight: bold;"); // Let system handle color
     buttonLayout->addWidget(titleLabel);
     

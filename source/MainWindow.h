@@ -16,7 +16,7 @@
 #include <QStackedWidget>
 #include <QTreeWidget>
 #include <QDial>
-#include <QSoundEffect>
+#include "SimpleAudio.h"
 #include <QFont>
 #include <QQueue>
 #include "SDLControllerManager.h"
@@ -512,7 +512,7 @@ private:
     int startAngle = 0;
     bool tracking = false;
     int accumulatedRotation = 0;
-    QSoundEffect *dialClickSound = nullptr;
+    SimpleAudio *dialClickSound = nullptr;
 
     int grossTotalClicks = 0;
 

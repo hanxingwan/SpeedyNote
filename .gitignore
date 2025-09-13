@@ -30,6 +30,10 @@
 *.exe
 *.out
 *.app
+*.rpm
+*.deb
+*.pkg.tar.zst
+*.apk
 
 # Editor
 .vs/

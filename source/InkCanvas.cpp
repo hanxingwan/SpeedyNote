@@ -578,6 +578,7 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
             // Draw it at the logical position
             // Use exactSelectionRectF for smoother movement if available
             QPointF topLeft = exactSelectionRectF.isEmpty() ? selectionRect.topLeft() : exactSelectionRectF.topLeft();
+            
             painter.drawPixmap(topLeft, scaledBuffer);
 
             QPen selectionBorderPen(Qt::DashLine);
@@ -836,20 +837,10 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
                     exactSelectionRectF = QRectF(selectionRect);
                 }
                 
-                // If this selection was just copied, clear the area now that user is moving it
+                // If this selection was just copied, DON'T clear the area - the original should remain
+                // This is the key difference between copy and cut/move operations
                 if (selectionJustCopied) {
-                    QPainter painter(&buffer);
-                    painter.setCompositionMode(QPainter::CompositionMode_Clear);
-                    QPointF bufferDest = mapLogicalWidgetToPhysicalBuffer(selectionRect.topLeft());
-                    QRect clearRect(bufferDest.toPoint(), selectionBuffer.size());
-                    // Only clear the part that's within buffer bounds
-                    QRect bufferBounds(0, 0, buffer.width(), buffer.height());
-                    QRect clippedClearRect = clearRect.intersected(bufferBounds);
-                    if (!clippedClearRect.isEmpty()) {
-                        painter.fillRect(clippedClearRect, Qt::transparent);
-                    }
-                    painter.end();
-                    selectionJustCopied = false; // Clear the flag
+                    selectionJustCopied = false; // Clear the flag, but don't clear the buffer area
                 }
                 
                 // If the selection area hasn't been cleared from the buffer yet, clear it now
@@ -2571,41 +2562,19 @@ void InkCanvas::copyRopeSelection() {
             newBufferDest = mapLogicalWidgetToPhysicalBuffer(newTopLeft);
         }
         
-        // First, paste the selection back to its current location to restore the original
+        // First, permanently commit the original selection to the buffer
         QPainter painter(&buffer);
-        // Explicitly set composition mode to draw on top of existing content
         painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
         painter.drawPixmap(currentBufferDest.toPoint(), selectionBuffer);
-        
-        // Then, paste the copy to the new location
-        // We need to handle the case where the copy extends beyond buffer boundaries
-        QRect targetRect(newBufferDest.toPoint(), selectionBuffer.size());
-        QRect bufferBounds(0, 0, buffer.width(), buffer.height());
-        QRect clippedRect = targetRect.intersected(bufferBounds);
-        
-        if (!clippedRect.isEmpty()) {
-            // Calculate which part of the selectionBuffer to draw
-            QRect sourceRect = QRect(
-                clippedRect.x() - targetRect.x(),
-                clippedRect.y() - targetRect.y(),
-                clippedRect.width(),
-                clippedRect.height()
-            );
-            
-            painter.drawPixmap(clippedRect, selectionBuffer, sourceRect);
-        }
-        
-        // For the selection buffer, we keep the FULL content, even if parts extend beyond canvas
-        // This way when the user drags it back, the full content is preserved
-        QPixmap newSelectionBuffer = selectionBuffer; // Keep the full original content
-        
-        // DON'T clear the copied area immediately - leave both original and copy on the canvas
-        // The copy will only be cleared when the user actually starts moving the selection
-        // This way, if the user cancels without moving, both original and copy remain permanently
         painter.end();
         
-        // Update the selection buffer and position
-        selectionBuffer = newSelectionBuffer;
+        // Clear the original selection's mask path so it won't be cleared later
+        // This makes the original permanently part of the buffer
+        selectionMaskPath = QPainterPath();
+        selectionAreaCleared = true; // Mark as cleared so it won't be cleared again
+        
+        // Now create a new independent copy selection at the new location
+        // Keep the same selectionBuffer content since it's the copied content
         selectionRect = QRect(newTopLeft.toPoint(), selectionRect.size());
         exactSelectionRectF = QRectF(newTopLeft, selectionRect.size());
         selectionJustCopied = true; // Mark that this selection was just copied

@@ -20,7 +20,6 @@
 #include <QTextStream>
 #include <QInputDialog>
 #include <QDial>
-#include <QSoundEffect>
 #include <QFontDatabase>
 #include <QStandardPaths>
 #include <QSettings>
@@ -86,7 +85,7 @@ void setupLinuxSignalHandlers() {
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false), localServer(nullptr) {
 
-    setWindowTitle(tr("SpeedyNote Beta 0.9.1"));
+    setWindowTitle(tr("SpeedyNote Beta 0.9.2"));
 
 #ifdef Q_OS_LINUX
     // Setup signal handlers for proper cleanup on Linux
@@ -2856,7 +2855,9 @@ void MainWindow::handleDialInput(int angle) {
             tempClicks = currentClicks;
             updateDialDisplay();
     
-            if (isLowResPreviewEnabled()) {
+            // Only load PDF previews for page-switching dial modes
+            if (isLowResPreviewEnabled() && 
+                (currentDialMode == PageSwitching || currentDialMode == PanAndPageScroll)) {
                 int previewPage = qBound(1, getCurrentPageForCanvas(currentCanvas()) + currentClicks, 99999);
                 currentCanvas()->loadPdfPreviewAsync(previewPage);
             }
@@ -3153,9 +3154,12 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
 
 void MainWindow::initializeDialSound() {
     if (!dialClickSound) {
-        dialClickSound = new QSoundEffect(this);
-        dialClickSound->setSource(QUrl::fromLocalFile(":/resources/sounds/dial_click.wav")); // ✅ Path to the sound file
+        dialClickSound = new SimpleAudio();
+        if (!dialClickSound->loadWavFile(":/resources/sounds/dial_click.wav")) {
+            qWarning() << "Failed to load dial click sound - audio will be disabled";
+        }
         dialClickSound->setVolume(0.8);  // ✅ Set volume (0.0 - 1.0)
+        dialClickSound->setMinimumInterval(5); // ✅ DirectSound can handle much faster rates (5ms minimum)
     }
 }
 
@@ -6563,6 +6567,8 @@ void MainWindow::mouseReleaseEvent(QMouseEvent *event) {
     if (pressedMouseButtons.contains(event->button())) {
         // Check if this was a short press (timer still running) for page navigation
         bool wasShortPress = mouseDialTimer->isActive();
+        // Check if this button was part of a combination (more than one button pressed)
+        bool wasPartOfCombination = pressedMouseButtons.size() > 1;
         
         pressedMouseButtons.remove(event->button());
         
@@ -6571,8 +6577,8 @@ void MainWindow::mouseReleaseEvent(QMouseEvent *event) {
             mouseDialTimer->stop();
             if (mouseDialModeActive) {
                 stopMouseDialMode();
-            } else if (wasShortPress) {
-                // Handle short press page navigation for side buttons only
+            } else if (wasShortPress && !wasPartOfCombination) {
+                // Only handle short press if it was NOT part of a combination
                 if (event->button() == Qt::BackButton) {
                     goToPreviousPage();
                 } else if (event->button() == Qt::ForwardButton) {

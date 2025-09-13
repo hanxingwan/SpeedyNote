@@ -195,10 +195,12 @@ void RecentNotebooksManager::generateAndSaveCoverPreview(const QString& folderPa
             grabHeight = logicalCanvasHeight;
             grabWidth = qRound(logicalCanvasHeight * targetAspectRatio);
             xOffset = (logicalCanvasWidth - grabWidth) / 2;
-        } else { // Canvas is taller than or equal to target 4:3
+        } else { // Canvas is taller than or equal to target 4:3 (vertical documents)
+            // For vertical documents, zoom in more by taking a smaller portion
+            // This makes the thumbnail show more detail instead of the entire page
             grabWidth = logicalCanvasWidth;
-            grabHeight = qRound(logicalCanvasWidth / targetAspectRatio);
-            yOffset = (logicalCanvasHeight - grabHeight) / 2;
+            grabHeight = qRound(logicalCanvasWidth / targetAspectRatio * 0.7); // Zoom in by taking 70% of calculated height
+            yOffset = qRound((logicalCanvasHeight - grabHeight) * 0.2); // Start from 20% down instead of center
         }
 
         if (grabWidth > 0 && grabHeight > 0) {
