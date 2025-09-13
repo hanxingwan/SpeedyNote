@@ -177,7 +177,8 @@ if (WIN32)
             Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Concurrent Qt6::Xml Qt6::Network
             SDL2::SDL2
             ${POPPLER_LIBRARIES}
-            winmm  # For PlaySound API
+            dsound  # For DirectSound API
+            dxguid  # For DirectSound GUIDs
     )
 elseif (UNIX)
     target_link_libraries(NoteApp

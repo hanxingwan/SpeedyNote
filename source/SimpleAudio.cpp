@@ -4,8 +4,9 @@
 
 #ifdef _WIN32
     #include <windows.h>
-    #include <mmsystem.h>
-    #pragma comment(lib, "winmm.lib")
+    #include <dsound.h>
+    #pragma comment(lib, "dsound.lib")
+    #pragma comment(lib, "dxguid.lib")
 #elif defined(__linux__)
     #include <alsa/asoundlib.h>
     #include <QThread>
@@ -16,13 +17,36 @@
 class SimpleAudio::SimpleAudioPrivate
 {
 public:
-    SimpleAudioPrivate() : volume(0.8f), audioData(nullptr), audioSize(0), minimumInterval(50) {}
+    SimpleAudioPrivate() : volume(0.8f), audioData(nullptr), audioSize(0), minimumInterval(50) {
+#ifdef _WIN32
+        directSound = nullptr;
+        primaryBuffer = nullptr;
+        soundBuffer = nullptr;
+        directSoundInitialized = false;
+        memset(&waveFormat, 0, sizeof(WAVEFORMATEX));
+#endif
+    }
     ~SimpleAudioPrivate() {
         cleanup();
     }
     
     void cleanup() {
 #ifdef _WIN32
+        // Clean up DirectSound objects
+        if (soundBuffer) {
+            soundBuffer->Release();
+            soundBuffer = nullptr;
+        }
+        if (primaryBuffer) {
+            primaryBuffer->Release();
+            primaryBuffer = nullptr;
+        }
+        if (directSound) {
+            directSound->Release();
+            directSound = nullptr;
+        }
+        directSoundInitialized = false;
+        
         if (audioData) {
             delete[] audioData;
             audioData = nullptr;
@@ -37,10 +61,98 @@ public:
 #endif
     }
     
+#ifdef _WIN32
+    bool initializeDirectSound() {
+        if (directSoundInitialized) return true;
+        
+        // Create DirectSound object
+        HRESULT hr = DirectSoundCreate8(NULL, &directSound, NULL);
+        if (FAILED(hr)) {
+            qWarning() << "SimpleAudio: Failed to create DirectSound object";
+            return false;
+        }
+        
+        // Set cooperative level
+        HWND hwnd = GetDesktopWindow(); // Use desktop window as fallback
+        hr = directSound->SetCooperativeLevel(hwnd, DSSCL_PRIORITY);
+        if (FAILED(hr)) {
+            qWarning() << "SimpleAudio: Failed to set DirectSound cooperative level";
+            return false;
+        }
+        
+        directSoundInitialized = true;
+        return true;
+    }
+    
+    bool createSoundBuffer() {
+        if (!directSoundInitialized || !audioData) return false;
+        
+        // Release existing buffer
+        if (soundBuffer) {
+            soundBuffer->Release();
+            soundBuffer = nullptr;
+        }
+        
+        // Set up wave format
+        waveFormat.wFormatTag = WAVE_FORMAT_PCM;
+        waveFormat.nChannels = 1; // Mono for click sounds
+        waveFormat.nSamplesPerSec = 44100; // Standard sample rate
+        waveFormat.wBitsPerSample = 16;
+        waveFormat.nBlockAlign = waveFormat.nChannels * waveFormat.wBitsPerSample / 8;
+        waveFormat.nAvgBytesPerSec = waveFormat.nSamplesPerSec * waveFormat.nBlockAlign;
+        waveFormat.cbSize = 0;
+        
+        // Create buffer description
+        DSBUFFERDESC bufferDesc;
+        memset(&bufferDesc, 0, sizeof(DSBUFFERDESC));
+        bufferDesc.dwSize = sizeof(DSBUFFERDESC);
+        bufferDesc.dwFlags = DSBCAPS_CTRLVOLUME | DSBCAPS_STATIC;
+        bufferDesc.dwBufferBytes = audioSize;
+        bufferDesc.lpwfxFormat = &waveFormat;
+        
+        // Create the sound buffer
+        HRESULT hr = directSound->CreateSoundBuffer(&bufferDesc, &soundBuffer, NULL);
+        if (FAILED(hr)) {
+            qWarning() << "SimpleAudio: Failed to create DirectSound buffer";
+            return false;
+        }
+        
+        // Lock the buffer and copy audio data
+        LPVOID audioPtr1, audioPtr2;
+        DWORD audioBytes1, audioBytes2;
+        
+        hr = soundBuffer->Lock(0, audioSize, &audioPtr1, &audioBytes1, &audioPtr2, &audioBytes2, DSBLOCK_ENTIREBUFFER);
+        if (FAILED(hr)) {
+            qWarning() << "SimpleAudio: Failed to lock DirectSound buffer";
+            return false;
+        }
+        
+        // Copy audio data
+        memcpy(audioPtr1, audioData, audioBytes1);
+        if (audioPtr2 && audioBytes2 > 0) {
+            memcpy(audioPtr2, (char*)audioData + audioBytes1, audioBytes2);
+        }
+        
+        // Unlock the buffer
+        soundBuffer->Unlock(audioPtr1, audioBytes1, audioPtr2, audioBytes2);
+        
+        return true;
+    }
+#endif
+    
     float volume;
     char* audioData;
     size_t audioSize;
     int minimumInterval; // Minimum interval between sounds in milliseconds
+    
+#ifdef _WIN32
+    // DirectSound objects
+    LPDIRECTSOUND8 directSound;
+    LPDIRECTSOUNDBUFFER primaryBuffer;
+    LPDIRECTSOUNDBUFFER soundBuffer;
+    WAVEFORMATEX waveFormat;
+    bool directSoundInitialized;
+#endif
     
 #ifdef __linux__
     // WAV format info
@@ -86,11 +198,37 @@ bool SimpleAudio::loadWavFile(const QString& filePath)
     d->cleanup();
     
 #ifdef _WIN32
-    // On Windows, we can use PlaySound with memory data
-    d->audioSize = fileData.size();
-    d->audioData = new char[d->audioSize];
-    memcpy(d->audioData, fileData.data(), d->audioSize);
-    return true;
+    // For DirectSound, we need to extract just the PCM data from the WAV file
+    const char* data = fileData.constData();
+    
+    // Find the "data" chunk to get the actual PCM audio data
+    size_t pos = 12;
+    while (pos < fileData.size() - 8) {
+        if (memcmp(data + pos, "data", 4) == 0) {
+            uint32_t dataSize = *reinterpret_cast<const uint32_t*>(data + pos + 4);
+            size_t dataOffset = pos + 8;
+            
+            // Store only the PCM data (not the WAV header)
+            d->audioSize = dataSize;
+            d->audioData = new char[d->audioSize];
+            memcpy(d->audioData, data + dataOffset, d->audioSize);
+            
+            // Initialize DirectSound and create buffer
+            if (!d->initializeDirectSound()) {
+                return false;
+            }
+            
+            if (!d->createSoundBuffer()) {
+                return false;
+            }
+            
+            return true;
+        }
+        pos += 8 + *reinterpret_cast<const uint32_t*>(data + pos + 4);
+    }
+    
+    qWarning() << "SimpleAudio: Could not find data chunk in WAV file";
+    return false;
     
 #elif defined(__linux__)
     // Parse WAV header for Linux ALSA playback
@@ -152,22 +290,29 @@ void SimpleAudio::play()
     }
     
 #ifdef _WIN32
-    // Rate limiting: Don't play if we just played recently (prevents CPU spikes)
+    // DirectSound can handle rapid playback much better than PlaySound
+    // No need for aggressive rate limiting anymore
     static DWORD lastPlayTime = 0;
     DWORD currentTime = GetTickCount();
-    DWORD minInterval = static_cast<DWORD>(d->minimumInterval);
     
-    if (currentTime - lastPlayTime < minInterval) {
-        return; // Skip this play request to prevent audio spam
+    // Very minimal rate limiting (just to prevent extreme spam)
+    if (currentTime - lastPlayTime < 5) { // Only 5ms minimum
+        return;
     }
     lastPlayTime = currentTime;
     
-    // Stop any currently playing sound first to prevent overlapping
-    PlaySoundA(nullptr, nullptr, SND_PURGE);
+    if (!d->soundBuffer) {
+        return; // Buffer not initialized
+    }
     
-    // Use optimized flags for better performance
-    DWORD flags = SND_MEMORY | SND_ASYNC | SND_NODEFAULT | SND_NOWAIT;
-    PlaySoundA(d->audioData, nullptr, flags);
+    // Reset the play position to the beginning and start playing
+    HRESULT hr = d->soundBuffer->SetCurrentPosition(0);
+    if (SUCCEEDED(hr)) {
+        hr = d->soundBuffer->Play(0, 0, 0); // Play once, no looping
+        if (FAILED(hr)) {
+            qWarning() << "SimpleAudio: Failed to play DirectSound buffer";
+        }
+    }
     
 #elif defined(__linux__)
     // Use ALSA for Linux playback in a separate thread
