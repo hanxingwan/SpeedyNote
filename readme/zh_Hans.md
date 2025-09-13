@@ -161,6 +161,9 @@ SOFTWARE.
    通常情况下，编译产物可能在 `./build/NoteApp.exe`
 
 5. 要是想做成安装程序，考虑使用 `InnoSetup`
+=======
+请尝试观看[此文档](../docs/zh_Hans/build.md).
+
 
 #### Linux
 
