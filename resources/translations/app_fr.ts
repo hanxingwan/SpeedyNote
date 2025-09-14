@@ -620,7 +620,7 @@
     </message>
     <message>
         <location filename="../../source/ControlPanelDialog.cpp" line="741"/>
-        <source>Version 0.9.2</source>
+        <source>Version 0.9.3</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -1556,7 +1556,7 @@ Would you like to save it as a SpeedyNote Package (.spn) file before closing?</s
     </message>
     <message>
         <location filename="../../source/MainWindow.cpp" line="88"/>
-        <source>SpeedyNote Beta 0.9.2</source>
+        <source>SpeedyNote Beta 0.9.3</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -1679,35 +1679,35 @@ Click the Save button to save your notebook first.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="4345"/>
+        <location filename="../../source/MainWindow.cpp" line="4348"/>
         <source>File Not Found</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="4345"/>
+        <location filename="../../source/MainWindow.cpp" line="4348"/>
         <source>The PDF file could not be found:
 %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="4505"/>
+        <location filename="../../source/MainWindow.cpp" line="4508"/>
         <source>Different PDF Linked</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="4506"/>
+        <location filename="../../source/MainWindow.cpp" line="4509"/>
         <source>This notebook folder is already linked to a different PDF file.
 
 Do you want to replace the link with the new PDF?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="4952"/>
+        <location filename="../../source/MainWindow.cpp" line="4955"/>
         <source>Annotated Image Saved</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="4953"/>
+        <location filename="../../source/MainWindow.cpp" line="4956"/>
         <source>Annotated page saved successfully!
 
 File: %1
@@ -1715,110 +1715,110 @@ Location: %2</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5680"/>
-        <location filename="../../source/MainWindow.cpp" line="5912"/>
+        <location filename="../../source/MainWindow.cpp" line="5683"/>
+        <location filename="../../source/MainWindow.cpp" line="5915"/>
         <source>Page %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5769"/>
+        <location filename="../../source/MainWindow.cpp" line="5772"/>
         <source>Copy</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5778"/>
+        <location filename="../../source/MainWindow.cpp" line="5781"/>
         <source>Copy to Clipboard</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5787"/>
+        <location filename="../../source/MainWindow.cpp" line="5790"/>
         <source>Delete</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5796"/>
+        <location filename="../../source/MainWindow.cpp" line="5799"/>
         <source>Cancel</source>
         <translation type="unfinished">Annuler</translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="5985"/>
+        <location filename="../../source/MainWindow.cpp" line="5988"/>
         <source>Bookmark %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="6008"/>
+        <location filename="../../source/MainWindow.cpp" line="6011"/>
         <source>Remove Bookmark</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="6010"/>
+        <location filename="../../source/MainWindow.cpp" line="6013"/>
         <source>Add Bookmark</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="6188"/>
+        <location filename="../../source/MainWindow.cpp" line="6191"/>
         <source>This notebook was last accessed on page %1.
 
 Would you like to go directly to page %1, or start from page 1?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="6191"/>
+        <location filename="../../source/MainWindow.cpp" line="6194"/>
         <source>Last Accessed Page</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="6195"/>
+        <location filename="../../source/MainWindow.cpp" line="6198"/>
         <source>Go to Page %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="6196"/>
+        <location filename="../../source/MainWindow.cpp" line="6199"/>
         <source>Start from Page 1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="6216"/>
+        <location filename="../../source/MainWindow.cpp" line="6219"/>
         <source>Invalid Package</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="6217"/>
+        <location filename="../../source/MainWindow.cpp" line="6220"/>
         <source>The selected file is not a valid SpeedyNote package.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="6269"/>
+        <location filename="../../source/MainWindow.cpp" line="6272"/>
         <source>File Exists</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="6270"/>
+        <location filename="../../source/MainWindow.cpp" line="6273"/>
         <source>A file with this name already exists. Please choose a different name.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="6280"/>
+        <location filename="../../source/MainWindow.cpp" line="6283"/>
         <source>Creation Failed</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="6281"/>
+        <location filename="../../source/MainWindow.cpp" line="6284"/>
         <source>Failed to create the SpeedyNote package. Please check file permissions.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="6319"/>
+        <location filename="../../source/MainWindow.cpp" line="6322"/>
         <source>Package Created</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="6320"/>
+        <location filename="../../source/MainWindow.cpp" line="6323"/>
         <source>New SpeedyNote package &apos;%1&apos; has been created successfully!</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/MainWindow.cpp" line="6629"/>
+        <location filename="../../source/MainWindow.cpp" line="6634"/>
         <source>Mouse Dial: %1</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2204,103 +2204,86 @@ You can still use the notebook for taking notes, but PDF annotation features wil
     <name>QPlainTextEditSearchWidget</name>
     <message>
         <location filename="../../markdown/qplaintexteditsearchwidget.ui" line="32"/>
-        <location filename="../../source/build/ui_qplaintexteditsearchwidget.h" line="212"/>
         <source>Find in text</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../markdown/qplaintexteditsearchwidget.ui" line="39"/>
-        <location filename="../../source/build/ui_qplaintexteditsearchwidget.h" line="213"/>
         <source>Replace with</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../markdown/qplaintexteditsearchwidget.ui" line="53"/>
-        <location filename="../../source/build/ui_qplaintexteditsearchwidget.h" line="214"/>
         <source>Find:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../markdown/qplaintexteditsearchwidget.ui" line="63"/>
-        <location filename="../../source/build/ui_qplaintexteditsearchwidget.h" line="216"/>
         <source>Search backward</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../markdown/qplaintexteditsearchwidget.ui" line="80"/>
-        <location filename="../../source/build/ui_qplaintexteditsearchwidget.h" line="219"/>
         <source>Replace:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../markdown/qplaintexteditsearchwidget.ui" line="90"/>
-        <location filename="../../source/build/ui_qplaintexteditsearchwidget.h" line="221"/>
         <source>Close search</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../markdown/qplaintexteditsearchwidget.ui" line="107"/>
-        <location filename="../../source/build/ui_qplaintexteditsearchwidget.h" line="225"/>
         <source>Advanced search / replace text</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../markdown/qplaintexteditsearchwidget.ui" line="127"/>
-        <location filename="../../source/build/ui_qplaintexteditsearchwidget.h" line="229"/>
         <source>Search forward</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../markdown/qplaintexteditsearchwidget.ui" line="144"/>
-        <location filename="../../source/build/ui_qplaintexteditsearchwidget.h" line="233"/>
         <source>Match case sensitive</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../markdown/qplaintexteditsearchwidget.ui" line="164"/>
-        <location filename="../../source/build/ui_qplaintexteditsearchwidget.h" line="236"/>
         <source>Mode:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../markdown/qplaintexteditsearchwidget.ui" line="193"/>
-        <location filename="../../source/build/ui_qplaintexteditsearchwidget.h" line="237"/>
         <source>Plain text</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../markdown/qplaintexteditsearchwidget.ui" line="198"/>
-        <location filename="../../source/build/ui_qplaintexteditsearchwidget.h" line="238"/>
         <source>Whole words</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../markdown/qplaintexteditsearchwidget.ui" line="203"/>
-        <location filename="../../source/build/ui_qplaintexteditsearchwidget.h" line="239"/>
         <source>Regular expression</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../markdown/qplaintexteditsearchwidget.ui" line="224"/>
-        <location filename="../../source/build/ui_qplaintexteditsearchwidget.h" line="242"/>
         <source>Replace one text occurrence</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../markdown/qplaintexteditsearchwidget.ui" line="227"/>
-        <location filename="../../source/build/ui_qplaintexteditsearchwidget.h" line="244"/>
         <source>Replace</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../markdown/qplaintexteditsearchwidget.ui" line="237"/>
-        <location filename="../../source/build/ui_qplaintexteditsearchwidget.h" line="246"/>
         <source>Replace all text occurrences</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../markdown/qplaintexteditsearchwidget.ui" line="240"/>
-        <location filename="../../source/build/ui_qplaintexteditsearchwidget.h" line="248"/>
         <source>Replace all</source>
         <translation type="unfinished"></translation>
     </message>
