@@ -5,7 +5,7 @@ project(NoteApp)
 set(CMAKE_CXX_STANDARD 17)
 
 # Using variable
-set(QT_PATH "C:/Qt/6.8.2/mingw_64" CACHE PATH "Path to Qt installation")
+set(QT_PATH "C:/Qt/6.9.2/mingw_64" CACHE PATH "Path to Qt installation")
 set(SDL2_ROOT "C:/libs/SDL2" CACHE PATH "Path to SDL2")
 set(POPPLER_PATH "C:/msys64/mingw64" CACHE PATH "Path to Poppler")
 # This is where the "libpoppler-qt6-dev" equivalent in Windows is located. 
@@ -24,7 +24,7 @@ if (WIN32)
             "${SDL2_ROOT}/lib/cmake"
     )
     set(CMAKE_MODULE_PATH "${QT_PATH}/lib/cmake/Poppler")
-    # In my case, this path is C:\Qt\6.8.2\mingw_64\lib\cmake\Poppler. 
+    # In my case, this path is C:\Qt\6.9.2\mingw_64\lib\cmake\Poppler. 
     # This path includes the FindPoppler.cmake file. 
     # You need to manually put FindPoppler.cmake into this folder.
 
@@ -147,7 +147,7 @@ find_program(LRELEASE_EXECUTABLE
         NO_DEFAULT_PATH
 )
 if (WIN32)
-    find_program(LRELEASE_EXECUTABLE lrelease PATHS "C:/Qt/6.8.2/mingw_64/bin")
+    find_program(LRELEASE_EXECUTABLE lrelease PATHS "C:/Qt/6.9.2/mingw_64/bin")
 endif ()
 
 if (LRELEASE_EXECUTABLE)

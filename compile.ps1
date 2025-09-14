@@ -3,7 +3,7 @@ mkdir build
 
 
 # ✅ Compile .ts → .qm files
-& "C:\Qt\6.8.2\mingw_64\bin\lrelease.exe" ./resources/translations/app_zh.ts ./resources/translations/app_fr.ts ./resources/translations/app_es.ts
+& "C:\Qt\6.9.2\mingw_64\bin\lrelease.exe" ./resources/translations/app_zh.ts ./resources/translations/app_fr.ts ./resources/translations/app_es.ts
 
 
 Copy-Item -Path ".\resources\translations\*.qm" -Destination ".\build" -Force
@@ -16,9 +16,18 @@ cmake --build . -- -j16
 # ✅ Optionally, copy compiled .qm files into build or embed them via qrc
 
 # ✅ Deploy Qt runtime
-& "C:\Qt\6.8.2\mingw_64\bin\windeployqt.exe" "NoteApp.exe"
+& "C:\Qt\6.9.2\mingw_64\bin\windeployqt.exe" "NoteApp.exe"
 
-Copy-Item -Path "..\dllpack\*.dll" -Destination "..\build" -Force
+# Copy DLLs only if they don't already exist in build folder
+Get-ChildItem -Path "..\dllpack\*.dll" | ForEach-Object {
+    $destination = Join-Path "..\build" $_.Name
+    if (-not (Test-Path $destination)) {
+        Copy-Item -Path $_.FullName -Destination $destination
+    }
+}
 # Copy-Item -Path "..\dllpack\bsdtar.exe" -Destination "..\build" -Force
+
+# Copy share folder
+Copy-Item -Path "..\share" -Destination "..\build\share" -Recurse -Force
 ./NoteApp.exe
 cd ../

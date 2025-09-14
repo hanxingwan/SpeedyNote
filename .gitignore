@@ -35,6 +35,9 @@
 *.pkg.tar.zst
 *.apk
 
+# Compressed files
+*.7z
+
 # Editor
 .vs/
 .idea/
@@ -44,3 +47,4 @@ out/
 build/
 dllpack/
 poppler-24.08.0/
+share/
