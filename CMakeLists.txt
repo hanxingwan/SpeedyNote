@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 # Using variable
 set(QT_PATH "C:/Qt/6.9.2/mingw_64" CACHE PATH "Path to Qt installation")
-set(SDL2_ROOT "C:/libs/SDL2" CACHE PATH "Path to SDL2")
+set(SDL2_ROOT "C:/msys64/mingw64" CACHE PATH "Path to SDL2")
 set(POPPLER_PATH "C:/msys64/mingw64" CACHE PATH "Path to Poppler")
 # This is where the "libpoppler-qt6-dev" equivalent in Windows is located. 
 # Go to the MSYS2 terminal to run this commands:
