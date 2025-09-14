@@ -25,7 +25,6 @@
 
 - 支持中文、英文、法语、西班牙语并可以在未来扩展更多语言支持，用户可覆盖半个地球
 
-
 # 安装
 
 ---
@@ -42,7 +41,7 @@
 
 #### Linux
 
-运行 `flatpak install ./speedynote.flatpak`
+安装对应系统的`deb`,`rpm` `.pkg.tar.zst` 和 `.apk` 包
 
 # 图片
 
@@ -128,59 +127,9 @@ SOFTWARE.
 
 #### Windows
 
-1. 安装依赖
-
-    - QT6
-    - SDL2
-    - Poppler
-    - Compiler(e.g. Mingw GCC/Mingw llvm clang, or MSVC(Visual Studio))
-    - CMake
-    - Ninja (Optional)
-
-2. 移动资源文件
-
-    ```PowerShell
-    Copy-Item -Path \
-   ".\resources\translations\*.qm" -Destination ".\build"
-    ```
-   如果失败了，尝试使用强制参数 `--Force` 重试.
-
-3. 编译
-
-    ```PowerShell
-    cmake -B build  \
-    -DQT_PATH="D:/Your/Qt/Path" \
-    -DSDL2_ROOT="E:/Your/SDL2" \
-    -DPOPPLER_PATH="F:/Your/Poppler"
-    cmake -G Ninja # If installed ninja. 
-    cmake --build build
-   ```
-
-4. 运行
-
-   通常情况下，编译产物可能在 `./build/NoteApp.exe`
-
-5. 要是想做成安装程序，考虑使用 `InnoSetup`
-=======
-请尝试观看[此文档](../docs/zh_Hans/build.md).
-
+请访问[Windows构建文档](../docs/SpeedyNote_Windows_Build_zh-CN.md)
 
 #### Linux
 
-1. 运行构建和打包脚本
-
-   ```bash
-   ./compile.sh
-   ./build-flatpak.sh
-   ```
-
-2. 安装打包好的flatpak
-
-   ```bash
-   flatpak install ./speedynote.flatpak
-   ```
-
-##### 本地软件包
-
-1. 运行 `./compile.sh` 以及 `./build-package.sh`
+1. 运行 `./build-package.sh`
 2. 安装适用您 Linux 发行版的软件包。
