@@ -29,7 +29,7 @@ vintage hardware._
 ## 📸 Screenshots
 
 | Drawing                                  | Dial UI / Joycon Controls               | Overlay Grid Options                     |
-|------------------------------------------|-----------------------------------------|------------------------------------------|
+| ---------------------------------------- | --------------------------------------- | ---------------------------------------- |
 | ![draw](https://i.imgur.com/iARL6Vo.gif) | ![pdf](https://i.imgur.com/NnrqOQQ.gif) | ![grid](https://i.imgur.com/YaEdx1p.gif) |
 
 ---
@@ -45,7 +45,7 @@ vintage hardware._
 🛠️ Usage
 
 1. Launch `SpeedyNote` shortcut on desktop
-2. *(Optitonal)* Click the PDF button on the tool bar to import a PDF document
+2. Click `Open PDF` to annotate a PDF document or click `New` to create a new notebook without loading a PDF.
 3. Start writing/drawing using your stylus
 4. Use the **MagicDial** or **Joy-Con** to change tools, zoom, scroll, or switch pages
 5. Click the `×` on the tab and save the notebook as a `.spn` package
@@ -60,7 +60,6 @@ vintage hardware._
 
 ---
 
-
 ## 🎮 Controller Support
 
 SpeedyNote supports controller input, ideal for tablet users:
@@ -68,11 +67,11 @@ SpeedyNote supports controller input, ideal for tablet users:
 - ✅ **Left Joy-Con supported**
 - 🎛️ Analog stick → Dial control
 - 🔘 Buttons can be mapped to:
-    - Control the dial with multiple features
-    - Toggle fullscreen
-    - Change color / thickness
-    - Open control panel
-    - Create/delete pages
+  - Control the dial with multiple features
+  - Toggle fullscreen
+  - Change color / thickness
+  - Open control panel
+  - Create/delete pages
 
 > Long press + turn = hold-and-turn mappings
 
@@ -82,60 +81,10 @@ SpeedyNote supports controller input, ideal for tablet users:
 
 #### Windows
 
-1. Install dependency.
-
-    - QT6
-    - SDL2
-    - Poppler
-    - Compiler(e.g. Mingw GCC/Mingw llvm clang, or MSVC(Visual Studio))
-    - CMake
-    - Ninja (Optional)
-
-2. Move resource.
-    
-    ```PowerShell
-    Copy-Item -Path \
-   ".\resources\translations\*.qm" -Destination ".\build"
-    ```
-    If failed, try to use `--Force` argument.
-
-3. Build.
-    
-    ```PowerShell
-    cmake -B build  \
-    -DQT_PATH="D:/Your/Qt/Path" \
-    -DSDL2_ROOT="E:/Your/SDL2" \
-    -DPOPPLER_PATH="F:/Your/Poppler"
-    cmake -G Ninja # If installed ninja. 
-    cmake --build build
-   ```
-
-4. Run.
-
-    The compilation product is usually in `./build/NoteApp.exe`
-
-5. If you want to make a Installer, try to use `InnoSetup`
+[Windows Build Documentation](./docs/SpeedyNote_Windows_Build_en.md) 
 
 #### Linux
 
-##### Flatpak
-
-1. Run compile and package scripts
-
-   ```bash
-   ./compile.sh
-   ./build-flatpak.sh
-   ```
-
-2. Install the flatpak package
-
-   ```bash
-   flatpak install ./speedynote.flatpak
-   ```
-
-##### Native Packages
-
-1. run `./compile.sh` and `./build-package.sh`
+1. run  `./build-package.sh`
 2. Install the packages for your Linux distro.
    `.deb`, `rpm`, `.pkg.tar.zst` and `.apk` are tested and working.
-   
