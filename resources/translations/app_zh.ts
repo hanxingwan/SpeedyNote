@@ -397,12 +397,12 @@
     <message>
         <location filename="../../source/ControlPanelDialog.cpp" line="398"/>
         <source>Right + Side 2</source>
-        <translation type="unfinished">右键+下侧键</translation>
+        <translation type="unfinished">右键+上侧键</translation>
     </message>
     <message>
         <location filename="../../source/ControlPanelDialog.cpp" line="399"/>
         <source>Side 1 + Side 2</source>
-        <translation type="unfinished">右键+上侧键</translation>
+        <translation type="unfinished">上侧键+下侧键</translation>
     </message>
     <message>
         <location filename="../../source/ControlPanelDialog.cpp" line="436"/>
