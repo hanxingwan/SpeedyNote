@@ -47,6 +47,7 @@ public:
     
     // Coordinate system
     void updateScreenPosition();
+    void updateScreenPositionImmediate(); // ✅ PERFORMANCE: Immediate update without throttling
     
     // Debug info
     QString getCoordinateInfo() const;
@@ -123,6 +124,7 @@ private:
     // Coordinate system
     QRect canvasRect;  // Position in canvas coordinates
     bool isUpdatingPosition;
+    QSize lastScaledSize;  // ✅ PERFORMANCE: Track last scaled size to avoid unnecessary rescaling
     
     // Mouse interaction
     bool dragging;
@@ -144,6 +146,10 @@ private:
     QPoint longPressStartPos;
     bool wasLongPress;
     QTime lastClickTime;
+    
+    // ✅ PERFORMANCE: Throttling for pan updates
+    QTimer *updateThrottleTimer;
+    bool hasPendingUpdate;
     
     // Touch interaction
     QPoint touchStartPos;

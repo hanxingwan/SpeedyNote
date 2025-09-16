@@ -258,7 +258,7 @@ build_project() {
     # Compile translations if lrelease is available
     if command_exists lrelease; then
         echo -e "${YELLOW}Compiling translation files...${NC}"
-        lrelease ./resources/translations/app_zh.ts ./resources/translations/app_fr.ts ./resources/translations/app_es.ts
+        # lrelease ./resources/translations/app_zh.ts ./resources/translations/app_fr.ts ./resources/translations/app_es.ts
         cp resources/translations/*.qm build/ 2>/dev/null || true
     fi
     
