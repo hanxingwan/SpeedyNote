@@ -1,89 +1,247 @@
-cmake_minimum_required(VERSION 3.10)
+﻿cmake_minimum_required(VERSION 3.10)
 cmake_policy(SET CMP0074 NEW)
+
+# CRITICAL: Ensure consistent 32-bit toolchain
+set(CMAKE_COMMAND "C:/msys64/mingw32/bin/cmake.exe" CACHE FILEPATH "CMake executable" FORCE)
+set(CMAKE_C_COMPILER "C:/Qt/Tools/mingw810_32/bin/i686-w64-mingw32-gcc.exe" CACHE FILEPATH "C compiler" FORCE)
+set(CMAKE_CXX_COMPILER "C:/Qt/Tools/mingw810_32/bin/i686-w64-mingw32-g++.exe" CACHE FILEPATH "CXX compiler" FORCE)
+set(CMAKE_RC_COMPILER "C:/Qt/Tools/mingw810_32/bin/windres.exe" CACHE FILEPATH "Resource compiler" FORCE)
+
+# Option 1: Use Ninja (faster) - CURRENT CHOICE
+# set(CMAKE_MAKE_PROGRAM "C:/msys64/mingw32/bin/ninja.exe" CACHE FILEPATH "Ninja build program" FORCE)
+
+# Option 2: Use Make instead (uncomment if you prefer Make over Ninja)
+set(CMAKE_MAKE_PROGRAM "C:/msys64/mingw32/bin/mingw32-make.exe" CACHE FILEPATH "Make program" FORCE)
+set(CMAKE_GENERATOR "MinGW Makefiles" CACHE INTERNAL "" FORCE)
 
 project(NoteApp)
 set(CMAKE_CXX_STANDARD 17)
 
-# ✅ Add correct CMake module search paths
-set(CMAKE_PREFIX_PATH 
-    "C:/Qt/5.15.2/mingw81_64/lib/cmake"
-    "C:/libs/SDL2/lib/cmake"
-)
-set(CMAKE_MODULE_PATH "C:/Qt/5.15.2/mingw81_64/lib/cmake/Poppler")
-set(SDL2_ROOT "C:/libs/SDL2")
-
-set(TS_FILES
-    ${CMAKE_SOURCE_DIR}/resources/translations/app_zh.ts
-    ${CMAKE_SOURCE_DIR}/resources/translations/app_es.ts
-    ${CMAKE_SOURCE_DIR}/resources/translations/app_fr.ts
-)
-
-# ✅ Prevent SDL2 from redefining main()
-add_compile_definitions(SDL_MAIN_HANDLED)
-
-# ✅ Find all dependencies
-find_package(Qt5 REQUIRED COMPONENTS Core Gui Widgets Concurrent Qml Quick)
-find_package(Poppler REQUIRED)
-find_package(SDL2 REQUIRED CONFIG)
-unset(SDL2main CACHE)  # Ensure SDL2main isn't picked up
-
-# ✅ Resources
-set(RESOURCES resources.qrc)
-QT5_ADD_RESOURCES(QRCC_FILES ${RESOURCES})
-
-# ✅ Include + Link paths
-include_directories(
-    "C:/msys64/mingw64/include/poppler"
-    "C:/msys64/mingw64/include/poppler/cpp"
-    "C:/msys64/mingw64/include/poppler/qt5"
-    "${SDL2_ROOT}/include"
-)
-link_directories("C:/msys64/mingw64/lib")
-
-# ✅ Qt Meta-Object Compiler support
-set(CMAKE_AUTOMOC ON)
-set(CMAKE_AUTORCC ON)
-
-if(WIN32)
-    enable_language(RC)
-    set(WIN_RESOURCES app_icon.rc)
+# ✅ Compiler optimization flags for 32-bit Intel Atom N270 (SSE3 capable)
+if (WIN32 AND CMAKE_COMPILER_IS_GNUCXX)
+    # Target Intel Atom N270 (supports SSE3) instead of generic i686
+    # This enables SSE for floating point instead of slow x87 FPU
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=bonnell -msse3 -mfpmath=sse -O2 -ffast-math")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=bonnell -msse3 -mfpmath=sse -O2 -ffast-math")
+    
+    # Additional optimizations
+    set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -DNDEBUG -fomit-frame-pointer")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -DNDEBUG -fomit-frame-pointer")
+    
+    message(STATUS "🚀 Optimizing for Intel Atom N270+ (SSE3, no x87 FPU)")
 endif()
 
+# Using Qt's MinGW with copied libraries for consistency
+set(QT_PATH "C:/Qt/5.15.2/mingw81_32" CACHE PATH "Path to Qt installation")
+set(MINGW_PATH "C:/Qt/Tools/mingw810_32" CACHE PATH "Path to MinGW toolchain")
+set(SDL2_ROOT "${MINGW_PATH}" CACHE PATH "Path to SDL2")
+set(POPPLER_PATH "${MINGW_PATH}" CACHE PATH "Path to Poppler")
+# This is where the "libpoppler-qt5-dev" equivalent in Windows is located. 
+# For 32-bit build, use:
+# pacman -S mingw-w64-i686-poppler-qt5 mingw-w64-i686-SDL2
+
+# Also, there isn't such thing called PopplerConfig.cmake. 
+#That's why I need to make a FindPoppler.cmake file
+
+# ✅ Platform-specific configuration
+if (WIN32)
+    # ✅ Platform-specific configuration
+    
+    set(CMAKE_PREFIX_PATH
+            "${QT_PATH}/lib/cmake"
+            "${SDL2_ROOT}/lib/cmake"
+    )
+    set(CMAKE_MODULE_PATH "${QT_PATH}/lib/cmake/Poppler")
+    # In my case, this path is C:\Qt\6.9.2\mingw_64\lib\cmake\Poppler. 
+    # This path includes the FindPoppler.cmake file. 
+    # You need to manually put FindPoppler.cmake into this folder.
+
+    include_directories(
+            # Use Qt's MinGW include paths
+            "${MINGW_PATH}/include/poppler/qt5"
+            "${MINGW_PATH}/include/SDL2"
+            "${MINGW_PATH}/include"
+            ${CMAKE_CURRENT_BINARY_DIR}
+    )
+    link_directories("${MINGW_PATH}/lib")
+
+    # Prevent SDL2 from redefining main()
+    add_compile_definitions(SDL_MAIN_HANDLED)
+
+    # Windows resource file
+    enable_language(RC)
+    set(WIN_RESOURCES app_icon.rc)
+
+    # Find dependencies for Windows
+    find_package(Qt5 REQUIRED COMPONENTS Core Gui Widgets Concurrent Qml Quick Network Xml)
+    find_package(Poppler REQUIRED)
+    find_package(SDL2 REQUIRED CONFIG)
+    unset(SDL2main CACHE)
+elseif (UNIX)
+    # Linux-specific configuration
+    # Use system paths for Linux
+    find_package(Qt5 REQUIRED COMPONENTS Core Gui Widgets Concurrent Xml Network)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(POPPLER REQUIRED IMPORTED_TARGET poppler-qt5)
+
+    # For SDL2, we use sdl2-compat which provides SDL2 compatibility
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(SDL2 REQUIRED IMPORTED_TARGET sdl2)
+
+    # Include current binary directory for generated files
+    include_directories(${CMAKE_CURRENT_BINARY_DIR})
+
+    # No Windows-specific resources
+    set(WIN_RESOURCES "")
+endif ()
+
+# Translation files
+set(TS_FILES
+        ${CMAKE_SOURCE_DIR}/resources/translations/app_zh.ts
+        ${CMAKE_SOURCE_DIR}/resources/translations/app_es.ts
+        ${CMAKE_SOURCE_DIR}/resources/translations/app_fr.ts
+)
+
+# ✅ Enable Qt automatic features
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+set(CMAKE_AUTOUIC ON)
+
+# ✅ QMarkdownTextEdit sources
+set(QMARKDOWNTEXTEDIT_SOURCES
+        markdown/qmarkdowntextedit.cpp
+        markdown/markdownhighlighter.cpp
+        markdown/qownlanguagedata.cpp
+        markdown/qplaintexteditsearchwidget.cpp
+)
+
+set(QMARKDOWNTEXTEDIT_HEADERS
+        markdown/qmarkdowntextedit.h
+        markdown/markdownhighlighter.h
+        markdown/qownlanguagedata.h
+        markdown/qplaintexteditsearchwidget.h
+        markdown/linenumberarea.h
+)
+
+# Process headers that contain Q_OBJECT for MOC
+qt5_wrap_cpp(QMARKDOWNTEXTEDIT_MOC_SOURCES markdown/linenumberarea.h)
+
+set(QMARKDOWNTEXTEDIT_UI
+        markdown/qplaintexteditsearchwidget.ui
+)
+
+set(QMARKDOWNTEXTEDIT_RESOURCES
+        markdown/media.qrc
+)
+
+# Process UI files to generate headers
+qt5_wrap_ui(QMARKDOWNTEXTEDIT_UI_HEADERS ${QMARKDOWNTEXTEDIT_UI})
+
+# ✅ Resources
+set(RESOURCES resources.qrc ${QMARKDOWNTEXTEDIT_RESOURCES})
+QT5_ADD_RESOURCES(QRCC_FILES ${RESOURCES})
+
 # ✅ Build target
-add_executable(NoteApp
-    Main.cpp MainWindow.cpp InkCanvas.cpp ControlPanelDialog.cpp SDLControllerManager.cpp ButtonMappingTypes.cpp ${QRCC_FILES}
-    RecentNotebooksManager.cpp
-    RecentNotebooksDialog.cpp
-    KeyCaptureDialog.cpp
-    ${WIN_RESOURCES}
+add_executable(${PROJECT_NAME}
+        source/Main.cpp
+        source/MainWindow.cpp
+        source/InkCanvas.cpp
+        source/SimpleAudio.cpp
+        source/ControlPanelDialog.cpp
+        source/SDLControllerManager.cpp
+        source/ButtonMappingTypes.cpp
+        source/RecentNotebooksManager.cpp
+        source/KeyCaptureDialog.cpp
+        source/ControllerMappingDialog.cpp
+        source/MarkdownWindow.cpp
+        source/MarkdownWindowManager.cpp
+	  source/PictureWindow.cpp
+    	  source/PictureWindowManager.cpp
+        source/PdfOpenDialog.cpp
+	  source/PdfRelinkDialog.cpp
+    	  source/SpnPackageManager.cpp
+    	  source/LauncherWindow.cpp
+        ${QRCC_FILES}
+        ${QMARKDOWNTEXTEDIT_SOURCES}
+        ${QMARKDOWNTEXTEDIT_UI_HEADERS}
+        ${QMARKDOWNTEXTEDIT_MOC_SOURCES}
+        ${WIN_RESOURCES}
 )
 
 # ✅ Compile .ts → .qm using Qt's lrelease
-find_program(LRELEASE_EXECUTABLE lrelease PATHS "C:/Qt/5.15.2/mingw81_64/bin")
+find_program(LRELEASE_EXECUTABLE
+        lrelease
+        PATHS "${QT_PATH}/bin"
+        NO_DEFAULT_PATH
+)
+if (WIN32)
+    find_program(LRELEASE_EXECUTABLE lrelease PATHS "C:/Qt/5.15.2/mingw81_32/bin")
+endif ()
 
-foreach(_ts ${TS_FILES})
-    get_filename_component(_qm ${_ts} NAME_WE)
-    set(_qm_file ${CMAKE_CURRENT_BINARY_DIR}/${_qm}.qm)
-    add_custom_command(
-        OUTPUT ${_qm_file}
-        COMMAND ${LRELEASE_EXECUTABLE} ${_ts} -qm ${_qm_file}
-        DEPENDS ${_ts}
-        COMMENT "Generating ${_qm_file}"
-        VERBATIM
-    )
-    list(APPEND QM_FILES ${_qm_file})
-endforeach()
+if (LRELEASE_EXECUTABLE)
+    foreach (_ts ${TS_FILES})
+        get_filename_component(_qm ${_ts} NAME_WE)
+        set(_qm_file ${CMAKE_CURRENT_BINARY_DIR}/${_qm}.qm)
+        add_custom_command(
+                OUTPUT ${_qm_file}
+                COMMAND ${LRELEASE_EXECUTABLE} ${_ts} -qm ${_qm_file}
+                DEPENDS ${_ts}
+                COMMENT "Generating ${_qm_file}"
+                VERBATIM
+        )
+        list(APPEND QM_FILES ${_qm_file})
+    endforeach ()
 
-# ✅ Add a target to build translations
-# add_custom_target(translations ALL DEPENDS ${QM_FILES})
-#
+    # Add a target to build translations
+    add_custom_target(translations ALL DEPENDS ${QM_FILES})
+endif ()
+
+# Disable Qt deprecated warnings
 add_compile_definitions(QT_NO_DEPRECATED_WARNINGS)
 
+# ✅ Link libraries - platform specific
+if (WIN32)
+    target_link_libraries(NoteApp
+            Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Concurrent Qt5::Qml Qt5::Quick Qt5::Network Qt5::Xml
+            SDL2::SDL2
+            ${POPPLER_LIBRARIES}
+            dsound  # For DirectSound API
+            dxguid  # For DirectSound GUIDs
+    )
+elseif (UNIX)
+    target_link_libraries(NoteApp
+            Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Concurrent Qt5::Xml Qt5::Network
+            PkgConfig::SDL2
+            PkgConfig::POPPLER
+            asound  # For ALSA audio
+    )
+endif ()
 
-# ✅ Link libraries
+# ✅ Set output name for Linux
+if (UNIX)
+    set_target_properties(NoteApp PROPERTIES OUTPUT_NAME NoteApp)
+endif ()
 
-target_link_libraries(NoteApp 
-    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Concurrent Qt5::Qml Qt5::Quick
-    SDL2::SDL2
-    ${POPPLER_LIBRARIES}
-)
+# ✅ Install targets for Linux/Flatpak
+if (UNIX)
+    # Install the main executable
+    install(TARGETS NoteApp DESTINATION bin)
+
+    # Install translation files if they exist
+    if (QM_FILES)
+        install(FILES ${QM_FILES} DESTINATION share/speedynote/translations)
+    endif ()
+    
+    # Also install resource translation files
+    file(GLOB RESOURCE_QM_FILES "resources/translations/*.qm")
+    if (RESOURCE_QM_FILES)
+        install(FILES ${RESOURCE_QM_FILES} DESTINATION share/speedynote/translations)
+    endif ()
+
+    # Install icon with app ID name for proper Flatpak desktop integration
+    install(FILES resources/icons/mainicon.png
+            DESTINATION share/icons/hicolor/256x256/apps
+            RENAME com.github.alpha_liu_01.SpeedyNote.png)
+
+    # Install desktop file and metainfo (handled by Flatpak post-install)
+endif ()
