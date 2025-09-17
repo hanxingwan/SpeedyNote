@@ -19,9 +19,9 @@
 
 PictureWindow::PictureWindow(const QRect &rect, const QString &imagePath, QWidget *parent)
     : QWidget(parent), imagePath(imagePath), canvasRect(rect), isUpdatingPosition(false),
-      dragging(false), resizing(false), isUserInteracting(false), currentResizeHandle(None),
+      lastScaledSize(QSize()), dragging(false), resizing(false), isUserInteracting(false), currentResizeHandle(None),
       maintainAspectRatio(true), aspectRatio(1.0), editMode(false), longPressTimer(new QTimer(this)),
-      wasLongPress(false)
+      wasLongPress(false), updateThrottleTimer(new QTimer(this)), hasPendingUpdate(false)
 {
     setupUI();
     applyStyle();
@@ -32,8 +32,18 @@ PictureWindow::PictureWindow(const QRect &rect, const QString &imagePath, QWidge
     longPressTimer->setInterval(500); // 500ms long press
     connect(longPressTimer, &QTimer::timeout, this, &PictureWindow::enterEditMode);
     
+    // ✅ PERFORMANCE: Set up throttle timer for pan updates
+    updateThrottleTimer->setSingleShot(true);
+    updateThrottleTimer->setInterval(16); // ~60 FPS maximum update rate
+    connect(updateThrottleTimer, &QTimer::timeout, this, [this]() {
+        if (hasPendingUpdate) {
+            hasPendingUpdate = false;
+            updateScreenPositionImmediate();
+        }
+    });
+    
     // Set initial screen position based on canvas coordinates
-    updateScreenPosition();
+    updateScreenPositionImmediate();
     
     // Enable mouse tracking for resize handles
     setMouseTracking(true);
@@ -261,7 +271,7 @@ void PictureWindow::loadImage() {
     // qDebug() << "  Title updated to:" << fileInfo.baseName();
     
     // Update screen position with the new size
-    updateScreenPosition();
+    updateScreenPositionImmediate();
 }
 
 QString PictureWindow::getImagePath() const {
@@ -288,6 +298,18 @@ void PictureWindow::setCanvasRect(const QRect &rect) {
 }
 
 void PictureWindow::updateScreenPosition() {
+    // ✅ PERFORMANCE: Throttle updates during frequent pan operations
+    if (!updateThrottleTimer->isActive()) {
+        // If not currently throttling, update immediately and start throttling
+        updateScreenPositionImmediate();
+        updateThrottleTimer->start();
+    } else {
+        // If throttling is active, just mark that we have a pending update
+        hasPendingUpdate = true;
+    }
+}
+
+void PictureWindow::updateScreenPositionImmediate() {
     // Prevent recursive updates
     if (isUpdatingPosition) return;
     isUpdatingPosition = true;
@@ -307,10 +329,11 @@ void PictureWindow::updateScreenPosition() {
         setGeometry(canvasRect);
     }
     
-    // Update scaled image when position/size changes
+    // ✅ PERFORMANCE OPTIMIZATION: Only rescale image if size actually changed
+    // This prevents expensive image rescaling during every pan operation
     if (imageLabel && !originalPixmap.isNull()) {
         QSize availableSize = imageLabel->size();
-        if (!availableSize.isEmpty()) {
+        if (!availableSize.isEmpty() && availableSize != lastScaledSize) {
             // Handle high DPI scaling properly
             qreal devicePixelRatio = devicePixelRatioF();
             QSize scaledSize = availableSize * devicePixelRatio;
@@ -318,6 +341,9 @@ void PictureWindow::updateScreenPosition() {
             scaledPixmap = originalPixmap.scaled(scaledSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
             scaledPixmap.setDevicePixelRatio(devicePixelRatio);
             imageLabel->setPixmap(scaledPixmap);
+            
+            // Remember the size we scaled for
+            lastScaledSize = availableSize;
         }
     }
     
@@ -398,7 +424,7 @@ void PictureWindow::deserialize(const QVariantMap &data) {
     ensureCanvasConnections();
     
     // Update screen position after everything is set up
-    updateScreenPosition();
+    updateScreenPositionImmediate();
     
     // qDebug() << "PictureWindow::deserialize() - Final canvas rect:" << canvasRect
              // << "Final screen rect:" << geometry();
@@ -530,6 +556,11 @@ void PictureWindow::renderToCanvas(QPainter &painter, const QRect &targetRect) c
     QPainter cachePainter(&cachedRendering);
     cachePainter.setRenderHint(QPainter::Antialiasing, true);
     cachePainter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    // ✅ Qt5: Modern text rendering hints for crisp fonts
+    cachePainter.setRenderHint(QPainter::TextAntialiasing, true);
+    #if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+        cachePainter.setRenderHint(QPainter::LosslessImageRendering, true);
+    #endif
     
     // Calculate the image area (excluding header and borders)
     QRect imageRect(0, 0, targetRect.width(), targetRect.height());
@@ -1206,6 +1237,8 @@ void PictureWindow::paintEvent(QPaintEvent *event) {
     // Draw resize handles
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
+    // ✅ Qt5: Modern text rendering hints
+    painter.setRenderHint(QPainter::TextAntialiasing, true);
     
     QColor handleColor = hasFocus() ? QColor(74, 144, 226) : QColor(180, 180, 180);
     painter.setPen(QPen(handleColor, 2));
