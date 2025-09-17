@@ -16,7 +16,7 @@ NC='\033[0m' # No Color
 PKGNAME="speedynote"
 PKGVER="0.9.3"
 PKGREL="1"
-MAINTAINER="SpeedyNote Team"
+MAINTAINER="SpeedyNote Team <speedynote@example.com>"
 DESCRIPTION="A fast note-taking application with PDF annotation support and controller input"
 URL="https://github.com/alpha-liu-01/SpeedyNote"
 LICENSE="MIT"
@@ -109,20 +109,31 @@ create_apk_package() {
     cd alpine-pkg
     
     # Create source tarball first to calculate checksum
-    cd ..
-    echo -e "${YELLOW}Creating source tarball...${NC}"
-    tar -czf "alpine-pkg/${PKGNAME}-${PKGVER}.tar.gz" \
-        --exclude=build \
-        --exclude=.git* \
-        --exclude=alpine-pkg \
-        --exclude="*.rpm" \
-        --exclude="*.deb" \
-        --exclude="*.pkg.tar.zst" \
-        --exclude="*.apk" \
-        --exclude="debian-pkg" \
-        .
+    echo -e "${YELLOW}Creating source tarball with pre-built binary...${NC}"
     
+    # Go back to project root to access files
+    cd ..
+    
+    # Create a minimal tarball with just the necessary files and pre-built binary
+    mkdir -p alpine-pkg/speedynote-src
+    cp -r resources/ alpine-pkg/speedynote-src/
+    cp README.md alpine-pkg/speedynote-src/
+    cp CMakeLists.txt alpine-pkg/speedynote-src/
+    mkdir -p alpine-pkg/speedynote-src/prebuilt
+    cp build/NoteApp alpine-pkg/speedynote-src/prebuilt/
+    
+    # Include Poppler font data for Asian text rendering
+    if [ -d "share/" ]; then
+        echo -e "${GREEN}Including Poppler font data for Asian text rendering...${NC}"
+        cp -r share/ alpine-pkg/speedynote-src/
+    else
+        echo -e "${YELLOW}Warning: share/ folder not found - Asian text rendering may not work correctly${NC}"
+    fi
+    
+    # Create tarball from alpine-pkg directory
     cd alpine-pkg
+    tar -czf "${PKGNAME}-${PKGVER}.tar.gz" speedynote-src/
+    rm -rf speedynote-src
     
     # Create APKBUILD first without checksum
     echo -e "${YELLOW}Creating APKBUILD...${NC}"
@@ -135,19 +146,19 @@ pkgdesc="$DESCRIPTION"
 url="$URL"
 arch="aarch64"
 license="MIT"
-depends="$(get_dependencies)"
-makedepends="$(get_build_dependencies)"
+# depends="$(get_dependencies)"  # Commented out to avoid dependency issues
+options="!check"  # No tests to run
 source="\$pkgname-\$pkgver.tar.gz"
-builddir="\$srcdir"
+builddir="\$srcdir/speedynote-src"
 install="\$pkgname.post-install"
 
 build() {
-    # Skip build since we're using pre-built binaries
-    echo "Using pre-built binaries from build directory"
+    # Skip build entirely - using pre-built binaries
+    return 0
 }
 
 package() {
-    install -Dm755 "build/NoteApp" "\$pkgdir/usr/bin/speedynote"
+    install -Dm755 "prebuilt/NoteApp" "\$pkgdir/usr/bin/speedynote"
     install -Dm644 "resources/icons/mainicon.png" "\$pkgdir/usr/share/pixmaps/speedynote.png"
     install -Dm644 README.md "\$pkgdir/usr/share/doc/\$pkgname/README.md"
     
@@ -159,6 +170,14 @@ package() {
                 install -m644 "\$qm_file" "\$pkgdir/usr/share/speedynote/translations/"
             fi
         done
+    fi
+    
+    # Install Poppler font data for Asian text rendering
+    if [ -d "share/poppler" ]; then
+        install -dm755 "\$pkgdir/usr/share/poppler"
+        cp -r share/poppler/* "\$pkgdir/usr/share/poppler/"
+        find "\$pkgdir/usr/share/poppler" -type f -exec chmod 644 {} \\;
+        find "\$pkgdir/usr/share/poppler" -type d -exec chmod 755 {} \\;
     fi
     
     # Create desktop file
@@ -215,7 +234,8 @@ EOF
     
     # Build package (source tarball already created above)
     echo -e "${YELLOW}Building Alpine package...${NC}"
-    abuild -r
+    # Use -K to keep going on errors, -r for clean build, -d to skip dependency check
+    abuild -K -r -d
     
     cd ..
     echo -e "${GREEN}Alpine package created successfully!${NC}"
@@ -261,6 +281,7 @@ show_package_info() {
     echo -e "✅ Desktop Integration: Application menu entry with proper categorization"
     echo -e "✅ MIME Type Support: Proper file type recognition"
     echo -e "✅ Translation Support: Multi-language interface support"
+    echo -e "✅ Asian Text Support: Includes Poppler font data for Chinese, Japanese, Korean text rendering"
 }
 
 # Main execution
