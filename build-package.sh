@@ -176,7 +176,7 @@ get_build_dependencies() {
             echo "cmake, make, pkgconf, qt6-base, qt6-tools, poppler-qt6, sdl2-compat, alsa-lib"
             ;;
         apk)
-            echo "cmake, make, pkgconf, qt6-qtbase-dev, qt6-qttools-dev, poppler-qt5-dev, sdl2-dev, alsa-lib-dev"
+            echo "cmake, make, pkgconf, qt6-qtbase-dev, qt6-qttools-dev, poppler-qt6, poppler-qt5-dev, sdl2-dev, alsa-lib-dev"
             ;;
     esac
 }
@@ -852,6 +852,23 @@ create_apk_package() {
     mkdir -p alpine-pkg
     cd alpine-pkg
     
+    # Create source tarball first to calculate checksum
+    cd ..
+    tar -czf "alpine-pkg/${PKGNAME}-${PKGVER}.tar.gz" \
+        --exclude=build \
+        --exclude=.git* \
+        --exclude=alpine-pkg \
+        --exclude="*.rpm" \
+        --exclude="*.deb" \
+        --exclude="*.pkg.tar.zst" \
+        --exclude="*.apk" \
+        .
+    
+    cd alpine-pkg
+    
+    # Calculate checksum
+    CHECKSUM=$(sha256sum "${PKGNAME}-${PKGVER}.tar.gz" | cut -d' ' -f1)
+    
     # Create APKBUILD
     cat > APKBUILD << EOF
 # Maintainer: $MAINTAINER
@@ -860,13 +877,14 @@ pkgver=$PKGVER
 pkgrel=$PKGREL
 pkgdesc="$DESCRIPTION"
 url="$URL"
-arch="aarch64"
+arch="all"
 license="MIT"
 depends="$(get_dependencies apk)"
 makedepends="$(get_build_dependencies apk)"
 source="\$pkgname-\$pkgver.tar.gz"
 builddir="\$srcdir"
 install="\$pkgname.post-install"
+sha256sums="$CHECKSUM"
 
 build() {
     cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
@@ -877,6 +895,16 @@ package() {
     install -Dm755 "build/NoteApp" "\$pkgdir/usr/bin/speedynote"
     install -Dm644 "resources/icons/mainicon.png" "\$pkgdir/usr/share/pixmaps/speedynote.png"
     install -Dm644 README.md "\$pkgdir/usr/share/doc/\$pkgname/README.md"
+    
+    # Install translation files
+    if [ -d "resources/translations" ]; then
+        install -dm755 "\$pkgdir/usr/share/speedynote/translations"
+        for qm_file in resources/translations/*.qm; do
+            if [ -f "\$qm_file" ]; then
+                install -m644 "\$qm_file" "\$pkgdir/usr/share/speedynote/translations/"
+            fi
+        done
+    fi
     
     install -Dm644 /dev/stdin "\$pkgdir/usr/share/applications/speedynote.desktop" << EOFDESKTOP
 [Desktop Entry]
@@ -923,19 +951,10 @@ update-mime-database /usr/share/mime 2>/dev/null || true
 exit 0
 EOF
     
-    # Create source tarball
-    cd ..
-    tar -czf "alpine-pkg/${PKGNAME}-${PKGVER}.tar.gz" \
-        --exclude=build \
-        --exclude=.git* \
-        --exclude=alpine-pkg \
-        .
-    
-    cd alpine-pkg
-    
-    # Build package
+    # Build package (source tarball already created above)
     abuild -r
     
+    cd ..
     echo -e "${GREEN}Alpine package created in ~/packages/alpine-pkg/${PKGNAME}/ for .apk file"
 }
 
