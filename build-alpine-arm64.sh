@@ -124,12 +124,7 @@ create_apk_package() {
     
     cd alpine-pkg
     
-    # Calculate checksum
-    echo -e "${YELLOW}Calculating checksum...${NC}"
-    CHECKSUM=$(sha256sum "${PKGNAME}-${PKGVER}.tar.gz" | cut -d' ' -f1)
-    echo -e "${GREEN}Checksum: $CHECKSUM${NC}"
-    
-    # Create APKBUILD
+    # Create APKBUILD first without checksum
     echo -e "${YELLOW}Creating APKBUILD...${NC}"
     cat > APKBUILD << EOF
 # Maintainer: $MAINTAINER
@@ -145,7 +140,6 @@ makedepends="$(get_build_dependencies)"
 source="\$pkgname-\$pkgver.tar.gz"
 builddir="\$srcdir"
 install="\$pkgname.post-install"
-sha256sums="$CHECKSUM"
 
 build() {
     # Skip build since we're using pre-built binaries
@@ -202,6 +196,10 @@ EOFDESKTOP
 EOFMIME
 }
 EOF
+    
+    # Generate checksums using abuild
+    echo -e "${YELLOW}Generating checksums with abuild...${NC}"
+    abuild checksum
     
     # Create post-install script
     echo -e "${YELLOW}Creating post-install script...${NC}"
