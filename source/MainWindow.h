@@ -391,6 +391,7 @@ private slots:
 
 public slots:
     void updatePictureButtonState(); // Public slot for picture button state
+    void onAutoScrollRequested(int direction);
 
 private:
     void onAnnotatedImageSaved(const QString &filePath); // ✅ Handle annotated image saved notification

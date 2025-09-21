@@ -46,6 +46,7 @@ signals:
     void pdfLoaded(); // Signal emitted when a PDF is loaded
     void markdownSelectionModeChanged(bool enabled); // Signal emitted when markdown selection mode changes
     void annotatedImageSaved(const QString &filePath); // ✅ Signal emitted when annotated image is saved
+    void autoScrollRequested(int direction); // Signal for autoscrolling to next/prev page
 
 public:
     explicit InkCanvas(QWidget *parent = nullptr);
@@ -211,6 +212,9 @@ public:
     QPointF mapCanvasToWidget(const QPointF &canvasPoint) const;
     QRect mapWidgetToCanvas(const QRect &widgetRect) const;
     QRect mapCanvasToWidget(const QRect &canvasRect) const;
+    
+    // Autoscroll threshold getter for MainWindow
+    int getAutoscrollThreshold() const;
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -224,6 +228,7 @@ protected:
     bool event(QEvent *event) override;
 
 private:
+    void checkAutoscrollThreshold(int oldPanY, int newPanY);
     QPointF mapLogicalWidgetToPhysicalBuffer(const QPointF& logicalWidgetPoint);
     QRect mapRectBufferToWidgetLogical(const QRectF& physicalBufferRect);
 
@@ -326,6 +331,9 @@ public:
     void invalidateCurrentPageCache(); // Invalidate cache for current page when modified
     
 private:
+    // Combined canvas window management
+    void loadCombinedWindowsForPage(int pageNumber); // Load windows for combined canvas pages
+    void saveCombinedWindowsForPage(int pageNumber); // Save windows for combined canvas pages
     // ✅ Migration from old txt files to JSON
     void migrateOldMetadataFiles();
     

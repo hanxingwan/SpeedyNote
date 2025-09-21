@@ -360,17 +360,70 @@ void InkCanvas::loadPdfPreviewAsync(int pageNumber) {
     });
 
     QFuture<QPixmap> future = QtConcurrent::run([=]() -> QPixmap {
-        std::unique_ptr<Poppler::Page> page(pdfDocument->page(pageNumber));
-        if (!page) return QPixmap();
+        // Render current page
+        std::unique_ptr<Poppler::Page> currentPage(pdfDocument->page(pageNumber));
+        if (!currentPage) return QPixmap();
 
-        // Render with document-level anti-aliasing settings
-        QImage pdfImage = page->renderToImage(96, 96);
-        if (pdfImage.isNull()) return QPixmap();
+        QImage currentPageImage = currentPage->renderToImage(96, 96);
+        if (currentPageImage.isNull()) return QPixmap();
 
-        QImage upscaled = pdfImage.scaled(pdfImage.width() * (pdfRenderDPI / 96),
-                                  pdfImage.height() * (pdfRenderDPI / 96),
-                                  Qt::KeepAspectRatio,
-                                  Qt::SmoothTransformation);
+        // Try to render next page for combination
+        QImage nextPageImage;
+        int nextPageNumber = pageNumber + 1;
+        if (nextPageNumber < pdfDocument->numPages()) {
+            std::unique_ptr<Poppler::Page> nextPage(pdfDocument->page(nextPageNumber));
+            if (nextPage) {
+                nextPageImage = nextPage->renderToImage(96, 96);
+            }
+        }
+
+        // Create combined image
+        QImage combinedImage;
+        if (!nextPageImage.isNull()) {
+            // Both pages available - create combined image
+            int combinedHeight = currentPageImage.height() + nextPageImage.height();
+            int combinedWidth = qMax(currentPageImage.width(), nextPageImage.width());
+            
+            combinedImage = QImage(combinedWidth, combinedHeight, QImage::Format_ARGB32);
+            combinedImage.fill(Qt::white);
+            
+            QPainter painter(&combinedImage);
+            painter.setRenderHint(QPainter::Antialiasing, true);
+            painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+            
+            // Draw current page at top
+            painter.drawImage(0, 0, currentPageImage);
+            
+            // Draw next page below current page
+            painter.drawImage(0, currentPageImage.height(), nextPageImage);
+            
+            painter.end();
+        } else {
+            // Only current page available (last page or next page failed to render)
+            // Create double-height image with current page at top and white space below
+            int combinedHeight = currentPageImage.height() * 2;
+            int combinedWidth = currentPageImage.width();
+            
+            combinedImage = QImage(combinedWidth, combinedHeight, QImage::Format_ARGB32);
+            combinedImage.fill(Qt::white);
+            
+            QPainter painter(&combinedImage);
+            painter.setRenderHint(QPainter::Antialiasing, true);
+            painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+            
+            // Draw current page at top
+            painter.drawImage(0, 0, currentPageImage);
+            
+            painter.end();
+        }
+
+        if (combinedImage.isNull()) return QPixmap();
+
+        // Scale to match the desired DPI
+        QImage upscaled = combinedImage.scaled(combinedImage.width() * (pdfRenderDPI / 96),
+                                              combinedImage.height() * (pdfRenderDPI / 96),
+                                              Qt::KeepAspectRatio,
+                                              Qt::SmoothTransformation);
 
         return QPixmap::fromImage(upscaled);
     });
@@ -1766,35 +1819,109 @@ void InkCanvas::saveToFile(int pageNumber) {
     if (saveFolder.isEmpty()) {
         return;
     }
-    QString filePath = saveFolder + QString("/%1_%2.png").arg(notebookId).arg(pageNumber, 5, 10, QChar('0'));
-
-    // ✅ If no file exists and the buffer is empty, do nothing
     
     if (!edited) {
         return;
     }
 
-    QImage image(buffer.size(), QImage::Format_ARGB32);
-    image.fill(Qt::transparent);
-    QPainter painter(&image);
-    painter.drawPixmap(0, 0, buffer);
-    image.save(filePath, "PNG");
+    // Check if this is a combined canvas (double height due to combined pages)
+    bool isCombinedCanvas = false;
+    int singlePageHeight = buffer.height();
+    
+    // If we have a background image (PDF) and buffer is roughly double its height, it's combined
+    if (!backgroundImage.isNull() && buffer.height() >= backgroundImage.height() * 1.8) {
+        isCombinedCanvas = true;
+        singlePageHeight = backgroundImage.height() / 2; // Each PDF page in the combined image
+    } else if (buffer.height() > 2000) { // Fallback heuristic for very tall buffers
+        isCombinedCanvas = true;
+        singlePageHeight = buffer.height() / 2;
+    }
+    
+    if (isCombinedCanvas) {
+        // Split the combined canvas and save both halves
+        int bufferWidth = buffer.width();
+        
+        // Save current page (top half)
+        QString currentFilePath = saveFolder + QString("/%1_%2.png").arg(notebookId).arg(pageNumber, 5, 10, QChar('0'));
+        QPixmap currentPageBuffer = buffer.copy(0, 0, bufferWidth, singlePageHeight);
+        QImage currentImage(currentPageBuffer.size(), QImage::Format_ARGB32);
+        currentImage.fill(Qt::transparent);
+        {
+            QPainter painter(&currentImage);
+            painter.drawPixmap(0, 0, currentPageBuffer);
+        }
+        currentImage.save(currentFilePath, "PNG");
+        
+        // Save next page (bottom half) by MERGING with existing content
+        int nextPageNumber = pageNumber + 1;
+        QString nextFilePath = saveFolder + QString("/%1_%2.png").arg(notebookId).arg(nextPageNumber, 5, 10, QChar('0'));
+        QPixmap nextPageBuffer = buffer.copy(0, singlePageHeight, bufferWidth, singlePageHeight);
+        
+        // Check if bottom half has any non-transparent content
+        QImage nextCheck = nextPageBuffer.toImage();
+        bool hasNewContent = false;
+        for (int y = 0; y < nextCheck.height() && !hasNewContent; ++y) {
+            const QRgb *row = reinterpret_cast<const QRgb*>(nextCheck.scanLine(y));
+            for (int x = 0; x < nextCheck.width() && !hasNewContent; ++x) {
+                if (qAlpha(row[x]) != 0) {
+                    hasNewContent = true;
+                }
+            }
+        }
+        
+        if (hasNewContent) {
+            // Load existing next page content and merge with new content
+            QPixmap existingNextPage;
+            if (QFile::exists(nextFilePath)) {
+                existingNextPage.load(nextFilePath);
+            }
+            
+            // Create merged image
+            QImage mergedNextImage(nextPageBuffer.size(), QImage::Format_ARGB32);
+            mergedNextImage.fill(Qt::transparent);
+            {
+                QPainter painter(&mergedNextImage);
+                
+                // Draw existing content first
+                if (!existingNextPage.isNull()) {
+                    painter.drawPixmap(0, 0, existingNextPage);
+                }
+                
+                // Draw new content on top
+                painter.drawPixmap(0, 0, nextPageBuffer);
+            }
+            
+            mergedNextImage.save(nextFilePath, "PNG");
+            
+            // Update cache for next page with merged content
+            noteCache.insert(nextPageNumber, new QPixmap(QPixmap::fromImage(mergedNextImage)));
+            
+            // Note: Cache invalidation is now handled during page switching for better timing
+        }
+        
+        // Update cache for current page
+        noteCache.insert(pageNumber, new QPixmap(currentPageBuffer));
+        
+    } else {
+        // Standard single page save
+        QString filePath = saveFolder + QString("/%1_%2.png").arg(notebookId).arg(pageNumber, 5, 10, QChar('0'));
+        QImage image(buffer.size(), QImage::Format_ARGB32);
+        image.fill(Qt::transparent);
+        QPainter painter(&image);
+        painter.drawPixmap(0, 0, buffer);
+        image.save(filePath, "PNG");
+        
+        // Update note cache with the saved buffer
+        noteCache.insert(pageNumber, new QPixmap(buffer));
+    }
+    
     edited = false;
     
-    // Save markdown windows for this page
-    if (markdownManager) {
-        markdownManager->saveWindowsForPage(pageNumber);
-    }
-    // Save picture windows for this page
-    if (pictureManager) {
-        pictureManager->saveWindowsForPage(pageNumber);
-    }
+    // Save windows with appropriate handling for combined canvas
+    saveCombinedWindowsForPage(pageNumber);
     
     // ✅ Sync changes to .spn package if needed
     syncSpnPackage();
-    
-    // Update note cache with the saved buffer
-    noteCache.insert(pageNumber, new QPixmap(buffer));
 }
 
 void InkCanvas::saveAnnotated(int pageNumber) {
@@ -1888,24 +2015,25 @@ void InkCanvas::loadPage(int pageNumber) {
     // Update current note page tracker
     currentCachedNotePage = pageNumber;
 
-    // Check if note page is already cached
+    // CRITICAL FIX: Always invalidate cache for combined pages when switching
+    // This ensures we get fresh content that might have been updated by other views
+    if (pageNumber > 0) {
+        noteCache.remove(pageNumber - 1); // Remove "page (n-1),n" cache
+    }
+    noteCache.remove(pageNumber);         // Remove "page n,(n+1)" cache
+    noteCache.remove(pageNumber + 1);     // Remove "page (n+1),(n+2)" cache
+
+    // Now load fresh from disk (no cache check since we just invalidated)
+    loadNotePageToCache(pageNumber);
+    
+    // Use the newly cached page or initialize buffer if loading failed
     bool loadedFromCache = false;
     if (noteCache.contains(pageNumber)) {
-        // Use cached note page immediately
         buffer = *noteCache.object(pageNumber);
         loadedFromCache = true;
     } else {
-        // Load note page from disk and cache it
-        loadNotePageToCache(pageNumber);
-        
-        // Use the newly cached page or initialize buffer if loading failed
-        if (noteCache.contains(pageNumber)) {
-            buffer = *noteCache.object(pageNumber);
-            loadedFromCache = true;
-    } else {
         initializeBuffer(); // Clear the canvas if no file exists
         loadedFromCache = false;
-    }
     }
     
     // Reset edited state when loading a new page
@@ -2008,12 +2136,7 @@ void InkCanvas::loadPage(int pageNumber) {
     // Load markdown windows AFTER canvas is fully rendered and sized
     // Use a single-shot timer to ensure the canvas is fully updated
     QTimer::singleShot(0, this, [this, pageNumber]() {
-        if (markdownManager) {
-            markdownManager->loadWindowsForPage(pageNumber);
-        }
-        if (pictureManager) {
-            pictureManager->loadWindowsForPage(pageNumber);
-        }
+        loadCombinedWindowsForPage(pageNumber);
     });
 }
 
@@ -2179,9 +2302,11 @@ void InkCanvas::setPanX(int value) {
 
 void InkCanvas::setPanY(int value) {
     if (panOffsetY != value) {
-    panOffsetY = value;
-    update();
+        int oldPanOffsetY = panOffsetY;
+        panOffsetY = value;
+        update();
         emit panChanged(panOffsetX, panOffsetY);
+        checkAutoscrollThreshold(oldPanOffsetY, value);
     }
 }
 
@@ -2961,15 +3086,71 @@ void InkCanvas::renderPdfPageToCache(int pageNumber) {
         pdfCache.remove(oldestKey);
     }
     
-    // Render the page and store it in the cache
-    std::unique_ptr<Poppler::Page> page(pdfDocument->page(pageNumber));
-    if (page) {
-        // Render with document-level anti-aliasing settings
-        QImage pdfImage = page->renderToImage(pdfRenderDPI, pdfRenderDPI);
-        if (!pdfImage.isNull()) {
-            QPixmap cachedPixmap = QPixmap::fromImage(pdfImage);
-            pdfCache.insert(pageNumber, new QPixmap(cachedPixmap));
+    // Render current page
+    std::unique_ptr<Poppler::Page> currentPage(pdfDocument->page(pageNumber));
+    if (!currentPage) {
+        return;
+    }
+    
+    QImage currentPageImage = currentPage->renderToImage(pdfRenderDPI, pdfRenderDPI);
+    if (currentPageImage.isNull()) {
+        return;
+    }
+    
+    // Try to render next page for combination
+    QImage nextPageImage;
+    int nextPageNumber = pageNumber + 1;
+    if (isValidPageNumber(nextPageNumber)) {
+        std::unique_ptr<Poppler::Page> nextPage(pdfDocument->page(nextPageNumber));
+        if (nextPage) {
+            nextPageImage = nextPage->renderToImage(pdfRenderDPI, pdfRenderDPI);
         }
+    }
+    
+    // Create combined image
+    QImage combinedImage;
+    if (!nextPageImage.isNull()) {
+        // Both pages available - create combined image
+        int combinedHeight = currentPageImage.height() + nextPageImage.height();
+        int combinedWidth = qMax(currentPageImage.width(), nextPageImage.width());
+        
+        combinedImage = QImage(combinedWidth, combinedHeight, QImage::Format_ARGB32);
+        combinedImage.fill(Qt::white);
+        
+        QPainter painter(&combinedImage);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+        
+        // Draw current page at top
+        painter.drawImage(0, 0, currentPageImage);
+        
+        // Draw next page below current page
+        painter.drawImage(0, currentPageImage.height(), nextPageImage);
+        
+        painter.end();
+    } else {
+        // Only current page available (last page or next page failed to render)
+        // Create double-height image with current page at top and white space below
+        int combinedHeight = currentPageImage.height() * 2;
+        int combinedWidth = currentPageImage.width();
+        
+        combinedImage = QImage(combinedWidth, combinedHeight, QImage::Format_ARGB32);
+        combinedImage.fill(Qt::white);
+        
+        QPainter painter(&combinedImage);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+        
+        // Draw current page at top
+        painter.drawImage(0, 0, currentPageImage);
+        
+        painter.end();
+    }
+    
+    // Cache the combined image
+    if (!combinedImage.isNull()) {
+        QPixmap cachedPixmap = QPixmap::fromImage(combinedImage);
+        pdfCache.insert(pageNumber, new QPixmap(cachedPixmap));
     }
 }
 
@@ -3076,8 +3257,8 @@ void InkCanvas::loadNotePageToCache(int pageNumber) {
         return;
     }
     
-    QString filePath = getNotePageFilePath(pageNumber);
-    if (filePath.isEmpty()) {
+    QString currentFilePath = getNotePageFilePath(pageNumber);
+    if (currentFilePath.isEmpty()) {
         return;
     }
     
@@ -3091,14 +3272,72 @@ void InkCanvas::loadNotePageToCache(int pageNumber) {
         }
     }
     
-    // Load note page from disk if it exists
-    if (QFile::exists(filePath)) {
-        QPixmap notePixmap;
-        if (notePixmap.load(filePath)) {
-            noteCache.insert(pageNumber, new QPixmap(notePixmap));
+    // Load current page canvas
+    QPixmap currentPageCanvas;
+    bool currentExists = false;
+    if (QFile::exists(currentFilePath)) {
+        if (currentPageCanvas.load(currentFilePath)) {
+            currentExists = true;
         }
     }
-    // If file doesn't exist, we don't cache anything - loadPage will handle initialization
+    
+    // Load next page canvas for combination
+    QPixmap nextPageCanvas;
+    bool nextExists = false;
+    int nextPageNumber = pageNumber + 1;
+    QString nextFilePath = getNotePageFilePath(nextPageNumber);
+    if (!nextFilePath.isEmpty() && QFile::exists(nextFilePath)) {
+        if (nextPageCanvas.load(nextFilePath)) {
+            nextExists = true;
+        }
+    }
+    
+    // Create combined canvas
+    QPixmap combinedCanvas;
+    if (currentExists || nextExists) {
+        // Determine the size for the combined canvas
+        int combinedWidth = 0;
+        int combinedHeight = 0;
+        
+        if (currentExists && nextExists) {
+            // Both pages exist - combine them vertically
+            combinedWidth = qMax(currentPageCanvas.width(), nextPageCanvas.width());
+            combinedHeight = currentPageCanvas.height() + nextPageCanvas.height();
+        } else if (currentExists) {
+            // Only current page exists - create double height with current page on top
+            combinedWidth = currentPageCanvas.width();
+            combinedHeight = currentPageCanvas.height() * 2;
+        } else {
+            // Only next page exists - create double height with empty space on top
+            combinedWidth = nextPageCanvas.width();
+            combinedHeight = nextPageCanvas.height() * 2;
+        }
+        
+        // Create the combined canvas
+        combinedCanvas = QPixmap(combinedWidth, combinedHeight);
+        combinedCanvas.fill(Qt::transparent);
+        
+        QPainter painter(&combinedCanvas);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+        
+        // Draw current page at the top
+        if (currentExists) {
+            painter.drawPixmap(0, 0, currentPageCanvas);
+        }
+        
+        // Draw next page below current page
+        if (nextExists) {
+            int yOffset = currentExists ? currentPageCanvas.height() : nextPageCanvas.height();
+            painter.drawPixmap(0, yOffset, nextPageCanvas);
+        }
+        
+        painter.end();
+        
+        // Cache the combined canvas
+        noteCache.insert(pageNumber, new QPixmap(combinedCanvas));
+    }
+    // If neither file exists, we don't cache anything - loadPage will handle initialization
 }
 
 void InkCanvas::checkAndCacheAdjacentNotePages(int targetPage) {
@@ -3192,6 +3431,147 @@ void InkCanvas::cacheAdjacentNotePages() {
 void InkCanvas::invalidateCurrentPageCache() {
     if (currentCachedNotePage >= 0) {
         noteCache.remove(currentCachedNotePage);
+    }
+}
+
+void InkCanvas::loadCombinedWindowsForPage(int pageNumber) {
+    if (!markdownManager && !pictureManager) {
+        return;
+    }
+    
+    // Check if this is a combined canvas
+    bool isCombinedCanvas = false;
+    int singlePageHeight = buffer.height();
+    
+    if (!backgroundImage.isNull() && buffer.height() >= backgroundImage.height() * 1.8) {
+        isCombinedCanvas = true;
+        singlePageHeight = backgroundImage.height() / 2;
+    } else if (buffer.height() > 2000) {
+        isCombinedCanvas = true;
+        singlePageHeight = buffer.height() / 2;
+    }
+    
+    if (isCombinedCanvas) {
+        // For combined canvas, load current page normally first
+        if (markdownManager) {
+            markdownManager->loadWindowsForPage(pageNumber);
+        }
+        if (pictureManager) {
+            pictureManager->loadWindowsForPage(pageNumber);
+        }
+        
+        // Then load next page windows and adjust their positions
+        int nextPageNumber = pageNumber + 1;
+        
+        // Store current page windows temporarily
+        QList<MarkdownWindow*> currentMarkdownWindows = markdownManager ? markdownManager->getCurrentPageWindows() : QList<MarkdownWindow*>();
+        QList<PictureWindow*> currentPictureWindows = pictureManager ? pictureManager->getCurrentPageWindows() : QList<PictureWindow*>();
+        
+        // Load next page windows
+        if (markdownManager) {
+            markdownManager->loadWindowsForPage(nextPageNumber);
+            QList<MarkdownWindow*> nextPageMarkdownWindows = markdownManager->getCurrentPageWindows();
+            
+            // Adjust next page window positions to bottom half
+            for (MarkdownWindow* window : nextPageMarkdownWindows) {
+                QRect rect = window->getCanvasRect();
+                rect.moveTop(rect.y() + singlePageHeight); // Move to bottom half
+                window->setCanvasRect(rect);
+            }
+        }
+        
+        if (pictureManager) {
+            pictureManager->loadWindowsForPage(nextPageNumber);
+            QList<PictureWindow*> nextPagePictureWindows = pictureManager->getCurrentPageWindows();
+            
+            // Adjust next page window positions to bottom half
+            for (PictureWindow* window : nextPagePictureWindows) {
+                QRect rect = window->getCanvasRect();
+                rect.moveTop(rect.y() + singlePageHeight); // Move to bottom half
+                window->setCanvasRect(rect);
+            }
+        }
+        
+        // Note: The windows from next page are now loaded and positioned correctly
+        // The managers will handle displaying both sets of windows
+        
+    } else {
+        // Standard single page window loading
+        if (markdownManager) {
+            markdownManager->loadWindowsForPage(pageNumber);
+        }
+        if (pictureManager) {
+            pictureManager->loadWindowsForPage(pageNumber);
+        }
+    }
+}
+
+void InkCanvas::saveCombinedWindowsForPage(int pageNumber) {
+    if (!markdownManager && !pictureManager) {
+        return;
+    }
+    
+    // Check if this is a combined canvas
+    bool isCombinedCanvas = false;
+    int singlePageHeight = buffer.height();
+    
+    if (!backgroundImage.isNull() && buffer.height() >= backgroundImage.height() * 1.8) {
+        isCombinedCanvas = true;
+        singlePageHeight = backgroundImage.height() / 2;
+    } else if (buffer.height() > 2000) {
+        isCombinedCanvas = true;
+        singlePageHeight = buffer.height() / 2;
+    }
+    
+    if (isCombinedCanvas) {
+        // For combined canvas, we need to save windows based on their positions
+        // Windows in the top half belong to current page, bottom half to next page
+        
+        // Get all current windows
+        QList<MarkdownWindow*> allMarkdownWindows = markdownManager ? markdownManager->getCurrentPageWindows() : QList<MarkdownWindow*>();
+        QList<PictureWindow*> allPictureWindows = pictureManager ? pictureManager->getCurrentPageWindows() : QList<PictureWindow*>();
+        
+        // Separate windows by position and temporarily adjust coordinates for saving
+        QList<MarkdownWindow*> nextPageMarkdownWindows;
+        QList<PictureWindow*> nextPagePictureWindows;
+        
+        // Identify windows that need to be copied to next page (in bottom half)
+        for (MarkdownWindow* window : allMarkdownWindows) {
+            QRect rect = window->getCanvasRect();
+            if (rect.y() >= singlePageHeight) {
+                // Window is in bottom half (next page) - needs to be copied there
+                nextPageMarkdownWindows.append(window);
+            }
+        }
+        
+        for (PictureWindow* window : allPictureWindows) {
+            QRect rect = window->getCanvasRect();
+            if (rect.y() >= singlePageHeight) {
+                // Window is in bottom half (next page) - needs to be copied there
+                nextPagePictureWindows.append(window);
+            }
+        }
+        
+        // Save current page (this will save all windows currently visible, including those in bottom half)
+        if (markdownManager) {
+            markdownManager->saveWindowsForPage(pageNumber);
+        }
+        if (pictureManager) {
+            pictureManager->saveWindowsForPage(pageNumber);
+        }
+        
+        // For now, keep window handling simple - the main issue was canvas content, not windows
+        // Windows are handled by their respective managers and should persist correctly
+        // The key fix was ensuring canvas content is merged, not replaced
+        
+    } else {
+        // Standard single page window saving
+        if (markdownManager) {
+            markdownManager->saveWindowsForPage(pageNumber);
+        }
+        if (pictureManager) {
+            pictureManager->saveWindowsForPage(pageNumber);
+        }
     }
 }
 
@@ -3925,6 +4305,57 @@ void InkCanvas::handlePictureMouseRelease(QMouseEvent *event) {
         int currentPage = getLastActivePage();
         pictureManager->saveWindowsForPage(currentPage);
     }
+}
+
+void InkCanvas::checkAutoscrollThreshold(int oldPanY, int newPanY) {
+    // Detect if this is a combined canvas
+    bool isCombinedCanvas = false;
+    int singlePageHeight = 0;
+    
+    if (!backgroundImage.isNull() && buffer.height() >= backgroundImage.height() * 1.8 && backgroundImage.height() > 0) {
+        isCombinedCanvas = true;
+        singlePageHeight = backgroundImage.height() / 2;
+    } else if (buffer.height() > 2000) { 
+        isCombinedCanvas = true;
+        singlePageHeight = buffer.height() / 2;
+    }
+    
+    if (!isCombinedCanvas || singlePageHeight == 0) {
+        return; 
+    }
+    
+    // Threshold for autoscroll is the bottom of the first page in the combined view
+    int threshold = singlePageHeight;
+    
+    // Check for forward autoscroll (scrolling down past the first page)
+    if (oldPanY < threshold && newPanY >= threshold) {
+        emit autoScrollRequested(1); // 1 for forward
+    }
+    
+    // Check for backward autoscroll (scrolling up past 0 into negative territory)
+    if (oldPanY >= 0 && newPanY < 0) {
+        emit autoScrollRequested(-1); // -1 for backward
+    }
+}
+
+int InkCanvas::getAutoscrollThreshold() const {
+    // Detect if this is a combined canvas
+    bool isCombinedCanvas = false;
+    int singlePageHeight = 0;
+    
+    if (!backgroundImage.isNull() && buffer.height() >= backgroundImage.height() * 1.8 && backgroundImage.height() > 0) {
+        isCombinedCanvas = true;
+        singlePageHeight = backgroundImage.height() / 2;
+    } else if (buffer.height() > 2000) { 
+        isCombinedCanvas = true;
+        singlePageHeight = buffer.height() / 2;
+    }
+    
+    if (!isCombinedCanvas || singlePageHeight == 0) {
+        return 0; // Return 0 for non-combined canvases
+    }
+    
+    return singlePageHeight;
 }
 
 

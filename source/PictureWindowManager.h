@@ -81,3 +81,4 @@ private:
 };
 
 #endif // PICTUREWINDOWMANAGER_H
+

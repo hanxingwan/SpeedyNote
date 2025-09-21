@@ -731,23 +731,18 @@ void MainWindow::setupUi() {
     bookmarksSidebar = new QWidget(this);
     bookmarksSidebar->setFixedWidth(250);
     bookmarksSidebar->setVisible(false); // Hidden by default
-    
     QVBoxLayout *bookmarksLayout = new QVBoxLayout(bookmarksSidebar);
     bookmarksLayout->setContentsMargins(5, 5, 5, 5);
-    
     QLabel *bookmarksLabel = new QLabel(tr("Bookmarks"), bookmarksSidebar);
     bookmarksLabel->setStyleSheet("font-weight: bold; padding: 5px;");
     bookmarksLayout->addWidget(bookmarksLabel);
-    
     bookmarksTree = new QTreeWidget(bookmarksSidebar);
     bookmarksTree->setHeaderHidden(true);
     bookmarksTree->setRootIsDecorated(false);
     bookmarksTree->setIndentation(0);
     bookmarksLayout->addWidget(bookmarksTree);
-    
     // Connect bookmarks tree item clicks
     connect(bookmarksTree, &QTreeWidget::itemClicked, this, &MainWindow::onBookmarkItemClicked);
-
     // 🌟 Horizontal Tab Bar (like modern web browsers)
     tabList = new QListWidget(this);
     tabList->setFlow(QListView::LeftToRight);  // Make it horizontal
@@ -755,7 +750,6 @@ void MainWindow::setupUi() {
     tabList->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     tabList->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     tabList->setSelectionMode(QAbstractItemView::SingleSelection);
-
     // Style the tab bar like a modern browser with transparent scrollbar
     tabList->setStyleSheet(R"(
         QListWidget {
@@ -1514,21 +1508,35 @@ void MainWindow::switchPage(int pageNumber) {
     canvas->setLastPanX(panXSlider->maximum());
     canvas->setLastPanY(panYSlider->maximum());
         
-        // ✅ Enhanced scroll-on-top functionality
+        // ✅ Enhanced scroll-on-top functionality with explicit direction
         if (scrollOnTopEnabled && panYSlider->maximum() > 0) {
             if (pageNumber > oldPage) {
                 // Forward page switching → scroll to top
-                panYSlider->setValue(0);
+                QTimer::singleShot(0, this, [this]() {
+                    if (panYSlider) panYSlider->setValue(0);
+                });
             } else if (pageNumber < oldPage) {
-                // Backward page switching → scroll to bottom
-                panYSlider->setValue(panYSlider->maximum());
+                // Backward page switching → scroll to just before the threshold
+                QTimer::singleShot(0, this, [this, canvas]() {
+                    if (panYSlider && canvas) {
+                        int threshold = canvas->getAutoscrollThreshold();
+                        if (threshold > 0) {
+                            // A small offset to avoid being exactly on the edge and re-triggering
+                            int offset = 20;
+                            int targetPan = (threshold > offset) ? (threshold - offset) : 0;
+                            panYSlider->setValue(targetPan);
+                        } else {
+                            // Fallback for non-combined canvases or error cases
+                            panYSlider->setValue(panYSlider->maximum());
+                        }
+                    }
+                });
             }
         }
     }
     updateDialDisplay();
     updateBookmarkButtonState(); // Update bookmark button state when switching pages
 }
-
 void MainWindow::switchPageWithDirection(int pageNumber, int direction) {
     InkCanvas *canvas = currentCanvas();
     if (!canvas) return;
@@ -1561,10 +1569,25 @@ void MainWindow::switchPageWithDirection(int pageNumber, int direction) {
         if (scrollOnTopEnabled && panYSlider->maximum() > 0) {
             if (direction > 0) {
                 // Forward page switching → scroll to top
-                panYSlider->setValue(0);
+                QTimer::singleShot(0, this, [this]() {
+                    if (panYSlider) panYSlider->setValue(0);
+                });
             } else if (direction < 0) {
-                // Backward page switching → scroll to bottom
-                panYSlider->setValue(panYSlider->maximum());
+                // Backward page switching → scroll to just before the threshold
+                QTimer::singleShot(0, this, [this, canvas]() {
+                    if (panYSlider && canvas) {
+                        int threshold = canvas->getAutoscrollThreshold();
+                        if (threshold > 0) {
+                            // A small offset to avoid being exactly on the edge and re-triggering
+                            int offset = 20;
+                            int targetPan = (threshold > offset) ? (threshold - offset) : 0;
+                            panYSlider->setValue(targetPan);
+                        } else {
+                            // Fallback for non-combined canvases or error cases
+                            panYSlider->setValue(panYSlider->maximum());
+                        }
+                    }
+                });
             }
         }
     }
@@ -1772,7 +1795,17 @@ void MainWindow::updatePanRange() {
         // No need for vertical scrollbar
         panYSlider->setVisible(false);
     } else {
-    panYSlider->setRange(0, maxPanY_scaled);
+        // Check if this is a combined canvas to extend pan Y range to negative values
+        InkCanvas *canvas = currentCanvas();
+        int minPanY = 0;
+        if (canvas && canvas->getAutoscrollThreshold() > 0) {
+            // For combined canvases, allow negative pan Y for backward scrolling
+            // Set negative range to about 10% of a single page height
+            int threshold = canvas->getAutoscrollThreshold();
+            minPanY = -(threshold / 10); // Allow scrolling up to trigger backward navigation
+        }
+        
+        panYSlider->setRange(minPanY, maxPanY_scaled);
         // Show scrollbar only if mouse is near and timeout hasn't occurred
         if (scrollbarsVisible && !scrollbarHideTimer->isActive()) {
             scrollbarHideTimer->start();
@@ -2241,6 +2274,7 @@ void MainWindow::addNewTab() {
     });
     connect(newCanvas, &InkCanvas::markdownSelectionModeChanged, this, &MainWindow::updateMarkdownButtonState);
     connect(newCanvas, &InkCanvas::annotatedImageSaved, this, &MainWindow::onAnnotatedImageSaved);
+    connect(newCanvas, &InkCanvas::autoScrollRequested, this, &MainWindow::onAutoScrollRequested);
     
     // Install event filter to detect mouse movement for scrollbar visibility
     newCanvas->setMouseTracking(true);
@@ -2296,8 +2330,6 @@ void MainWindow::addNewTab() {
     // Update color button states for the new tab
     updateColorButtonStates();
 }
-
-
 void MainWindow::removeTabAt(int index) {
     if (!tabList || !canvasStack) return; // Ensure UI elements exist
     if (index < 0 || index >= canvasStack->count()) return;
@@ -2530,7 +2562,9 @@ void MainWindow::goToPreviousPage() {
     if (currentPage > 1) {
         int newPage = currentPage - 1;
         switchPageWithDirection(newPage, -1); // -1 indicates backward
+        pageInput->blockSignals(true);
         pageInput->setValue(newPage);
+        pageInput->blockSignals(false);
     }
 }
 
@@ -2538,7 +2572,9 @@ void MainWindow::goToNextPage() {
     int currentPage = getCurrentPageForCanvas(currentCanvas()) + 1;  // Convert to 1-based
     int newPage = currentPage + 1;
     switchPageWithDirection(newPage, 1); // 1 indicates forward
+    pageInput->blockSignals(true);
     pageInput->setValue(newPage);
+    pageInput->blockSignals(false);
 }
 
 void MainWindow::onPageInputChanged(int newPage) {
@@ -2948,10 +2984,6 @@ void MainWindow::handleToolSelection(int angle) {
 void MainWindow::onToolReleased() {
     
 }
-
-
-
-
 bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
     static bool dragging = false;
     static QPoint lastMousePos;
@@ -3523,7 +3555,6 @@ void MainWindow::setUseCustomAccentColor(bool use) {
         saveThemeSettings();
     }
 }
-
 void MainWindow::updateTheme() {
     // Update control bar background color
     QColor accentColor = getAccentColor();
@@ -4239,7 +4270,6 @@ QString MainWindow::migrateOldActionString(const QString &oldString) {
     if (oldString == "Toggle PDF Text Selection") return "toggle_pdf_text_selection";
     return oldString; // Return as-is if not found (might already be new format)
 }
-
 void MainWindow::handleControllerButton(const QString &buttonName) {  // This is for single press functions
     ControllerAction action = buttonPressActionMapping.value(buttonName, ControllerAction::None);
 
@@ -5016,7 +5046,6 @@ void MainWindow::updateScrollbarPositions() {
         containerHeight - cornerOffset - margin*2  // Full height minus corner and bottom margin
     );
 }
-
 // Add the new helper method for edge detection
 void MainWindow::handleEdgeProximity(InkCanvas* canvas, const QPoint& pos) {
     if (!canvas) return;
@@ -5810,7 +5839,6 @@ void MainWindow::showRopeSelectionMenu(const QPoint &position) {
     // Show the menu at the specified position
     contextMenu->popup(globalPos);
 }
-
 void MainWindow::updatePdfTextSelectButtonState() {
     // Check if PDF text selection is enabled
     bool isEnabled = currentCanvas() && currentCanvas()->isPdfTextSelectionEnabled();
@@ -6601,7 +6629,6 @@ void MainWindow::wheelEvent(QWheelEvent *event) {
     
     QMainWindow::wheelEvent(event);
 }
-
 QString MainWindow::mouseButtonCombinationToString(const QSet<Qt::MouseButton> &buttons) const {
     QStringList buttonNames;
     
@@ -6741,4 +6768,13 @@ void MainWindow::loadMouseDialMappings() {
     }
     
     settings.endGroup();
+}
+
+void MainWindow::onAutoScrollRequested(int direction)
+{
+    if (direction > 0) {
+        goToNextPage();
+    } else if (direction < 0) {
+        goToPreviousPage();
+    }
 }
