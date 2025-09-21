@@ -1702,15 +1702,88 @@ void MainWindow::saveCurrentPageConcurrent() {
         notebookId = canvas->getNotebookId();
     }
     
+    // Check if this is a combined canvas and get background image info if needed
+    QPixmap backgroundImage = canvas->getBackgroundImage();
+    bool isCombinedCanvas = false;
+    int singlePageHeight = bufferCopy.height();
+    
+    // If we have a background image (PDF) and buffer is roughly double its height, it's combined
+    if (!backgroundImage.isNull() && bufferCopy.height() >= backgroundImage.height() * 1.8) {
+        isCombinedCanvas = true;
+        singlePageHeight = backgroundImage.height() / 2; // Each PDF page in the combined image
+    } else if (bufferCopy.height() > 2000) { // Fallback heuristic for very tall buffers
+        isCombinedCanvas = true;
+        singlePageHeight = bufferCopy.height() / 2;
+    }
+    
     // Run the save operation concurrently
-    QFuture<void> future = QtConcurrent::run([saveFolder, pageNumber, bufferCopy, notebookId]() {
-        QString filePath = saveFolder + QString("/%1_%2.png").arg(notebookId).arg(pageNumber, 5, 10, QChar('0'));
-        
-        QImage image(bufferCopy.size(), QImage::Format_ARGB32);
-        image.fill(Qt::transparent);
-        QPainter painter(&image);
-        painter.drawPixmap(0, 0, bufferCopy);
-        image.save(filePath, "PNG");
+    concurrentSaveFuture = QtConcurrent::run([saveFolder, pageNumber, bufferCopy, notebookId, isCombinedCanvas, singlePageHeight]() {
+        if (isCombinedCanvas) {
+            // Split the combined canvas and save both halves
+            int bufferWidth = bufferCopy.width();
+            
+            // Save current page (top half)
+            QString currentFilePath = saveFolder + QString("/%1_%2.png").arg(notebookId).arg(pageNumber, 5, 10, QChar('0'));
+            QPixmap currentPageBuffer = bufferCopy.copy(0, 0, bufferWidth, singlePageHeight);
+            QImage currentImage(currentPageBuffer.size(), QImage::Format_ARGB32);
+            currentImage.fill(Qt::transparent);
+            {
+                QPainter painter(&currentImage);
+                painter.drawPixmap(0, 0, currentPageBuffer);
+            }
+            currentImage.save(currentFilePath, "PNG");
+            
+            // Save next page (bottom half) by MERGING with existing content
+            int nextPageNumber = pageNumber + 1;
+            QString nextFilePath = saveFolder + QString("/%1_%2.png").arg(notebookId).arg(nextPageNumber, 5, 10, QChar('0'));
+            QPixmap nextPageBuffer = bufferCopy.copy(0, singlePageHeight, bufferWidth, singlePageHeight);
+            
+            // Check if bottom half has any non-transparent content
+            QImage nextCheck = nextPageBuffer.toImage();
+            bool hasNewContent = false;
+            for (int y = 0; y < nextCheck.height() && !hasNewContent; ++y) {
+                const QRgb *row = reinterpret_cast<const QRgb*>(nextCheck.scanLine(y));
+                for (int x = 0; x < nextCheck.width() && !hasNewContent; ++x) {
+                    if (qAlpha(row[x]) != 0) {
+                        hasNewContent = true;
+                    }
+                }
+            }
+            
+            if (hasNewContent) {
+                // Load existing next page content and merge with new content
+                QPixmap existingNextPage;
+                if (QFile::exists(nextFilePath)) {
+                    existingNextPage.load(nextFilePath);
+                }
+                
+                // Create merged image
+                QImage mergedNextImage(nextPageBuffer.size(), QImage::Format_ARGB32);
+                mergedNextImage.fill(Qt::transparent);
+                {
+                    QPainter painter(&mergedNextImage);
+                    
+                    // Draw existing content first
+                    if (!existingNextPage.isNull()) {
+                        painter.drawPixmap(0, 0, existingNextPage);
+                    }
+                    
+                    // Draw new content on top
+                    painter.drawPixmap(0, 0, nextPageBuffer);
+                }
+                
+                mergedNextImage.save(nextFilePath, "PNG");
+            }
+        } else {
+            // Standard single page save
+            QString filePath = saveFolder + QString("/%1_%2.png").arg(notebookId).arg(pageNumber, 5, 10, QChar('0'));
+            
+            QImage image(bufferCopy.size(), QImage::Format_ARGB32);
+            image.fill(Qt::transparent);
+            QPainter painter(&image);
+            painter.drawPixmap(0, 0, bufferCopy);
+            image.save(filePath, "PNG");
+        }
     });
     
     // Mark as not edited since we're saving
@@ -2275,6 +2348,7 @@ void MainWindow::addNewTab() {
     connect(newCanvas, &InkCanvas::markdownSelectionModeChanged, this, &MainWindow::updateMarkdownButtonState);
     connect(newCanvas, &InkCanvas::annotatedImageSaved, this, &MainWindow::onAnnotatedImageSaved);
     connect(newCanvas, &InkCanvas::autoScrollRequested, this, &MainWindow::onAutoScrollRequested);
+    connect(newCanvas, &InkCanvas::earlySaveRequested, this, &MainWindow::onEarlySaveRequested);
     
     // Install event filter to detect mouse movement for scrollbar visibility
     newCanvas->setMouseTracking(true);
@@ -6772,9 +6846,26 @@ void MainWindow::loadMouseDialMappings() {
 
 void MainWindow::onAutoScrollRequested(int direction)
 {
+    // If there's a pending concurrent save, wait for it to complete before autoscrolling
+    // This ensures that content is saved before switching pages
+    if (concurrentSaveFuture.isValid() && !concurrentSaveFuture.isFinished()) {
+        // Wait for the save to complete (this should be very fast since it's just file I/O)
+        concurrentSaveFuture.waitForFinished();
+    }
+    
     if (direction > 0) {
         goToNextPage();
     } else if (direction < 0) {
         goToPreviousPage();
+    }
+}
+
+void MainWindow::onEarlySaveRequested()
+{
+    // Proactive save triggered when approaching autoscroll threshold
+    // This ensures content is saved before the actual page switch happens
+    InkCanvas *canvas = currentCanvas();
+    if (canvas && canvas->isEdited()) {
+        saveCurrentPageConcurrent();
     }
 }

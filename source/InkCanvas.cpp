@@ -2046,18 +2046,24 @@ void InkCanvas::loadPage(int pageNumber) {
         backgroundImage = *pdfCache.object(pageNumber);
             
             // Resize canvas buffer to match PDF page size if needed
-        if (backgroundImage.size() != buffer.size()) {
-            QPixmap newBuffer(backgroundImage.size());
-            newBuffer.fill(Qt::transparent);
+            // BUT: Don't resize if we have a combined canvas (double height)
+            bool isCombinedCanvas = false;
+            if (buffer.height() >= backgroundImage.height() * 1.8) {
+                isCombinedCanvas = true;
+            }
+            
+            if (!isCombinedCanvas && backgroundImage.size() != buffer.size()) {
+                QPixmap newBuffer(backgroundImage.size());
+                newBuffer.fill(Qt::transparent);
 
-            // Copy existing drawings
-            QPainter painter(&newBuffer);
-            painter.drawPixmap(0, 0, buffer);
+                // Copy existing drawings
+                QPainter painter(&newBuffer);
+                painter.drawPixmap(0, 0, buffer);
 
-            buffer = newBuffer;
-            // Don't constrain widget size - let it expand to fill available space
-            // The paintEvent will center the PDF content within the widget
-        
+                buffer = newBuffer;
+                // Don't constrain widget size - let it expand to fill available space
+                // The paintEvent will center the PDF content within the widget
+            
                 // Update cache with resized buffer
                 noteCache.insert(pageNumber, new QPixmap(buffer));
             }
@@ -4326,6 +4332,20 @@ void InkCanvas::checkAutoscrollThreshold(int oldPanY, int newPanY) {
     
     // Threshold for autoscroll is the bottom of the first page in the combined view
     int threshold = singlePageHeight;
+    
+    // Define early save trigger zones (save when getting close to threshold)
+    int forwardSaveZone = threshold - 100;  // Save 100 pixels before forward threshold
+    int backwardSaveZone = 100;             // Save when 100 pixels into negative territory
+    
+    // Proactive save triggers - save before reaching the actual scroll threshold
+    if (edited && oldPanY < forwardSaveZone && newPanY >= forwardSaveZone) {
+        // Approaching forward threshold - trigger save early
+        emit earlySaveRequested();
+    }
+    if (edited && oldPanY > -backwardSaveZone && newPanY <= -backwardSaveZone) {
+        // Approaching backward threshold - trigger save early  
+        emit earlySaveRequested();
+    }
     
     // Check for forward autoscroll (scrolling down past the first page)
     if (oldPanY < threshold && newPanY >= threshold) {

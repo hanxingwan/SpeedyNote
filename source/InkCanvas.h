@@ -47,6 +47,7 @@ signals:
     void markdownSelectionModeChanged(bool enabled); // Signal emitted when markdown selection mode changes
     void annotatedImageSaved(const QString &filePath); // ✅ Signal emitted when annotated image is saved
     void autoScrollRequested(int direction); // Signal for autoscrolling to next/prev page
+    void earlySaveRequested(); // Signal for proactive save before autoscroll threshold
 
 public:
     explicit InkCanvas(QWidget *parent = nullptr);
@@ -215,6 +216,9 @@ public:
     
     // Autoscroll threshold getter for MainWindow
     int getAutoscrollThreshold() const;
+    
+    // Background image getter for MainWindow
+    QPixmap getBackgroundImage() const { return backgroundImage; }
 
 protected:
     void paintEvent(QPaintEvent *event) override;

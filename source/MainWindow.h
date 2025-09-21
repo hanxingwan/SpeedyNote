@@ -6,6 +6,7 @@
 #include <QPushButton>
 #include <QLabel>
 #include <QTimer>
+#include <QFuture>
 #include <QLineEdit>
 #include <QSlider>
 #include <QScrollBar>
@@ -392,6 +393,7 @@ private slots:
 public slots:
     void updatePictureButtonState(); // Public slot for picture button state
     void onAutoScrollRequested(int direction);
+    void onEarlySaveRequested();
 
 private:
     void onAnnotatedImageSaved(const QString &filePath); // ✅ Handle annotated image saved notification
@@ -612,6 +614,9 @@ private:
     QTimer *tooltipTimer;
     QWidget *lastHoveredWidget;
     QPoint pendingTooltipPos;
+    
+    // Concurrent save handling for autoscroll synchronization
+    QFuture<void> concurrentSaveFuture;
 
     void handleButtonHeld(const QString &buttonName);
     void handleButtonReleased(const QString &buttonName);
