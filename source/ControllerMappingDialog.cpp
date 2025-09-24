@@ -63,7 +63,8 @@ void ControllerMappingDialog::setupUI() {
     
     // Create mapping rows for each logical button
     QStringList logicalButtons = {"LEFTSHOULDER", "RIGHTSHOULDER", "PADDLE2", "PADDLE4", 
-                                 "Y", "A", "B", "X", "LEFTSTICK", "START", "GUIDE"};
+                                 "Y", "A", "B", "X", "LEFTSTICK", "START", "GUIDE", 
+                                 "PREVIOUS_PAGE", "NEXT_PAGE"};
     
     int row = 1;
     for (const QString &logicalButton : logicalButtons) {
@@ -119,20 +120,19 @@ void ControllerMappingDialog::setupUI() {
 
 QMap<QString, QString> ControllerMappingDialog::getLogicalButtonDescriptions() const {
     QMap<QString, QString> descriptions;
-    descriptions["LEFTSHOULDER"] = tr("SL Button (Side Left)");
-    descriptions["RIGHTSHOULDER"] = tr("SR Button (Side Right)");
-    descriptions["PADDLE2"] = tr("L Button (Left Shoulder)");
-    descriptions["PADDLE4"] = tr("ZL Button (Left Trigger)");
-
+    descriptions["LEFTSHOULDER"] = tr("L Button (Left Shoulder)");
+    descriptions["RIGHTSHOULDER"] = tr("ZL Button (Left Trigger)");
+    descriptions["PADDLE2"] = tr("SL Button (Side Left)");
+    descriptions["PADDLE4"] = tr("SR Button (Side Right)");
     descriptions["Y"] = tr("Up Arrow (D-Pad Up)");
-    descriptions["A"] = tr("Right Arrow (D-Pad Right)");
-    descriptions["B"] = tr("Down Arrow (D-Pad Down)");
-    descriptions["X"] = tr("Left Arrow (D-Pad Left)");
+    descriptions["A"] = tr("Down Arrow (D-Pad Down)");
+    descriptions["B"] = tr("Left Arrow (D-Pad Left)");
+    descriptions["X"] = tr("Right Arrow (D-Pad Right)");
     descriptions["LEFTSTICK"] = tr("Analog Stick Press");
     descriptions["START"] = tr("Minus Button (-)");
     descriptions["GUIDE"] = tr("Screenshot Button");
-    // descriptions["PREVIOUS_PAGE"] = tr("Previous Page");
-    // descriptions["NEXT_PAGE"] = tr("Next Page");
+    descriptions["PREVIOUS_PAGE"] = tr("Previous Page");
+    descriptions["NEXT_PAGE"] = tr("Next Page");
     return descriptions;
 }
 

@@ -1576,11 +1576,6 @@ void InkCanvas::drawStroke(const QPointF &start, const QPointF &end, qreal press
 
     QPainter painter(&buffer);
     painter.setRenderHint(QPainter::Antialiasing);
-    // ✅ Qt5: Modern text rendering hints for crisp fonts
-    painter.setRenderHint(QPainter::TextAntialiasing, true);
-    #if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
-        painter.setRenderHint(QPainter::LosslessImageRendering, true);
-    #endif
 
     qreal thickness = penThickness;
 

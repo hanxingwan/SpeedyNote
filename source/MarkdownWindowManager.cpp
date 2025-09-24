@@ -205,7 +205,7 @@ void MarkdownWindowManager::loadWindowsForPage(int pageNumber) {
         window->ensureCanvasConnections();
         
         window->show();
-        window->updateScreenPositionImmediate();
+        window->updateScreenPosition();
         // Make sure window is not transparent when loaded
         window->setTransparent(false);
     }
@@ -390,7 +390,7 @@ void MarkdownWindowManager::updateAllWindowPositions() {
     // Update positions of all current windows
     for (MarkdownWindow *window : currentWindows) {
         if (window) {
-            window->updateScreenPositionImmediate();
+            window->updateScreenPosition();
         }
     }
 }

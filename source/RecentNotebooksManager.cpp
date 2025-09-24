@@ -178,9 +178,6 @@ void RecentNotebooksManager::generateAndSaveCoverPreview(const QString& folderPa
     coverImage.fill(Qt::white); // Default background
     QPainter painter(&coverImage);
     painter.setRenderHint(QPainter::SmoothPixmapTransform);
-    // ✅ Qt5: Modern text rendering hints for crisp fonts
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setRenderHint(QPainter::TextAntialiasing, true);
 
     // ✅ Try canvas grab first, but with better validation
     bool canvasGrabSuccessful = false;

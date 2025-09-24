@@ -11,7 +11,6 @@
 #include <QSettings>
 #include <QStandardPaths>
 #include <QColor>
-#include <QFontDatabase>
 #include "MainWindow.h"
 #include "LauncherWindow.h"
 #include "SpnPackageManager.h"
@@ -59,120 +58,7 @@ int main(int argc, char *argv[]) {
     // Enable Windows IME support for multi-language input
     QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
     QCoreApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
-    
-    // ✅ Qt5: Additional settings for better fractional scaling support
-    QCoreApplication::setAttribute(Qt::AA_DisableHighDpiScaling, false);
-    
-    // Try to enable fractional scaling (Qt 5.14+)
-    #if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
-        QGuiApplication::setHighDpiScaleFactorRoundingPolicy(Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
-    #endif
-    
-    // Set scale factor rounding policy for better 125% support
-    #if QT_VERSION >= QT_VERSION_CHECK(5, 6, 0)
-        qputenv("QT_SCALE_FACTOR_ROUNDING_POLICY", "PassThrough");
-        qputenv("QT_ENABLE_HIGHDPI_SCALING", "1");
-    #endif
     QApplication app(argc, argv);
-    
-    // ✅ Qt5: Modern font rendering and anti-aliasing setup
-    #ifdef _WIN32
-        // Enable modern font rendering on Windows - English fonts
-        QFont::insertSubstitution("MS Shell Dlg 2", "Segoe UI");
-        QFont::insertSubstitution("MS Shell Dlg", "Segoe UI");
-        QFont::insertSubstitution("MS Sans Serif", "Segoe UI");
-        
-        // Enable font anti-aliasing and subpixel rendering
-        QApplication::setDesktopSettingsAware(true);
-        
-        // Additional font rendering improvements
-        qputenv("QT_AUTO_SCREEN_SCALE_FACTOR", "1");
-        qputenv("QT_FONT_DPI", "96"); // Standard Windows DPI
-        
-        // ✅ Qt5: Chinese font rendering optimizations
-        qputenv("QT_FONT_SUBSTITUTION", "1");
-        qputenv("QT_ENABLE_GLYPH_CACHE_WORKAROUND", "1");
-        
-        // ✅ Qt5: Setup optimal Chinese font with fallback chain
-        QStringList chineseFontPriority = {
-            "Microsoft YaHei UI",    // Windows 10/11 modern Chinese font
-            "Microsoft YaHei",       // Windows 7+ Chinese font
-            "Segoe UI",              // Fallback to English font
-            "Tahoma"                 // Final fallback
-        };
-        
-        QString bestChineseFont = "Microsoft YaHei UI"; // Default
-        QFontDatabase fontDb;
-        QStringList availableFamilies = fontDb.families();
-        
-        // Find the best available Chinese font
-        for (const QString &font : chineseFontPriority) {
-            if (availableFamilies.contains(font)) {
-                bestChineseFont = font;
-                break;
-            }
-        }
-        
-        // Apply Chinese font substitutions with the best available font
-        QFont::insertSubstitution("SimSun", bestChineseFont);
-        QFont::insertSubstitution("NSimSun", bestChineseFont);
-        QFont::insertSubstitution("FangSong", bestChineseFont);
-        QFont::insertSubstitution("KaiTi", bestChineseFont);
-        QFont::insertSubstitution("SimHei", bestChineseFont);
-        QFont::insertSubstitution("MS Song", bestChineseFont);
-        QFont::insertSubstitution("MS Hei", bestChineseFont);
-        
-        // Set up a mixed font for UI that handles both English and Chinese well
-        QFont uiFont;
-        if (bestChineseFont == "Microsoft YaHei UI" || bestChineseFont == "Microsoft YaHei") {
-            // Use YaHei for everything if available (best for mixed content)
-            uiFont = QFont(bestChineseFont, 9);
-        } else {
-            // Fallback: use Segoe UI for English, let Qt handle Chinese fallback
-            uiFont = QFont("Segoe UI", 9);
-        }
-        uiFont.setStyleHint(QFont::SansSerif);
-        uiFont.setStyleStrategy(static_cast<QFont::StyleStrategy>(QFont::PreferAntialias | QFont::PreferQuality));
-        app.setFont(uiFont);
-    #endif
-    
-    // ✅ Qt5: Cross-platform font anti-aliasing
-    QApplication::setAttribute(Qt::AA_UseDesktopOpenGL, true);
-    
-    // ✅ Qt5: Global text rendering improvements
-    QApplication::setAttribute(Qt::AA_SynthesizeMouseForUnhandledTouchEvents, false);
-    QApplication::setAttribute(Qt::AA_SynthesizeTouchForUnhandledMouseEvents, false);
-    
-    // Set global text anti-aliasing policy
-    qputenv("QT_FONT_HINTING", "1");
-    qputenv("QT_FONT_ANTIALIAS", "1");
-    qputenv("QT_USE_NATIVE_WINDOWS", "1");
-    
-    // ✅ Qt5: CJK (Chinese/Japanese/Korean) font rendering improvements
-    qputenv("QT_FONTCONFIG_TIMESTAMP", "1");
-    qputenv("QT_HARFBUZZ", "old"); // Use Qt's text shaping for better CJK support
-    qputenv("QT_ENABLE_REGEXP_JIT", "0"); // Disable for better CJK text processing
-    
-    // ✅ Qt5: Debug high DPI scaling information
-    /*
-    #ifdef QT_DEBUG
-        qDebug() << "Qt5 High DPI Debug Info:";
-        qDebug() << "  Qt version:" << QT_VERSION_STR;
-        qDebug() << "  High DPI scaling enabled:" << QCoreApplication::testAttribute(Qt::AA_EnableHighDpiScaling);
-        qDebug() << "  Device pixel ratio:" << app.devicePixelRatio();
-        qDebug() << "  System font:" << app.font().toString();
-        
-        // Check all screens for their scale factors
-        const auto screens = QGuiApplication::screens();
-        for (int i = 0; i < screens.size(); ++i) {
-            QScreen *screen = screens[i];
-            qDebug() << "  Screen" << i << ":" << screen->name() 
-                     << "DPR:" << screen->devicePixelRatio()
-                     << "Logical DPI:" << screen->logicalDotsPerInch()
-                     << "Physical DPI:" << screen->physicalDotsPerInch();
-        }
-    #endif
-    */
     
     // Ensure IME is properly enabled for Windows
     #ifdef _WIN32

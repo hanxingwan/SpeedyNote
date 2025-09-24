@@ -32,7 +32,6 @@ public:
     QRect getCanvasRect() const;
     void setCanvasRect(const QRect &canvasRect);
     void updateScreenPosition(); // Updates screen position from canvas coordinates
-    void updateScreenPositionImmediate(); // ✅ PERFORMANCE: Immediate update without throttling
     
     // Serialization
     QVariantMap serialize() const;
@@ -120,10 +119,6 @@ private:
     
     // User interaction tracking
     bool isUserInteracting = false;
-    
-    // ✅ PERFORMANCE: Throttling for pan updates
-    QTimer *updateThrottleTimer = nullptr;
-    bool hasPendingUpdate = false;
     
     ResizeHandle getResizeHandle(const QPoint &pos) const;
     void updateCursor(const QPoint &pos);

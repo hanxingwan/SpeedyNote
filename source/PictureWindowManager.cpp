@@ -214,7 +214,7 @@ void PictureWindowManager::loadWindowsForPage(int pageNumber) {
         window->ensureCanvasConnections();
         
         // Update screen position (even though window is invisible)
-        window->updateScreenPositionImmediate();
+        window->updateScreenPosition();
     }
     
     // Trigger canvas repaint to show loaded pictures
@@ -702,7 +702,7 @@ void PictureWindowManager::updateAllWindowPositions() {
     // Update positions of all current windows
     for (PictureWindow *window : currentWindows) {
         if (window) {
-            window->updateScreenPositionImmediate();
+            window->updateScreenPosition();
         }
     }
 }
