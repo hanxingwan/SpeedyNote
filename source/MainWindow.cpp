@@ -1454,6 +1454,8 @@ bool MainWindow::selectFolder() {
                     // User cancelled PDF relinking, don't continue
                     return false;
                 }
+                // ✅ Update scroll behavior based on PDF loading state after relinking
+                setScrollOnTopEnabled(canvas->isPdfLoadedFunc());
             }
             
             // ✅ Show last accessed page dialog if available
@@ -1992,6 +1994,9 @@ void MainWindow::loadPdf() {
             loadPdfOutline();
         }
         
+        // ✅ Automatically enable scroll on top when PDF is loaded (required for pseudo smooth scrolling)
+        setScrollOnTopEnabled(true);
+        
         // ✅ Refresh the canvas to show the PDF immediately
         currentCanvas()->update();
     }
@@ -2005,6 +2010,9 @@ void MainWindow::clearPdf() {
     
     // ✅ Update the tab label to reflect PDF removal
     updateTabLabel();
+    
+    // ✅ Automatically disable scroll on top when PDF is cleared (not needed for independent canvases)
+    setScrollOnTopEnabled(false);
     
     // ✅ Refresh the canvas to show the cleared state immediately
     canvas->update();
@@ -2119,6 +2127,9 @@ void MainWindow::switchTab(int index) {
             updateFastForwardButtonState(); // Update fast forward button state when switching tabs
             updateToolButtonStates();   // Update tool button states when switching tabs
             updateThicknessSliderForCurrentTool(); // Update thickness slider for current tool when switching tabs
+            
+            // ✅ Update scroll on top behavior based on PDF loading state
+            setScrollOnTopEnabled(canvas->isPdfLoadedFunc());
             
             // Refresh PDF outline if sidebar is visible
             if (outlineSidebarVisible) {
@@ -2410,6 +2421,10 @@ void MainWindow::addNewTab() {
     newCanvas->setBackgroundStyle(defaultStyle);
     newCanvas->setBackgroundColor(defaultColor);
     newCanvas->setBackgroundDensity(defaultDensity);
+    
+    // ✅ New tabs start without PDFs, so disable scroll on top initially
+    // It will be automatically enabled when a PDF is loaded
+    setScrollOnTopEnabled(false);
     newCanvas->setPDFRenderDPI(getPdfDPI());
     
     // Update color button states for the new tab
@@ -4493,6 +4508,9 @@ void MainWindow::openPdfFile(const QString &pdfPath) {
         // Load the PDF
         canvas->loadPdf(pdfPath);
         
+        // ✅ Automatically enable scroll on top when PDF is loaded (required for pseudo smooth scrolling)
+        setScrollOnTopEnabled(true);
+        
         // Update tab label
         updateTabLabel();
         updateBookmarkButtonState(); // ✅ Update bookmark button state after loading notebook
@@ -4575,6 +4593,9 @@ void MainWindow::openPdfFile(const QString &pdfPath) {
         // Load the PDF
         canvas->loadPdf(pdfPath);
         
+        // ✅ Automatically enable scroll on top when PDF is loaded (required for pseudo smooth scrolling)
+        setScrollOnTopEnabled(true);
+        
         // Update tab label
         updateTabLabel();
         
@@ -4650,9 +4671,13 @@ void MainWindow::openPdfFile(const QString &pdfPath) {
                 // User cancelled PDF relinking, don't continue
                 return;
             }
+            // ✅ Update scroll behavior based on PDF loading state after relinking
+            setScrollOnTopEnabled(canvas->isPdfLoadedFunc());
         } else {
             // Load the PDF for regular folders
             canvas->loadPdf(pdfPath);
+            // ✅ Automatically enable scroll on top when PDF is loaded (required for pseudo smooth scrolling)
+            setScrollOnTopEnabled(true);
         }
         
         // Update tab label
@@ -6360,6 +6385,9 @@ void MainWindow::openSpnPackage(const QString &spnPath)
         // User cancelled PDF relinking, don't open the package
         return;
     }
+    
+    // ✅ Update scroll behavior based on PDF loading state after relinking
+    setScrollOnTopEnabled(canvas->isPdfLoadedFunc());
     
     // Update tab label
     updateTabLabel();

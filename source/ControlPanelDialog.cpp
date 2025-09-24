@@ -271,13 +271,6 @@ void ControlPanelDialog::createToolbarTab(){
     zoomButtonsNote->setStyleSheet("color: gray; font-size: 10px;");
     toolbarLayout->addWidget(zoomButtonsNote);
 
-    QCheckBox *scrollOnTopCheckBox = new QCheckBox(tr("Scroll on Top after Page Switching"), toolbarTab);
-    scrollOnTopCheckBox->setChecked(mainWindowRef->isScrollOnTopEnabled());
-    toolbarLayout->addWidget(scrollOnTopCheckBox);
-    QLabel *scrollNote = new QLabel(tr("Enabling this will make the page scroll to the top after switching to a new page."));
-    scrollNote->setWordWrap(true);
-    scrollNote->setStyleSheet("color: gray; font-size: 10px;");
-    toolbarLayout->addWidget(scrollNote);
     
     toolbarLayout->addStretch();
     toolbarTab->setLayout(toolbarLayout);
@@ -287,7 +280,6 @@ void ControlPanelDialog::createToolbarTab(){
     // Connect the checkbox
     connect(benchmarkVisibilityCheckbox, &QCheckBox::toggled, mainWindowRef, &MainWindow::setBenchmarkControlsVisible);
     connect(zoomButtonsVisibilityCheckbox, &QCheckBox::toggled, mainWindowRef, &MainWindow::setZoomButtonsVisible);
-    connect(scrollOnTopCheckBox, &QCheckBox::toggled, mainWindowRef, &MainWindow::setScrollOnTopEnabled);
 }
 
 
