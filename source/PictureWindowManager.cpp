@@ -277,6 +277,72 @@ QList<PictureWindow*> PictureWindowManager::getCurrentPageWindows() const {
     return currentWindows;
 }
 
+QList<PictureWindow*> PictureWindowManager::loadWindowsForPageSeparately(int pageNumber) {
+    if (!canvas) return QList<PictureWindow*>();
+
+    // Load windows from file without affecting current windows
+    QList<PictureWindow*> pageWindows = loadPictureData(pageNumber);
+    
+    // Apply bounds checking and setup connections
+    for (PictureWindow *window : pageWindows) {
+        // Validate that the window is within canvas bounds
+        if (!window->isValidForCanvas()) {
+            QRect canvasBounds = canvas->getCanvasRect();
+            QRect windowRect = window->getCanvasRect();
+            
+            // Clamp the window position to canvas bounds
+            int newX = qMax(0, qMin(windowRect.x(), canvasBounds.width() - windowRect.width()));
+            int newY = qMax(0, qMin(windowRect.y(), canvasBounds.height() - windowRect.height()));
+            
+            if (newX != windowRect.x() || newY != windowRect.y()) {
+                QRect adjustedRect(newX, newY, windowRect.width(), windowRect.height());
+                window->setCanvasRect(adjustedRect);
+            }
+        }
+        
+        // Ensure canvas connections are set up for loaded windows
+        window->ensureCanvasConnections();
+        
+        // Connect window signals
+        connectWindowSignals(window);
+        
+        // Update screen position (even though window is invisible)
+        window->updateScreenPositionImmediate();
+    }
+    
+    return pageWindows;
+}
+
+void PictureWindowManager::setCombinedWindows(const QList<PictureWindow*> &windows) {
+    // Hide current windows first
+    for (PictureWindow *window : currentWindows) {
+        window->hide();
+    }
+    
+    // Set new combined windows as current
+    currentWindows = windows;
+    
+    // Update screen positions for all combined windows
+    for (PictureWindow *window : currentWindows) {
+        window->updateScreenPositionImmediate();
+    }
+    
+    // Trigger canvas repaint to show combined pictures
+    if (canvas && !currentWindows.isEmpty()) {
+        canvas->update();
+    }
+}
+
+void PictureWindowManager::saveWindowsForPageSeparately(int pageNumber, const QList<PictureWindow*> &windows) {
+    if (!canvas) return;
+    
+    // Update page windows map for this specific page
+    pageWindows[pageNumber] = windows;
+    
+    // Save to file
+    savePictureData(pageNumber, windows);
+}
+
 void PictureWindowManager::exitAllEditModes() {
     for (PictureWindow *window : currentWindows) {
         if (window && window->isInEditMode()) {
@@ -716,3 +782,5 @@ QRect PictureWindowManager::convertScreenToCanvasRect(const QRect &screenRect) c
     QRect canvasRect = canvas->mapWidgetToCanvas(screenRect);
     return canvasRect;
 }
+
+

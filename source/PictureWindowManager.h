@@ -37,6 +37,11 @@ public:
     QList<PictureWindow*> getCurrentPageWindows() const;
     void exitAllEditModes();
     
+    // Combined canvas support
+    QList<PictureWindow*> loadWindowsForPageSeparately(int pageNumber);
+    void setCombinedWindows(const QList<PictureWindow*> &windows);
+    void saveWindowsForPageSeparately(int pageNumber, const QList<PictureWindow*> &windows);
+    
     // Canvas rendering
     void renderPicturesToCanvas(QPainter &painter) const;
     void renderPicturesToCanvas(QPainter &painter, const QRect &updateRect) const;
@@ -81,3 +86,5 @@ private:
 };
 
 #endif // PICTUREWINDOWMANAGER_H
+
+
