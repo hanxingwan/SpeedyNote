@@ -346,6 +346,10 @@ private:
     void loadCombinedWindowsForPage(int pageNumber); // Load windows for combined canvas pages
     QList<MarkdownWindow*> loadMarkdownWindowsForPage(int pageNumber); // Load markdown windows without affecting current
     QList<PictureWindow*> loadPictureWindowsForPage(int pageNumber); // Load picture windows without affecting current
+    
+    // PDF text selection helpers for combined canvas
+    void loadPdfTextBoxesForSinglePage(int pageNumber); // Load text boxes for single page
+    void loadPdfTextBoxesForCombinedCanvas(int pageNumber, int singlePageHeight); // Load text boxes for combined canvas
     // ✅ Migration from old txt files to JSON
     void migrateOldMetadataFiles();
     
@@ -369,9 +373,11 @@ private:
     bool pdfTextSelecting = false; // True when actively selecting text
     QPointF pdfSelectionStart; // Start point of text selection (logical widget coordinates)
     QPointF pdfSelectionEnd; // End point of text selection (logical widget coordinates)
-    QList<Poppler::TextBox*> currentPdfTextBoxes; // Text boxes for current page
+    QList<Poppler::TextBox*> currentPdfTextBoxes; // Text boxes for current page(s)
     QList<Poppler::TextBox*> selectedTextBoxes; // Currently selected text boxes
+    QList<int> currentPdfTextBoxPageNumbers; // Page number for each text box (for combined canvas)
     std::unique_ptr<Poppler::Page> currentPdfPageForText; // Current PDF page for text operations
+    std::unique_ptr<Poppler::Page> currentPdfPageForTextSecond; // Second PDF page for combined canvas
     
     // PDF text selection throttling (60 FPS)
     QTimer* pdfTextSelectionTimer = nullptr; // Timer for throttling text selection updates
@@ -423,7 +429,7 @@ private:
     // Helper methods for PDF text selection
     void loadPdfTextBoxes(int pageNumber); // Load text boxes for a page
     QPointF mapWidgetToPdfCoordinates(const QPointF &widgetPoint); // Map widget coordinates to PDF coordinates
-    QPointF mapPdfToWidgetCoordinates(const QPointF &pdfPoint); // Map PDF coordinates to widget coordinates
+    QPointF mapPdfToWidgetCoordinates(const QPointF &pdfPoint, int pageNumber = -1); // Map PDF coordinates to widget coordinates
     void updatePdfTextSelection(const QPointF &start, const QPointF &end); // Update text selection
     void handlePdfLinkClick(const QPointF &clickPoint); // Handle PDF link clicks
     void showPdfTextSelectionMenu(const QPoint &position); // Show context menu for PDF text selection
