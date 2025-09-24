@@ -1516,14 +1516,29 @@ void MainWindow::switchPage(int pageNumber) {
     canvas->setLastPanX(panXSlider->maximum());
     canvas->setLastPanY(panYSlider->maximum());
         
-        // ✅ Enhanced scroll-on-top functionality
+        // ✅ Enhanced scroll-on-top functionality with explicit direction
         if (scrollOnTopEnabled && panYSlider->maximum() > 0) {
             if (pageNumber > oldPage) {
                 // Forward page switching → scroll to top
-                panYSlider->setValue(0);
+                QTimer::singleShot(0, this, [this]() {
+                    if (panYSlider) panYSlider->setValue(0);
+                });
             } else if (pageNumber < oldPage) {
-                // Backward page switching → scroll to bottom
-                panYSlider->setValue(panYSlider->maximum());
+                // Backward page switching → scroll to just before the threshold
+                QTimer::singleShot(0, this, [this, canvas]() {
+                    if (panYSlider && canvas) {
+                        int threshold = canvas->getAutoscrollThreshold();
+                        if (threshold > 0) {
+                            // A small offset to avoid being exactly on the edge and re-triggering
+                            int offset = 20;
+                            int targetPan = (threshold > offset) ? (threshold - offset) : 0;
+                            panYSlider->setValue(targetPan);
+                        } else {
+                            // Fallback for non-combined canvases or error cases
+                            panYSlider->setValue(panYSlider->maximum());
+                        }
+                    }
+                });
             }
         }
     }
@@ -1563,10 +1578,25 @@ void MainWindow::switchPageWithDirection(int pageNumber, int direction) {
         if (scrollOnTopEnabled && panYSlider->maximum() > 0) {
             if (direction > 0) {
                 // Forward page switching → scroll to top
-                panYSlider->setValue(0);
+                QTimer::singleShot(0, this, [this]() {
+                    if (panYSlider) panYSlider->setValue(0);
+                });
             } else if (direction < 0) {
-                // Backward page switching → scroll to bottom
-                panYSlider->setValue(panYSlider->maximum());
+                // Backward page switching → scroll to just before the threshold
+                QTimer::singleShot(0, this, [this, canvas]() {
+                    if (panYSlider && canvas) {
+                        int threshold = canvas->getAutoscrollThreshold();
+                        if (threshold > 0) {
+                            // A small offset to avoid being exactly on the edge and re-triggering
+                            int offset = 20;
+                            int targetPan = (threshold > offset) ? (threshold - offset) : 0;
+                            panYSlider->setValue(targetPan);
+                        } else {
+                            // Fallback for non-combined canvases or error cases
+                            panYSlider->setValue(panYSlider->maximum());
+                        }
+                    }
+                });
             }
         }
     }
@@ -1774,7 +1804,17 @@ void MainWindow::updatePanRange() {
         // No need for vertical scrollbar
         panYSlider->setVisible(false);
     } else {
-    panYSlider->setRange(0, maxPanY_scaled);
+        // Check if this is a combined canvas to extend pan Y range to negative values
+        InkCanvas *canvas = currentCanvas();
+        int minPanY = 0;
+        if (canvas && canvas->getAutoscrollThreshold() > 0) {
+            // For combined canvases, allow negative pan Y for backward scrolling
+            // Set negative range to about 10% of a single page height
+            int threshold = canvas->getAutoscrollThreshold();
+            minPanY = -(threshold / 10); // Allow scrolling up to trigger backward navigation
+        }
+        
+        panYSlider->setRange(minPanY, maxPanY_scaled);
         // Show scrollbar only if mouse is near and timeout hasn't occurred
         if (scrollbarsVisible && !scrollbarHideTimer->isActive()) {
             scrollbarHideTimer->start();
@@ -1877,6 +1917,9 @@ void MainWindow::loadPdf() {
             loadPdfOutline();
         }
         
+        // ✅ Automatically enable scroll on top when PDF is loaded (required for pseudo smooth scrolling)
+        setScrollOnTopEnabled(true);
+        
         // ✅ Refresh the canvas to show the PDF immediately
         currentCanvas()->update();
     }
@@ -1890,6 +1933,9 @@ void MainWindow::clearPdf() {
     
     // ✅ Update the tab label to reflect PDF removal
     updateTabLabel();
+    
+    // ✅ Automatically disable scroll on top when PDF is cleared (not needed for independent canvases)
+    setScrollOnTopEnabled(false);
     
     // ✅ Refresh the canvas to show the cleared state immediately
     canvas->update();
@@ -2532,7 +2578,9 @@ void MainWindow::goToPreviousPage() {
     if (currentPage > 1) {
         int newPage = currentPage - 1;
         switchPageWithDirection(newPage, -1); // -1 indicates backward
+        pageInput->blockSignals(true);
         pageInput->setValue(newPage);
+        pageInput->blockSignals(false);
     }
 }
 
@@ -2540,7 +2588,9 @@ void MainWindow::goToNextPage() {
     int currentPage = getCurrentPageForCanvas(currentCanvas()) + 1;  // Convert to 1-based
     int newPage = currentPage + 1;
     switchPageWithDirection(newPage, 1); // 1 indicates forward
+    pageInput->blockSignals(true);
     pageInput->setValue(newPage);
+    pageInput->blockSignals(false);
 }
 
 void MainWindow::onPageInputChanged(int newPage) {
@@ -3062,16 +3112,27 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
             if (wheelEvent->angleDelta().y() != 0 && needVerticalScroll) {
                 // Calculate scroll amount (negative because wheel up should scroll up)
                 int scrollDelta = -wheelEvent->angleDelta().y() / 8; // Convert from 1/8 degree units
-                scrollDelta = scrollDelta / 15; // Convert to steps (typical wheel step is 15 degrees)
                 
-                // Much faster base scroll speed - aim for ~3-5 scrolls to reach bottom
-                int baseScrollAmount = panYSlider->maximum() / 8; // 1/8 of total range per scroll
-                scrollDelta = scrollDelta * qMax(baseScrollAmount, 50); // Minimum 50 units per scroll
+                // Detect if this is a trackpad (smooth scrolling) vs mouse wheel (stepped)
+                // Trackpad typically sends smaller, more frequent events
+                bool isTrackpad = qAbs(wheelEvent->angleDelta().y()) < 120; // Less than typical mouse wheel step
+                
+                if (isTrackpad) {
+                    // Trackpad: Use direct, smooth scrolling for better responsiveness
+                    scrollDelta = scrollDelta / 2; // Reduce sensitivity for smooth trackpad scrolling
+                } else {
+                    // Mouse wheel: Use stepped scrolling as before
+                    scrollDelta = scrollDelta / 15; // Convert to steps (typical wheel step is 15 degrees)
+                    
+                    // Much faster base scroll speed - aim for ~3-5 scrolls to reach bottom
+                    int baseScrollAmount = panYSlider->maximum() / 8; // 1/8 of total range per scroll
+                    scrollDelta = scrollDelta * qMax(baseScrollAmount, 50); // Minimum 50 units per scroll
+                }
                 
                 // Apply the scroll
                 int currentPan = panYSlider->value();
                 int newPan = qBound(panYSlider->minimum(), currentPan + scrollDelta, panYSlider->maximum());
-                panYSlider->setValue(newPan);
+                panYSlider->setValue(newPan); // This triggers autoscroll via valueChanged signal
                 
                 // Show scrollbar temporarily
                 panYSlider->setVisible(true);
@@ -4771,21 +4832,20 @@ void MainWindow::handleTouchPanChange(int panX, int panY) {
     }
     scrollbarsVisible = true;
     
-    // Update sliders without triggering their valueChanged signals
+    // Update sliders - allow panY signals for autoscroll, block panX to avoid redundancy
     panXSlider->blockSignals(true);
-    panYSlider->blockSignals(true);
     panXSlider->setValue(panX);
-    panYSlider->setValue(panY);
     panXSlider->blockSignals(false);
-    panYSlider->blockSignals(false);
     
-    // Update canvas pan directly
+    // For panY: DON'T block signals so it triggers the same autoscroll flow as mouse wheel
+    panYSlider->setValue(panY); // This will trigger updatePanY() -> setPanY() -> autoscroll logic
+    
+    // Update canvas X pan directly (Y pan is handled by the setValue signal above)
     InkCanvas *canvas = currentCanvas();
     if (canvas) {
         canvas->setPanX(panX);
-        canvas->setPanY(panY);
         canvas->setLastPanX(panX);
-        canvas->setLastPanY(panY);
+        // Note: panY is handled by panYSlider->setValue() signal flow above
     }
 }
 
@@ -6810,4 +6870,30 @@ void MainWindow::loadMouseDialMappings() {
     }
     
     settings.endGroup();
+}
+
+void MainWindow::onAutoScrollRequested(int direction)
+{
+    // If there's a pending concurrent save, wait for it to complete before autoscrolling
+    // This ensures that content is saved before switching pages
+    if (concurrentSaveFuture.isValid() && !concurrentSaveFuture.isFinished()) {
+        // Wait for the save to complete (this should be very fast since it's just file I/O)
+        concurrentSaveFuture.waitForFinished();
+    }
+    
+    if (direction > 0) {
+        goToNextPage();
+    } else if (direction < 0) {
+        goToPreviousPage();
+    }
+}
+
+void MainWindow::onEarlySaveRequested()
+{
+    // Proactive save triggered when approaching autoscroll threshold
+    // This ensures content is saved before the actual page switch happens
+    InkCanvas *canvas = currentCanvas();
+    if (canvas && canvas->isEdited()) {
+        saveCurrentPageConcurrent();
+    }
 }

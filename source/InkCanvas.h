@@ -26,6 +26,8 @@
 
 class MarkdownWindowManager;
 class PictureWindowManager;
+class MarkdownWindow;
+class PictureWindow;
 
 enum class BackgroundStyle {
     None,
@@ -46,6 +48,8 @@ signals:
     void pdfLoaded(); // Signal emitted when a PDF is loaded
     void markdownSelectionModeChanged(bool enabled); // Signal emitted when markdown selection mode changes
     void annotatedImageSaved(const QString &filePath); // ✅ Signal emitted when annotated image is saved
+    void autoScrollRequested(int direction); // Signal for autoscrolling to next/prev page
+    void earlySaveRequested(); // Signal for proactive save before autoscroll threshold
 
 public:
     explicit InkCanvas(QWidget *parent = nullptr);
@@ -211,6 +215,18 @@ public:
     QPointF mapCanvasToWidget(const QPointF &canvasPoint) const;
     QRect mapWidgetToCanvas(const QRect &widgetRect) const;
     QRect mapCanvasToWidget(const QRect &canvasRect) const;
+    
+    // Autoscroll threshold getter for MainWindow
+    int getAutoscrollThreshold() const;
+    
+    // Background image getter for MainWindow
+    QPixmap getBackgroundImage() const { return backgroundImage; }
+    
+    // Combined canvas window management
+    void saveCombinedWindowsForPage(int pageNumber); // Save windows for combined canvas pages
+    
+    // Autoscroll threshold detection (for touch gestures and external pan changes)
+    void checkAutoscrollThreshold(int oldPanY, int newPanY);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -326,6 +342,21 @@ public:
     void invalidateCurrentPageCache(); // Invalidate cache for current page when modified
     
 private:
+    // Combined canvas window management
+    void loadCombinedWindowsForPage(int pageNumber); // Load windows for combined canvas pages
+    QList<MarkdownWindow*> loadMarkdownWindowsForPage(int pageNumber); // Load markdown windows without affecting current
+    QList<PictureWindow*> loadPictureWindowsForPage(int pageNumber); // Load picture windows without affecting current
+    
+    // PDF text selection helpers for combined canvas
+    void loadPdfTextBoxesForSinglePage(int pageNumber); // Load text boxes for single page
+    void loadPdfTextBoxesForCombinedCanvas(int pageNumber, int singlePageHeight); // Load text boxes for combined canvas
+    
+    // Enhanced caching system
+    void checkAndCacheAdjacentPages(int targetPage); // Check and cache adjacent PDF pages
+    void cacheAdjacentPages(int targetPage); // Cache adjacent PDF pages
+    void checkAndCacheAdjacentNotePages(int targetPage); // Check and cache adjacent note pages  
+    void cacheAdjacentNotePages(int targetPage); // Cache adjacent note pages
+    
     // ✅ Migration from old txt files to JSON
     void migrateOldMetadataFiles();
     
@@ -349,9 +380,11 @@ private:
     bool pdfTextSelecting = false; // True when actively selecting text
     QPointF pdfSelectionStart; // Start point of text selection (logical widget coordinates)
     QPointF pdfSelectionEnd; // End point of text selection (logical widget coordinates)
-    QList<Poppler::TextBox*> currentPdfTextBoxes; // Text boxes for current page
+    QList<Poppler::TextBox*> currentPdfTextBoxes; // Text boxes for current page(s)
     QList<Poppler::TextBox*> selectedTextBoxes; // Currently selected text boxes
+    QList<int> currentPdfTextBoxPageNumbers; // Page number for each text box (for combined canvas)
     std::unique_ptr<Poppler::Page> currentPdfPageForText; // Current PDF page for text operations
+    std::unique_ptr<Poppler::Page> currentPdfPageForTextSecond; // Second PDF page for combined canvas
     
     // PDF text selection throttling (60 FPS)
     QTimer* pdfTextSelectionTimer = nullptr; // Timer for throttling text selection updates
@@ -403,7 +436,7 @@ private:
     // Helper methods for PDF text selection
     void loadPdfTextBoxes(int pageNumber); // Load text boxes for a page
     QPointF mapWidgetToPdfCoordinates(const QPointF &widgetPoint); // Map widget coordinates to PDF coordinates
-    QPointF mapPdfToWidgetCoordinates(const QPointF &pdfPoint); // Map PDF coordinates to widget coordinates
+    QPointF mapPdfToWidgetCoordinates(const QPointF &pdfPoint, int pageNumber = -1); // Map PDF coordinates to widget coordinates
     void updatePdfTextSelection(const QPointF &start, const QPointF &end); // Update text selection
     void handlePdfLinkClick(const QPointF &clickPoint); // Handle PDF link clicks
     void showPdfTextSelectionMenu(const QPoint &position); // Show context menu for PDF text selection

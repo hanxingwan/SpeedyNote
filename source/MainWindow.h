@@ -6,6 +6,7 @@
 #include <QPushButton>
 #include <QLabel>
 #include <QTimer>
+#include <QFuture>
 #include <QLineEdit>
 #include <QSlider>
 #include <QScrollBar>
@@ -247,6 +248,10 @@ public:
 
     int getPdfDPI() const { return pdfRenderDPI; }
     void setPdfDPI(int dpi);
+    
+    // Autoscroll slots
+    void onAutoScrollRequested(int direction);
+    void onEarlySaveRequested();
 
     // void loadUserSettings();  // New
     void savePdfDPI(int dpi); // New
@@ -667,6 +672,9 @@ private:
     
     // Separator line for 2-row layout
     QFrame *separatorLine = nullptr;
+    
+    // Concurrent save future for autoscroll
+    QFuture<void> concurrentSaveFuture;
     
 protected:
     void resizeEvent(QResizeEvent *event) override;

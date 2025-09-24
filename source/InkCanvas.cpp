@@ -2185,9 +2185,11 @@ void InkCanvas::setPanX(int value) {
 
 void InkCanvas::setPanY(int value) {
     if (panOffsetY != value) {
-    panOffsetY = value;
-    update();
+        int oldPanOffsetY = panOffsetY;
+        panOffsetY = value;
+        update();
         emit panChanged(panOffsetX, panOffsetY);
+        checkAutoscrollThreshold(oldPanOffsetY, value);
     }
 }
 
@@ -2716,39 +2718,100 @@ QPointF InkCanvas::mapWidgetToPdfCoordinates(const QPointF &widgetPoint) {
     adjustedPoint /= zoom;
     adjustedPoint += QPointF(panOffsetX, panOffsetY);
     
+    // Check if this is a combined canvas
+    bool isCombinedCanvas = false;
+    int singlePageHeight = buffer.height();
+    
+    if (!backgroundImage.isNull() && buffer.height() >= backgroundImage.height() * 1.8) {
+        isCombinedCanvas = true;
+        singlePageHeight = backgroundImage.height() / 2;
+    } else if (buffer.height() > 2000) {
+        isCombinedCanvas = true;
+        singlePageHeight = buffer.height() / 2;
+    }
+    
+    // Determine which page and adjust coordinates for combined canvas
+    std::unique_ptr<Poppler::Page>* targetPage = &currentPdfPageForText;
+    QPointF finalAdjustedPoint = adjustedPoint;
+    
+    if (isCombinedCanvas && currentPdfPageForTextSecond) {
+        // Check if the point is in the bottom half (page N+1)
+        if (adjustedPoint.y() >= singlePageHeight) {
+            // Bottom half - use second page and adjust coordinates
+            targetPage = &currentPdfPageForTextSecond;
+            finalAdjustedPoint.setY(adjustedPoint.y() - singlePageHeight); // Shift back to page coordinate system
+        }
+        // Top half - use first page with original coordinates
+    }
+    
     // Convert to PDF coordinates
-    // Since Poppler renders the PDF in Qt coordinate system (top-left origin),
-    // we don't need to flip the Y coordinate
-    QSizeF pdfPageSize = currentPdfPageForText->pageSizeF();
-    QSizeF imageSize = backgroundImage.size();
+    QSizeF pdfPageSize = (*targetPage)->pageSizeF();
+    QSizeF imageSize = isCombinedCanvas ? QSizeF(backgroundImage.width(), singlePageHeight * 2) : backgroundImage.size();
+    
+    // For combined canvas, we need to scale based on single page height
+    qreal effectiveImageHeight = isCombinedCanvas ? singlePageHeight : imageSize.height();
     
     // Scale from image coordinates to PDF coordinates
     qreal scaleX = pdfPageSize.width() / imageSize.width();
-    qreal scaleY = pdfPageSize.height() / imageSize.height();
+    qreal scaleY = pdfPageSize.height() / effectiveImageHeight;
     
     QPointF pdfPoint;
-    pdfPoint.setX(adjustedPoint.x() * scaleX);
-    pdfPoint.setY(adjustedPoint.y() * scaleY); // No Y-axis flipping needed
+    pdfPoint.setX(finalAdjustedPoint.x() * scaleX);
+    pdfPoint.setY(finalAdjustedPoint.y() * scaleY);
     
     return pdfPoint;
 }
 
-QPointF InkCanvas::mapPdfToWidgetCoordinates(const QPointF &pdfPoint) {
+QPointF InkCanvas::mapPdfToWidgetCoordinates(const QPointF &pdfPoint, int pageNumber) {
     if (!currentPdfPageForText || backgroundImage.isNull()) {
         return QPointF();
     }
     
+    // Check if this is a combined canvas
+    bool isCombinedCanvas = false;
+    int singlePageHeight = buffer.height();
+    
+    if (!backgroundImage.isNull() && buffer.height() >= backgroundImage.height() * 1.8) {
+        isCombinedCanvas = true;
+        singlePageHeight = backgroundImage.height() / 2;
+    } else if (buffer.height() > 2000) {
+        isCombinedCanvas = true;
+        singlePageHeight = buffer.height() / 2;
+    }
+    
+    // Determine which page to use and coordinate adjustments
+    std::unique_ptr<Poppler::Page>* sourcePage = &currentPdfPageForText;
+    qreal yOffset = 0;
+    
+    if (isCombinedCanvas && pageNumber != -1) {
+        // Find the base page number (first page of the combined canvas)
+        int basePage = -1;
+        if (!currentPdfTextBoxPageNumbers.empty()) {
+            basePage = currentPdfTextBoxPageNumbers[0];
+        }
+        
+        if (pageNumber > basePage && currentPdfPageForTextSecond) {
+            // This text box belongs to the second page (bottom half)
+            sourcePage = &currentPdfPageForTextSecond;
+            yOffset = singlePageHeight; // Shift down to bottom half
+        }
+        // Otherwise, use first page (top half) with no offset
+    }
+    
     // Convert from PDF coordinates to image coordinates
-    QSizeF pdfPageSize = currentPdfPageForText->pageSizeF();
+    QSizeF pdfPageSize = (*sourcePage)->pageSizeF();
     QSizeF imageSize = backgroundImage.size();
+    
+    // For combined canvas, scale based on single page height
+    qreal effectiveImageHeight = isCombinedCanvas ? singlePageHeight : imageSize.height();
     
     // Scale from PDF coordinates to image coordinates
     qreal scaleX = imageSize.width() / pdfPageSize.width();
-    qreal scaleY = imageSize.height() / pdfPageSize.height();
+    qreal scaleY = effectiveImageHeight / pdfPageSize.height();
     
     QPointF imagePoint;
     imagePoint.setX(pdfPoint.x() * scaleX);
-    imagePoint.setY(pdfPoint.y() * scaleY); // No Y-axis flipping needed
+    imagePoint.setY(pdfPoint.y() * scaleY + yOffset); // Add offset for bottom half
     
     // Use the same zoom factor as in paintEvent (internalZoomFactor for smooth animations)
     qreal zoom = internalZoomFactor / 100.0;
@@ -3933,7 +3996,182 @@ void InkCanvas::handlePictureMouseRelease(QMouseEvent *event) {
     }
 }
 
+void InkCanvas::checkAutoscrollThreshold(int oldPanY, int newPanY) {
+    // Detect if this is a combined canvas
+    bool isCombinedCanvas = false;
+    int singlePageHeight = 0;
+    
+    if (!backgroundImage.isNull() && buffer.height() >= backgroundImage.height() * 1.8 && backgroundImage.height() > 0) {
+        isCombinedCanvas = true;
+        singlePageHeight = backgroundImage.height() / 2;
+    } else if (buffer.height() > 2000) { 
+        isCombinedCanvas = true;
+        singlePageHeight = buffer.height() / 2;
+    }
+    
+    if (!isCombinedCanvas || singlePageHeight == 0) {
+        return; 
+    }
+    
+    // Threshold for autoscroll is the bottom of the first page in the combined view
+    int threshold = singlePageHeight;
+    
+    // Define early save trigger zones (save when getting close to threshold)
+    int forwardSaveZone = threshold - 100;  // Save 100 pixels before forward threshold
+    int backwardSaveZone = 100;             // Save when 100 pixels into negative territory
+    
+    // Proactive save triggers - save before reaching the actual scroll threshold
+    if (edited && oldPanY < forwardSaveZone && newPanY >= forwardSaveZone) {
+        // Approaching forward threshold - trigger save early
+        emit earlySaveRequested();
+    }
+    if (edited && oldPanY > -backwardSaveZone && newPanY <= -backwardSaveZone) {
+        // Approaching backward threshold - trigger save early  
+        emit earlySaveRequested();
+    }
+    
+    // Check for forward autoscroll (scrolling down past the first page)
+    if (oldPanY < threshold && newPanY >= threshold) {
+        emit autoScrollRequested(1); // 1 for forward
+    }
+    
+    // Check for backward autoscroll (scrolling up past 0 into negative territory)
+    if (oldPanY >= 0 && newPanY < 0) {
+        emit autoScrollRequested(-1); // -1 for backward
+    }
+}
 
+int InkCanvas::getAutoscrollThreshold() const {
+    // Detect if this is a combined canvas
+    bool isCombinedCanvas = false;
+    int singlePageHeight = 0;
+    
+    if (!backgroundImage.isNull() && buffer.height() >= backgroundImage.height() * 1.8 && backgroundImage.height() > 0) {
+        isCombinedCanvas = true;
+        singlePageHeight = backgroundImage.height() / 2;
+    } else if (buffer.height() > 2000) { 
+        isCombinedCanvas = true;
+        singlePageHeight = buffer.height() / 2;
+    }
+    
+    if (!isCombinedCanvas || singlePageHeight == 0) {
+        return 0; // Return 0 for non-combined canvases
+    }
+    
+    return singlePageHeight;
+}
 
+void InkCanvas::checkAndCacheAdjacentPages(int targetPage) {
+    if (!pdfDocument || !pdfCacheTimer) return;
+    
+    // Stop any existing timer
+    if (pdfCacheTimer->isActive()) {
+        pdfCacheTimer->stop();
+    }
+    
+    // Cache adjacent pages after a short delay to avoid blocking current page load
+    QTimer::singleShot(100, this, [this, targetPage]() {
+        cacheAdjacentPages(targetPage);
+    });
+}
 
+void InkCanvas::cacheAdjacentPages(int targetPage) {
+    if (!pdfDocument) return;
+    
+    int totalPages = pdfDocument->numPages();
+    
+    // Cache previous page (targetPage - 1)
+    if (targetPage > 0 && !pdfCache.contains(targetPage - 1)) {
+        renderPdfPageToCache(targetPage - 1);
+    }
+    
+    // Cache next page (targetPage + 1) 
+    if (targetPage + 1 < totalPages && !pdfCache.contains(targetPage + 1)) {
+        renderPdfPageToCache(targetPage + 1);
+    }
+    
+    // ✅ ENHANCED: Cache 2 pages ahead (targetPage + 2) for pseudo smooth scrolling
+    if (targetPage + 2 < totalPages && !pdfCache.contains(targetPage + 2)) {
+        renderPdfPageToCache(targetPage + 2);
+    }
+}
+
+void InkCanvas::checkAndCacheAdjacentNotePages(int targetPage) {
+    if (!noteCacheTimer) return;
+    
+    // Stop any existing timer
+    if (noteCacheTimer->isActive()) {
+        noteCacheTimer->stop();
+    }
+    
+    // Cache adjacent note pages after a short delay
+    QTimer::singleShot(100, this, [this, targetPage]() {
+        cacheAdjacentNotePages(targetPage);
+    });
+}
+
+void InkCanvas::cacheAdjacentNotePages(int targetPage) {
+    if (saveFolder.isEmpty()) return;
+    
+    // Cache previous note page (targetPage - 1)
+    if (targetPage > 0 && !noteCache.contains(targetPage - 1)) {
+        loadNotePageToCache(targetPage - 1);
+    }
+    
+    // Cache next note page (targetPage + 1)
+    if (!noteCache.contains(targetPage + 1)) {
+        loadNotePageToCache(targetPage + 1);
+    }
+    
+    // ✅ ENHANCED: Cache 2 pages ahead (targetPage + 2) for pseudo smooth scrolling
+    if (!noteCache.contains(targetPage + 2)) {
+        loadNotePageToCache(targetPage + 2);
+    }
+}
+
+void InkCanvas::loadPdfTextBoxesForSinglePage(int pageNumber) {
+    // Get the page for text operations
+    currentPdfPageForText = std::unique_ptr<Poppler::Page>(pdfDocument->page(pageNumber));
+    if (!currentPdfPageForText) {
+        return;
+    }
+
+    // Load text boxes for the single page
+    auto textBoxVector = currentPdfPageForText->textList();
+    for (auto& textBox : textBoxVector) {
+        currentPdfTextBoxes.append(textBox.release()); // Transfer ownership to QList
+        currentPdfTextBoxPageNumbers.append(pageNumber); // Track page number for each text box
+    }
+}
+
+void InkCanvas::loadPdfTextBoxesForCombinedCanvas(int pageNumber, int singlePageHeight) {
+    // For combined canvas showing pages N and N+1:
+    // - Top half shows page N (coordinates as-is)
+    // - Bottom half shows page N+1 (coordinates will be adjusted in mapping functions)
+    
+    // Load text boxes for top half (page N)
+    currentPdfPageForText = std::unique_ptr<Poppler::Page>(pdfDocument->page(pageNumber));
+    if (currentPdfPageForText) {
+        auto topTextBoxVector = currentPdfPageForText->textList();
+        for (auto& textBox : topTextBoxVector) {
+            // Text boxes for top half keep their original coordinates
+            currentPdfTextBoxes.append(textBox.release());
+            currentPdfTextBoxPageNumbers.append(pageNumber); // Track as page N
+        }
+    }
+    
+    // Load text boxes for bottom half (page N+1) if it exists
+    int nextPageNumber = pageNumber + 1;
+    if (nextPageNumber < pdfDocument->numPages()) {
+        currentPdfPageForTextSecond = std::unique_ptr<Poppler::Page>(pdfDocument->page(nextPageNumber));
+        if (currentPdfPageForTextSecond) {
+            auto bottomTextBoxVector = currentPdfPageForTextSecond->textList();
+            for (auto& textBox : bottomTextBoxVector) {
+                // Text boxes for bottom half - coordinates will be adjusted in mapping functions
+                currentPdfTextBoxes.append(textBox.release());
+                currentPdfTextBoxPageNumbers.append(nextPageNumber); // Track as page N+1
+            }
+        }
+    }
+}
 
