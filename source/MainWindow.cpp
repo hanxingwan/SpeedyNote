@@ -1685,14 +1685,29 @@ void MainWindow::saveCurrentPageConcurrent() {
     // Create a copy of the buffer for concurrent saving
     QPixmap bufferCopy = canvas->getBuffer();
     
-    // Save markdown windows for this page (this must be done on the main thread)
-    if (canvas->getMarkdownManager()) {
-        canvas->getMarkdownManager()->saveWindowsForPage(pageNumber);
+    // Check if this is a combined canvas first to determine window saving strategy
+    QPixmap backgroundImage = canvas->getBackgroundImage();
+    bool isCombinedCanvas = false;
+    
+    // If we have a background image (PDF) and buffer is roughly double its height, it's combined
+    if (!backgroundImage.isNull() && bufferCopy.height() >= backgroundImage.height() * 1.8) {
+        isCombinedCanvas = true;
+    } else if (bufferCopy.height() > 2000) { // Fallback heuristic for very tall buffers
+        isCombinedCanvas = true;
     }
     
-    // ✅ Save picture windows for this page (this must be done on the main thread)
-    if (canvas->getPictureManager()) {
-        canvas->getPictureManager()->saveWindowsForPage(pageNumber);
+    // Save windows using the appropriate strategy (this must be done on the main thread)
+    if (isCombinedCanvas) {
+        // Use combined window saving logic for cross-page coordinate adjustments
+        canvas->saveCombinedWindowsForPage(pageNumber);
+    } else {
+        // Use standard single-page window saving
+        if (canvas->getMarkdownManager()) {
+            canvas->getMarkdownManager()->saveWindowsForPage(pageNumber);
+        }
+        if (canvas->getPictureManager()) {
+            canvas->getPictureManager()->saveWindowsForPage(pageNumber);
+        }
     }
     
     // ✅ Get notebook ID from JSON metadata before concurrent operation
@@ -1702,18 +1717,14 @@ void MainWindow::saveCurrentPageConcurrent() {
         notebookId = canvas->getNotebookId();
     }
     
-    // Check if this is a combined canvas and get background image info if needed
-    QPixmap backgroundImage = canvas->getBackgroundImage();
-    bool isCombinedCanvas = false;
+    // Calculate single page height for canvas splitting
     int singlePageHeight = bufferCopy.height();
-    
-    // If we have a background image (PDF) and buffer is roughly double its height, it's combined
-    if (!backgroundImage.isNull() && bufferCopy.height() >= backgroundImage.height() * 1.8) {
-        isCombinedCanvas = true;
-        singlePageHeight = backgroundImage.height() / 2; // Each PDF page in the combined image
-    } else if (bufferCopy.height() > 2000) { // Fallback heuristic for very tall buffers
-        isCombinedCanvas = true;
-        singlePageHeight = bufferCopy.height() / 2;
+    if (isCombinedCanvas) {
+        if (!backgroundImage.isNull()) {
+            singlePageHeight = backgroundImage.height() / 2; // Each PDF page in the combined image
+        } else {
+            singlePageHeight = bufferCopy.height() / 2; // Fallback for combined canvas
+        }
     }
     
     // Run the save operation concurrently

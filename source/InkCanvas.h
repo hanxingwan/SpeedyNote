@@ -315,6 +315,9 @@ private:
 public:
     // ✅ Metadata management
     void loadNotebookId();
+    
+    // Combined canvas window management
+    void saveCombinedWindowsForPage(int pageNumber); // Save windows for combined canvas pages
     void saveNotebookId();
     void saveBackgroundMetadata();
     
@@ -339,7 +342,6 @@ public:
 private:
     // Combined canvas window management
     void loadCombinedWindowsForPage(int pageNumber); // Load windows for combined canvas pages
-    void saveCombinedWindowsForPage(int pageNumber); // Save windows for combined canvas pages
     QList<MarkdownWindow*> loadMarkdownWindowsForPage(int pageNumber); // Load markdown windows without affecting current
     QList<PictureWindow*> loadPictureWindowsForPage(int pageNumber); // Load picture windows without affecting current
     // ✅ Migration from old txt files to JSON
