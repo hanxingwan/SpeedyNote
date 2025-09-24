@@ -717,3 +717,4 @@ QRect PictureWindowManager::convertScreenToCanvasRect(const QRect &screenRect) c
     return canvasRect;
 }
 
+
