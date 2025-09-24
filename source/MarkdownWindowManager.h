@@ -37,6 +37,11 @@ public:
     // Get all windows for current page
     QList<MarkdownWindow*> getCurrentPageWindows() const;
     
+    // Combined canvas support
+    QList<MarkdownWindow*> loadWindowsForPageSeparately(int pageNumber);
+    void setCombinedWindows(const QList<MarkdownWindow*> &windows);
+    void saveWindowsForPageSeparately(int pageNumber, const QList<MarkdownWindow*> &windows);
+    
     // Get canvas
     InkCanvas* getCanvas() const { return canvas; }
     
@@ -84,7 +89,3 @@ public slots:
 };
 
 #endif // MARKDOWNWINDOWMANAGER_H 
-
-
-
-

@@ -3440,6 +3440,24 @@ void InkCanvas::invalidateCurrentPageCache() {
     }
 }
 
+QList<MarkdownWindow*> InkCanvas::loadMarkdownWindowsForPage(int pageNumber) {
+    if (!markdownManager) {
+        return QList<MarkdownWindow*>();
+    }
+    
+    // Load windows for the specified page without affecting current windows
+    return markdownManager->loadWindowsForPageSeparately(pageNumber);
+}
+
+QList<PictureWindow*> InkCanvas::loadPictureWindowsForPage(int pageNumber) {
+    if (!pictureManager) {
+        return QList<PictureWindow*>();
+    }
+    
+    // Load windows for the specified page without affecting current windows
+    return pictureManager->loadWindowsForPageSeparately(pageNumber);
+}
+
 void InkCanvas::loadCombinedWindowsForPage(int pageNumber) {
     if (!markdownManager && !pictureManager) {
         return;
@@ -3458,48 +3476,66 @@ void InkCanvas::loadCombinedWindowsForPage(int pageNumber) {
     }
     
     if (isCombinedCanvas) {
-        // For combined canvas, load current page normally first
-        if (markdownManager) {
-            markdownManager->loadWindowsForPage(pageNumber);
-        }
-        if (pictureManager) {
-            pictureManager->loadWindowsForPage(pageNumber);
-        }
-        
-        // Then load next page windows and adjust their positions
+        // For combined canvas, we need to load and merge windows from both current and next page
         int nextPageNumber = pageNumber + 1;
         
-        // Store current page windows temporarily
-        QList<MarkdownWindow*> currentMarkdownWindows = markdownManager ? markdownManager->getCurrentPageWindows() : QList<MarkdownWindow*>();
-        QList<PictureWindow*> currentPictureWindows = pictureManager ? pictureManager->getCurrentPageWindows() : QList<PictureWindow*>();
         
-        // Load next page windows
+        // For combined canvas showing pages N and N+1:
+        // - Top half shows page N
+        // - Bottom half shows page N+1
+        
+        // CORRECTED LOGIC: For page "N-(N+1)" view, we need:
+        // - Top half: Page N windows (no adjustment needed - they were saved with top-half coordinates)  
+        // - Bottom half: Page N+1 windows (adjust by +singlePageHeight)
+        
+        // Load page N windows for top half using separate method to avoid interference
+        QList<MarkdownWindow*> topHalfMarkdownWindows;
+        QList<PictureWindow*> topHalfPictureWindows;
+        
         if (markdownManager) {
-            markdownManager->loadWindowsForPage(nextPageNumber);
-            QList<MarkdownWindow*> nextPageMarkdownWindows = markdownManager->getCurrentPageWindows();
-            
-            // Adjust next page window positions to bottom half
-            for (MarkdownWindow* window : nextPageMarkdownWindows) {
+            topHalfMarkdownWindows = loadMarkdownWindowsForPage(pageNumber);
+            // These windows were saved with their original coordinates and appear in top half as-is
+        }
+        
+        if (pictureManager) {
+            topHalfPictureWindows = loadPictureWindowsForPage(pageNumber);
+            // These windows were saved with their original coordinates and appear in top half as-is
+        }
+        
+        // Load page N+1 windows for bottom half and adjust their coordinates
+        QList<MarkdownWindow*> bottomHalfMarkdownWindows;
+        QList<PictureWindow*> bottomHalfPictureWindows;
+        
+        if (markdownManager) {
+            bottomHalfMarkdownWindows = loadMarkdownWindowsForPage(nextPageNumber);
+            // Move page N+1 windows to bottom half by adding singlePageHeight
+            for (MarkdownWindow* window : bottomHalfMarkdownWindows) {
                 QRect rect = window->getCanvasRect();
-                rect.moveTop(rect.y() + singlePageHeight); // Move to bottom half
+                rect.moveTop(rect.y() + singlePageHeight);
                 window->setCanvasRect(rect);
             }
         }
         
         if (pictureManager) {
-            pictureManager->loadWindowsForPage(nextPageNumber);
-            QList<PictureWindow*> nextPagePictureWindows = pictureManager->getCurrentPageWindows();
-            
-            // Adjust next page window positions to bottom half
-            for (PictureWindow* window : nextPagePictureWindows) {
+            bottomHalfPictureWindows = loadPictureWindowsForPage(nextPageNumber);
+            // Move page N+1 windows to bottom half by adding singlePageHeight
+            for (PictureWindow* window : bottomHalfPictureWindows) {
                 QRect rect = window->getCanvasRect();
-                rect.moveTop(rect.y() + singlePageHeight); // Move to bottom half
+                rect.moveTop(rect.y() + singlePageHeight);
                 window->setCanvasRect(rect);
             }
         }
         
-        // Note: The windows from next page are now loaded and positioned correctly
-        // The managers will handle displaying both sets of windows
+        // Combine both sets of windows and set as current
+        if (markdownManager) {
+            QList<MarkdownWindow*> combinedMarkdownWindows = topHalfMarkdownWindows + bottomHalfMarkdownWindows;
+            markdownManager->setCombinedWindows(combinedMarkdownWindows);
+        }
+        
+        if (pictureManager) {
+            QList<PictureWindow*> combinedPictureWindows = topHalfPictureWindows + bottomHalfPictureWindows;
+            pictureManager->setCombinedWindows(combinedPictureWindows);
+        }
         
     } else {
         // Standard single page window loading
@@ -3537,38 +3573,76 @@ void InkCanvas::saveCombinedWindowsForPage(int pageNumber) {
         QList<MarkdownWindow*> allMarkdownWindows = markdownManager ? markdownManager->getCurrentPageWindows() : QList<MarkdownWindow*>();
         QList<PictureWindow*> allPictureWindows = pictureManager ? pictureManager->getCurrentPageWindows() : QList<PictureWindow*>();
         
-        // Separate windows by position and temporarily adjust coordinates for saving
+        // Separate windows by position
+        QList<MarkdownWindow*> currentPageMarkdownWindows;
         QList<MarkdownWindow*> nextPageMarkdownWindows;
+        QList<PictureWindow*> currentPagePictureWindows;
         QList<PictureWindow*> nextPagePictureWindows;
         
-        // Identify windows that need to be copied to next page (in bottom half)
+        // Separate markdown windows by position
         for (MarkdownWindow* window : allMarkdownWindows) {
             QRect rect = window->getCanvasRect();
-            if (rect.y() >= singlePageHeight) {
-                // Window is in bottom half (next page) - needs to be copied there
+            if (rect.top() < singlePageHeight) {
+                // Window starts in top half (current page)
+                currentPageMarkdownWindows.append(window);
+            } else {
+                // Window starts in bottom half (next page)
                 nextPageMarkdownWindows.append(window);
             }
         }
         
+        // Separate picture windows by position  
         for (PictureWindow* window : allPictureWindows) {
             QRect rect = window->getCanvasRect();
-            if (rect.y() >= singlePageHeight) {
-                // Window is in bottom half (next page) - needs to be copied there
+            if (rect.top() < singlePageHeight) {
+                // Window starts in top half (current page)
+                currentPagePictureWindows.append(window);
+            } else {
+                // Window starts in bottom half (next page)
                 nextPagePictureWindows.append(window);
             }
         }
         
-        // Save current page (this will save all windows currently visible, including those in bottom half)
+        // Save current page windows (top half)
         if (markdownManager) {
-            markdownManager->saveWindowsForPage(pageNumber);
+            markdownManager->saveWindowsForPageSeparately(pageNumber, currentPageMarkdownWindows);
         }
         if (pictureManager) {
-            pictureManager->saveWindowsForPage(pageNumber);
+            pictureManager->saveWindowsForPageSeparately(pageNumber, currentPagePictureWindows);
         }
         
-        // For now, keep window handling simple - the main issue was canvas content, not windows
-        // Windows are handled by their respective managers and should persist correctly
-        // The key fix was ensuring canvas content is merged, not replaced
+        // Save next page windows (bottom half, with adjusted coordinates)
+        if (!nextPageMarkdownWindows.isEmpty() && markdownManager) {
+            // Temporarily adjust coordinates for saving
+            for (MarkdownWindow* window : nextPageMarkdownWindows) {
+                QRect rect = window->getCanvasRect();
+                rect.moveTop(rect.y() - singlePageHeight); // Move to top half coordinates
+                window->setCanvasRect(rect);
+            }
+            markdownManager->saveWindowsForPageSeparately(pageNumber + 1, nextPageMarkdownWindows);
+            // Restore original coordinates
+            for (MarkdownWindow* window : nextPageMarkdownWindows) {
+                QRect rect = window->getCanvasRect();
+                rect.moveTop(rect.y() + singlePageHeight); // Move back to bottom half
+                window->setCanvasRect(rect);
+            }
+        }
+        
+        if (!nextPagePictureWindows.isEmpty() && pictureManager) {
+            // Temporarily adjust coordinates for saving
+            for (PictureWindow* window : nextPagePictureWindows) {
+                QRect rect = window->getCanvasRect();
+                rect.moveTop(rect.y() - singlePageHeight); // Move to top half coordinates
+                window->setCanvasRect(rect);
+            }
+            pictureManager->saveWindowsForPageSeparately(pageNumber + 1, nextPagePictureWindows);
+            // Restore original coordinates
+            for (PictureWindow* window : nextPagePictureWindows) {
+                QRect rect = window->getCanvasRect();
+                rect.moveTop(rect.y() + singlePageHeight); // Move back to bottom half
+                window->setCanvasRect(rect);
+            }
+        }
         
     } else {
         // Standard single page window saving
