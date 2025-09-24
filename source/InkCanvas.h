@@ -234,7 +234,6 @@ protected:
     bool event(QEvent *event) override;
 
 private:
-    void checkAutoscrollThreshold(int oldPanY, int newPanY);
     QPointF mapLogicalWidgetToPhysicalBuffer(const QPointF& logicalWidgetPoint);
     QRect mapRectBufferToWidgetLogical(const QRectF& physicalBufferRect);
 
@@ -318,6 +317,9 @@ public:
     
     // Combined canvas window management
     void saveCombinedWindowsForPage(int pageNumber); // Save windows for combined canvas pages
+    
+    // Autoscroll threshold detection (for touch gestures and external pan changes)
+    void checkAutoscrollThreshold(int oldPanY, int newPanY);
     void saveNotebookId();
     void saveBackgroundMetadata();
     

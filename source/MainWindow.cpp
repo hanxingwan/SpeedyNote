@@ -3177,16 +3177,27 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
             if (wheelEvent->angleDelta().y() != 0 && needVerticalScroll) {
                 // Calculate scroll amount (negative because wheel up should scroll up)
                 int scrollDelta = -wheelEvent->angleDelta().y() / 8; // Convert from 1/8 degree units
-                scrollDelta = scrollDelta / 15; // Convert to steps (typical wheel step is 15 degrees)
                 
-                // Much faster base scroll speed - aim for ~3-5 scrolls to reach bottom
-                int baseScrollAmount = panYSlider->maximum() / 8; // 1/8 of total range per scroll
-                scrollDelta = scrollDelta * qMax(baseScrollAmount, 50); // Minimum 50 units per scroll
+                // Detect if this is a trackpad (smooth scrolling) vs mouse wheel (stepped)
+                // Trackpad typically sends smaller, more frequent events
+                bool isTrackpad = qAbs(wheelEvent->angleDelta().y()) < 120; // Less than typical mouse wheel step
+                
+                if (isTrackpad) {
+                    // Trackpad: Use direct, smooth scrolling for better responsiveness
+                    scrollDelta = scrollDelta / 2; // Reduce sensitivity for smooth trackpad scrolling
+                } else {
+                    // Mouse wheel: Use stepped scrolling as before
+                    scrollDelta = scrollDelta / 15; // Convert to steps (typical wheel step is 15 degrees)
+                    
+                    // Much faster base scroll speed - aim for ~3-5 scrolls to reach bottom
+                    int baseScrollAmount = panYSlider->maximum() / 8; // 1/8 of total range per scroll
+                    scrollDelta = scrollDelta * qMax(baseScrollAmount, 50); // Minimum 50 units per scroll
+                }
                 
                 // Apply the scroll
                 int currentPan = panYSlider->value();
                 int newPan = qBound(panYSlider->minimum(), currentPan + scrollDelta, panYSlider->maximum());
-                panYSlider->setValue(newPan);
+                panYSlider->setValue(newPan); // This triggers autoscroll via valueChanged signal
                 
                 // Show scrollbar temporarily
                 panYSlider->setVisible(true);
@@ -4884,21 +4895,20 @@ void MainWindow::handleTouchPanChange(int panX, int panY) {
     }
     scrollbarsVisible = true;
     
-    // Update sliders without triggering their valueChanged signals
+    // Update sliders - allow panY signals for autoscroll, block panX to avoid redundancy
     panXSlider->blockSignals(true);
-    panYSlider->blockSignals(true);
     panXSlider->setValue(panX);
-    panYSlider->setValue(panY);
     panXSlider->blockSignals(false);
-    panYSlider->blockSignals(false);
     
-    // Update canvas pan directly
+    // For panY: DON'T block signals so it triggers the same autoscroll flow as mouse wheel
+    panYSlider->setValue(panY); // This will trigger updatePanY() -> setPanY() -> autoscroll logic
+    
+    // Update canvas X pan directly (Y pan is handled by the setValue signal above)
     InkCanvas *canvas = currentCanvas();
     if (canvas) {
         canvas->setPanX(panX);
-        canvas->setPanY(panY);
         canvas->setLastPanX(panX);
-        canvas->setLastPanY(panY);
+        // Note: panY is handled by panYSlider->setValue() signal flow above
     }
 }
 
