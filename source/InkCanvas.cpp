@@ -3165,17 +3165,19 @@ void InkCanvas::checkAndCacheAdjacentPages(int targetPage) {
         return;
     }
     
-    // Calculate adjacent pages
+    // Calculate adjacent pages - with pseudo smooth scrolling, we need 2 pages ahead
     int prevPage = targetPage - 1;
     int nextPage = targetPage + 1;
+    int nextNextPage = targetPage + 2; // Added for pseudo smooth scrolling
     
     // Check what needs to be cached
     bool needPrevPage = isValidPageNumber(prevPage) && !pdfCache.contains(prevPage);
     bool needCurrentPage = !pdfCache.contains(targetPage);
     bool needNextPage = isValidPageNumber(nextPage) && !pdfCache.contains(nextPage);
+    bool needNextNextPage = isValidPageNumber(nextNextPage) && !pdfCache.contains(nextNextPage);
     
     // If all pages are cached, nothing to do
-    if (!needPrevPage && !needCurrentPage && !needNextPage) {
+    if (!needPrevPage && !needCurrentPage && !needNextPage && !needNextNextPage) {
         return;
     }
 
@@ -3212,6 +3214,7 @@ void InkCanvas::cacheAdjacentPages() {
     int targetPage = currentCachedPage;
     int prevPage = targetPage - 1;
     int nextPage = targetPage + 1;
+    int nextNextPage = targetPage + 2; // Added for pseudo smooth scrolling
     
     // Create list of pages to cache asynchronously
     QList<int> pagesToCache;
@@ -3224,6 +3227,11 @@ void InkCanvas::cacheAdjacentPages() {
     // Add next page if needed
     if (isValidPageNumber(nextPage) && !pdfCache.contains(nextPage)) {
         pagesToCache.append(nextPage);
+    }
+    
+    // Add next-next page if needed (for pseudo smooth scrolling)
+    if (isValidPageNumber(nextNextPage) && !pdfCache.contains(nextNextPage)) {
+        pagesToCache.append(nextNextPage);
     }
     
     // Cache pages asynchronously
@@ -3351,17 +3359,19 @@ void InkCanvas::checkAndCacheAdjacentNotePages(int targetPage) {
         return;
     }
     
-    // Calculate adjacent pages
+    // Calculate adjacent pages - with pseudo smooth scrolling, we need 2 pages ahead
     int prevPage = targetPage - 1;
     int nextPage = targetPage + 1;
+    int nextNextPage = targetPage + 2; // Added for pseudo smooth scrolling
     
     // Check what needs to be cached (we don't have a max page limit for notes)
     bool needPrevPage = (prevPage >= 0) && !noteCache.contains(prevPage);
     bool needCurrentPage = !noteCache.contains(targetPage);
     bool needNextPage = !noteCache.contains(nextPage); // No upper limit check for notes
+    bool needNextNextPage = !noteCache.contains(nextNextPage); // No upper limit check for notes
     
     // If all nearby pages are cached, nothing to do
-    if (!needPrevPage && !needCurrentPage && !needNextPage) {
+    if (!needPrevPage && !needCurrentPage && !needNextPage && !needNextNextPage) {
         return;
     }
     
@@ -3398,6 +3408,7 @@ void InkCanvas::cacheAdjacentNotePages() {
     int targetPage = currentCachedNotePage;
     int prevPage = targetPage - 1;
     int nextPage = targetPage + 1;
+    int nextNextPage = targetPage + 2; // Added for pseudo smooth scrolling
     
     // Create list of note pages to cache asynchronously
     QList<int> notePagesToCache;
@@ -3410,6 +3421,11 @@ void InkCanvas::cacheAdjacentNotePages() {
     // Add next page if needed (no upper limit check for notes)
     if (!noteCache.contains(nextPage)) {
         notePagesToCache.append(nextPage);
+    }
+    
+    // Add next-next page if needed (for pseudo smooth scrolling)
+    if (!noteCache.contains(nextNextPage)) {
+        notePagesToCache.append(nextNextPage);
     }
     
     // Cache note pages asynchronously
