@@ -9,8 +9,8 @@ mkdir build
 Copy-Item -Path ".\resources\translations\*.qm" -Destination ".\build" -Force
 
 cd .\build
-cmake -G "MinGW Makefiles" .. 
-cmake --build . -- -j16
+cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release .. 
+cmake --build . --config Release -- -j16
 
 
 # ✅ Optionally, copy compiled .qm files into build or embed them via qrc

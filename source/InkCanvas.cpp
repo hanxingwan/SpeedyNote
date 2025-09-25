@@ -4600,15 +4600,24 @@ void InkCanvas::checkAutoscrollThreshold(int oldPanY, int newPanY) {
     
     // Define early save trigger zones (save when getting close to threshold)
     int forwardSaveZone = threshold - 300;  // Save 300 pixels before forward threshold
-    int backwardSaveZone = threshold / 15;  // Save when reaching 1/15th of threshold into negative territory (more realistic than fixed 300)
+    int backwardSaveZone = -5;  // Save 5 pixels into negative territory for better timing on slower devices
+    int backwardSwitchThreshold = -300;  // Delay backward page switch to -300 pixels for save completion
+    
+    // Safety check: ensure we have a reasonable threshold size for our offsets
+    if (threshold < 600) {
+        // For very small thresholds, use proportional offsets instead of fixed 300px
+        forwardSaveZone = threshold - (threshold / 4);
+        backwardSaveZone = -(threshold / 4);
+        backwardSwitchThreshold = -(threshold / 4);
+    }
     
     // Proactive save triggers - save before reaching the actual scroll threshold
     if (edited && oldPanY < forwardSaveZone && newPanY >= forwardSaveZone) {
         // Approaching forward threshold - trigger save early
         emit earlySaveRequested();
     }
-    if (edited && oldPanY > -backwardSaveZone && newPanY <= -backwardSaveZone) {
-        // Approaching backward threshold - trigger save early  
+    if (edited && oldPanY > backwardSaveZone && newPanY <= backwardSaveZone) {
+        // Approaching backward threshold - trigger save early (much earlier now)
         emit earlySaveRequested();
     }
     
@@ -4617,9 +4626,10 @@ void InkCanvas::checkAutoscrollThreshold(int oldPanY, int newPanY) {
         emit autoScrollRequested(1); // 1 for forward
     }
     
-    // Check for backward autoscroll (scrolling up past 0 into negative territory)
-    if (oldPanY >= 0 && newPanY < 0) {
-        emit autoScrollRequested(-1); // -1 for backward
+    // Check for backward autoscroll (scrolling up past -300 for delayed switching)
+    // This gives more time for the save operation to complete on slower devices
+    if (oldPanY > backwardSwitchThreshold && newPanY <= backwardSwitchThreshold) {
+        emit autoScrollRequested(-1); // -1 for backward (delayed until -300)
     }
 }
 
