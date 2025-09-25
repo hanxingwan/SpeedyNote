@@ -17,6 +17,7 @@
 #include <QMenu>
 #include <QClipboard>
 #include <QFutureWatcher>
+#include <QMutex>
 #include "MarkdownWindowManager.h"
 #include "PictureWindowManager.h"
 #include "ToolType.h"
@@ -142,7 +143,10 @@ public:
 
     void clearPdfCache() { pdfCache.clear(); }
     void clearNoteCache() { 
-        noteCache.clear(); 
+        {
+            QMutexLocker locker(&noteCacheMutex);
+            noteCache.clear(); 
+        }
         currentCachedNotePage = -1;
         if (noteCacheTimer && noteCacheTimer->isActive()) {
             noteCacheTimer->stop();
@@ -393,6 +397,7 @@ private:
     
     // Intelligent note page cache system
     QCache<int, QPixmap> noteCache; // Cache for note pages (PNG files)
+    mutable QMutex noteCacheMutex; // Thread safety for noteCache
     QTimer* noteCacheTimer = nullptr; // Timer for delayed adjacent note page caching
     int currentCachedNotePage = -1; // Currently displayed note page for cache management
     int pendingNoteCacheTargetPage = -1; // Target page for pending note cache operation (to validate timer relevance)
