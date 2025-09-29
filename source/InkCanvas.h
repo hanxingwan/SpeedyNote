@@ -141,7 +141,10 @@ public:
 
     void setPDFRenderDPI(int dpi) { pdfRenderDPI = dpi; }  // ✅ Set PDF render DPI
 
-    void clearPdfCache() { pdfCache.clear(); }
+    void clearPdfCache() { 
+        QMutexLocker locker(&pdfCacheMutex);
+        pdfCache.clear(); 
+    }
     void clearNoteCache() { 
         {
             QMutexLocker locker(&noteCacheMutex);
@@ -289,6 +292,7 @@ private:
     
 
     QCache<int, QPixmap> pdfCache; // Caches 5 pages of the PDF
+    mutable QMutex pdfCacheMutex; // Thread safety for pdfCache
     std::unique_ptr<Poppler::Document> pdfDocument;
     int currentPdfPage;
     bool isPdfLoaded = false;

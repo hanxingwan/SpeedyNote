@@ -136,7 +136,10 @@ InkCanvas::~InkCanvas() {
     }
     
     // ✅ Clear caches to free memory
-    pdfCache.clear();
+    {
+        QMutexLocker locker(&pdfCacheMutex);
+        pdfCache.clear();
+    }
     {
         QMutexLocker locker(&noteCacheMutex);
         noteCache.clear();
@@ -214,7 +217,10 @@ void InkCanvas::initializeBuffer() {
 
 void InkCanvas::loadPdf(const QString &pdfPath) {
     // ✅ Clear existing PDF cache before loading new PDF to prevent old pages from showing
-    pdfCache.clear();
+    {
+        QMutexLocker locker(&pdfCacheMutex);
+        pdfCache.clear();
+    }
     currentCachedPage = -1;
     
     // Cancel any active PDF caching operations
@@ -261,7 +267,10 @@ void InkCanvas::clearPdf() {
     pdfDocument = nullptr;
     isPdfLoaded = false;
     totalPdfPages = 0;
-    pdfCache.clear();
+    {
+        QMutexLocker locker(&pdfCacheMutex);
+        pdfCache.clear();
+    }
 
     // ✅ Clear the background image immediately to remove PDF from display
     backgroundImage = QPixmap();
@@ -293,7 +302,10 @@ void InkCanvas::clearPdfNoDelete() {
     pdfDocument = nullptr;
     isPdfLoaded = false;
     totalPdfPages = 0;
-    pdfCache.clear();
+    {
+        QMutexLocker locker(&pdfCacheMutex);
+        pdfCache.clear();
+    }
     
     // Reset cache system state
     currentCachedPage = -1;
@@ -317,10 +329,18 @@ void InkCanvas::loadPdfPage(int pageNumber) {
     // Update current page tracker
     currentCachedPage = pageNumber;
 
-    // Check if target page is already cached
-    if (pdfCache.contains(pageNumber)) {
-        // Display the cached page immediately
-        backgroundImage = *pdfCache.object(pageNumber);
+    // Check if target page is already cached (thread-safe)
+    bool isCached = false;
+    {
+        QMutexLocker locker(&pdfCacheMutex);
+        if (pdfCache.contains(pageNumber)) {
+            // Display the cached page immediately
+            backgroundImage = *pdfCache.object(pageNumber);
+            isCached = true;
+        }
+    }
+    
+    if (isCached) {
         loadPage(pageNumber);  // Load annotations
         loadPdfTextBoxes(pageNumber); // Load text boxes for PDF text selection
         update();
@@ -333,11 +353,14 @@ void InkCanvas::loadPdfPage(int pageNumber) {
     // Target page not in cache - render it immediately
     renderPdfPageToCache(pageNumber);
     
-    // Display the newly rendered page
-    if (pdfCache.contains(pageNumber)) {
-        backgroundImage = *pdfCache.object(pageNumber);
-    } else {
-        backgroundImage = QPixmap();  // Clear background if rendering failed
+    // Display the newly rendered page (thread-safe)
+    {
+        QMutexLocker locker(&pdfCacheMutex);
+        if (pdfCache.contains(pageNumber)) {
+            backgroundImage = *pdfCache.object(pageNumber);
+        } else {
+            backgroundImage = QPixmap();  // Clear background if rendering failed
+        }
     }
     
     loadPage(pageNumber);  // Load existing canvas annotations
@@ -2075,18 +2098,20 @@ void InkCanvas::loadPage(int pageNumber) {
     
     // Handle background image loading (PDF or custom background)
     if (isPdfLoaded && pdfDocument && pageNumber >= 0 && pageNumber < pdfDocument->numPages()) {
-        // Use PDF as background (should already be cached by loadPdfPage)
-        if (pdfCache.contains(pageNumber)) {
-        backgroundImage = *pdfCache.object(pageNumber);
+        // Use PDF as background (should already be cached by loadPdfPage) - thread-safe
+        {
+            QMutexLocker locker(&pdfCacheMutex);
+            if (pdfCache.contains(pageNumber)) {
+                backgroundImage = *pdfCache.object(pageNumber);
             
             // Resize canvas buffer to match PDF page size if needed
             // BUT: Don't resize if we have a combined canvas (double height)
             bool isCombinedCanvas = false;
-            if (buffer.height() >= backgroundImage.height() * 1.8) {
-                isCombinedCanvas = true;
-            }
-            
-            if (!isCombinedCanvas && backgroundImage.size() != buffer.size()) {
+                if (buffer.height() >= backgroundImage.height() * 1.8) {
+                    isCombinedCanvas = true;
+                }
+                
+                if (!isCombinedCanvas && backgroundImage.size() != buffer.size()) {
                 QPixmap newBuffer(backgroundImage.size());
                 newBuffer.fill(Qt::transparent);
 
@@ -2105,6 +2130,7 @@ void InkCanvas::loadPage(int pageNumber) {
                 }
             }
         }
+        } // Close pdfCacheMutex scope
     } else {
         // Handle custom background images
         QString bgFileName = saveFolder + QString("/bg_%1_%2.png").arg(notebookId).arg(pageNumber, 5, 10, QChar('0'));
@@ -3238,15 +3264,18 @@ void InkCanvas::renderPdfPageToCache(int pageNumber) {
         return;
     }
 
-    // Check if already cached
-    if (pdfCache.contains(pageNumber)) {
-        return;
-    }
-    
-    // Ensure the cache holds only 6 pages max
-    if (pdfCache.count() >= 6) {
-        auto oldestKey = pdfCache.keys().first();
-        pdfCache.remove(oldestKey);
+    // Check if already cached and manage cache size (thread-safe)
+    {
+        QMutexLocker locker(&pdfCacheMutex);
+        if (pdfCache.contains(pageNumber)) {
+            return;
+        }
+        
+        // Ensure the cache holds only 6 pages max
+        if (pdfCache.count() >= 6) {
+            auto oldestKey = pdfCache.keys().first();
+            pdfCache.remove(oldestKey);
+        }
     }
     
     // Render current page
@@ -3310,10 +3339,13 @@ void InkCanvas::renderPdfPageToCache(int pageNumber) {
         painter.end();
     }
     
-    // Cache the combined image
+    // Cache the combined image (thread-safe)
     if (!combinedImage.isNull()) {
         QPixmap cachedPixmap = QPixmap::fromImage(combinedImage);
-        pdfCache.insert(pageNumber, new QPixmap(cachedPixmap));
+        {
+            QMutexLocker locker(&pdfCacheMutex);
+            pdfCache.insert(pageNumber, new QPixmap(cachedPixmap));
+        }
     }
 }
 
@@ -3327,11 +3359,15 @@ void InkCanvas::checkAndCacheAdjacentPages(int targetPage) {
     int nextPage = targetPage + 1;
     int nextNextPage = targetPage + 2; // Added for pseudo smooth scrolling
     
-    // Check what needs to be cached
-    bool needPrevPage = isValidPageNumber(prevPage) && !pdfCache.contains(prevPage);
-    bool needCurrentPage = !pdfCache.contains(targetPage);
-    bool needNextPage = isValidPageNumber(nextPage) && !pdfCache.contains(nextPage);
-    bool needNextNextPage = isValidPageNumber(nextNextPage) && !pdfCache.contains(nextNextPage);
+    // Check what needs to be cached (thread-safe)
+    bool needPrevPage, needCurrentPage, needNextPage, needNextNextPage;
+    {
+        QMutexLocker locker(&pdfCacheMutex);
+        needPrevPage = isValidPageNumber(prevPage) && !pdfCache.contains(prevPage);
+        needCurrentPage = !pdfCache.contains(targetPage);
+        needNextPage = isValidPageNumber(nextPage) && !pdfCache.contains(nextPage);
+        needNextNextPage = isValidPageNumber(nextNextPage) && !pdfCache.contains(nextNextPage);
+    }
     
     // If all pages are cached, nothing to do
     if (!needPrevPage && !needCurrentPage && !needNextPage && !needNextNextPage) {
@@ -3376,19 +3412,23 @@ void InkCanvas::cacheAdjacentPages() {
     // Create list of pages to cache asynchronously
     QList<int> pagesToCache;
     
-    // Add previous page if needed
-    if (isValidPageNumber(prevPage) && !pdfCache.contains(prevPage)) {
-        pagesToCache.append(prevPage);
-    }
-    
-    // Add next page if needed
-    if (isValidPageNumber(nextPage) && !pdfCache.contains(nextPage)) {
-        pagesToCache.append(nextPage);
-    }
-    
-    // Add next-next page if needed (for pseudo smooth scrolling)
-    if (isValidPageNumber(nextNextPage) && !pdfCache.contains(nextNextPage)) {
-        pagesToCache.append(nextNextPage);
+    // Add pages that need caching (thread-safe check)
+    {
+        QMutexLocker locker(&pdfCacheMutex);
+        // Add previous page if needed
+        if (isValidPageNumber(prevPage) && !pdfCache.contains(prevPage)) {
+            pagesToCache.append(prevPage);
+        }
+        
+        // Add next page if needed
+        if (isValidPageNumber(nextPage) && !pdfCache.contains(nextPage)) {
+            pagesToCache.append(nextPage);
+        }
+        
+        // Add next-next page if needed (for pseudo smooth scrolling)
+        if (isValidPageNumber(nextNextPage) && !pdfCache.contains(nextNextPage)) {
+            pagesToCache.append(nextNextPage);
+        }
     }
     
     // Cache pages asynchronously
