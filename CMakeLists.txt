@@ -40,6 +40,18 @@ if (WIN32)
     # Prevent SDL2 from redefining main()
     add_compile_definitions(SDL_MAIN_HANDLED)
 
+    # Enable modern instruction sets and optimizations for Windows
+    add_compile_options(
+        -march=haswell          # Enable AVX2, FMA, BMI1, BMI2 instructions
+        -mtune=haswell          # Optimize for Haswell+ architectures
+        -mavx2                  # Explicitly enable AVX2
+        -mfma                   # Enable FMA (Fused Multiply-Add)
+        -mbmi                   # Enable BMI1 (Bit Manipulation Instructions)
+        -mbmi2                  # Enable BMI2
+        -O3                     # Maximum optimization level
+        -DNDEBUG                # Disable debug assertions for performance
+    )
+
     # Windows resource file
     enable_language(RC)
     set(WIN_RESOURCES app_icon.rc)

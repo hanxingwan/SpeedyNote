@@ -136,8 +136,14 @@ InkCanvas::~InkCanvas() {
     }
     
     // ✅ Clear caches to free memory
-    pdfCache.clear();
-    noteCache.clear();
+    {
+        QMutexLocker locker(&pdfCacheMutex);
+        pdfCache.clear();
+    }
+    {
+        QMutexLocker locker(&noteCacheMutex);
+        noteCache.clear();
+    }
     
     // ✅ Stop and clean up timers
     if (pdfCacheTimer) {
@@ -171,7 +177,8 @@ InkCanvas::~InkCanvas() {
     }
     activeNoteWatchers.clear();
     
-    // ✅ Clear PDF text boxes
+    // ✅ Clear PDF text boxes - CRITICAL: Clear selectedTextBoxes first to prevent crashes
+    selectedTextBoxes.clear();  // Must clear before deleting currentPdfTextBoxes
     qDeleteAll(currentPdfTextBoxes);
     currentPdfTextBoxes.clear();
     
@@ -210,7 +217,10 @@ void InkCanvas::initializeBuffer() {
 
 void InkCanvas::loadPdf(const QString &pdfPath) {
     // ✅ Clear existing PDF cache before loading new PDF to prevent old pages from showing
-    pdfCache.clear();
+    {
+        QMutexLocker locker(&pdfCacheMutex);
+        pdfCache.clear();
+    }
     currentCachedPage = -1;
     
     // Cancel any active PDF caching operations
@@ -257,7 +267,10 @@ void InkCanvas::clearPdf() {
     pdfDocument = nullptr;
     isPdfLoaded = false;
     totalPdfPages = 0;
-    pdfCache.clear();
+    {
+        QMutexLocker locker(&pdfCacheMutex);
+        pdfCache.clear();
+    }
 
     // ✅ Clear the background image immediately to remove PDF from display
     backgroundImage = QPixmap();
@@ -289,7 +302,10 @@ void InkCanvas::clearPdfNoDelete() {
     pdfDocument = nullptr;
     isPdfLoaded = false;
     totalPdfPages = 0;
-    pdfCache.clear();
+    {
+        QMutexLocker locker(&pdfCacheMutex);
+        pdfCache.clear();
+    }
     
     // Reset cache system state
     currentCachedPage = -1;
@@ -313,10 +329,18 @@ void InkCanvas::loadPdfPage(int pageNumber) {
     // Update current page tracker
     currentCachedPage = pageNumber;
 
-    // Check if target page is already cached
-    if (pdfCache.contains(pageNumber)) {
-        // Display the cached page immediately
-        backgroundImage = *pdfCache.object(pageNumber);
+    // Check if target page is already cached (thread-safe)
+    bool isCached = false;
+    {
+        QMutexLocker locker(&pdfCacheMutex);
+        if (pdfCache.contains(pageNumber)) {
+            // Display the cached page immediately
+            backgroundImage = *pdfCache.object(pageNumber);
+            isCached = true;
+        }
+    }
+    
+    if (isCached) {
         loadPage(pageNumber);  // Load annotations
         loadPdfTextBoxes(pageNumber); // Load text boxes for PDF text selection
         update();
@@ -329,11 +353,14 @@ void InkCanvas::loadPdfPage(int pageNumber) {
     // Target page not in cache - render it immediately
     renderPdfPageToCache(pageNumber);
     
-    // Display the newly rendered page
-    if (pdfCache.contains(pageNumber)) {
-        backgroundImage = *pdfCache.object(pageNumber);
-    } else {
-        backgroundImage = QPixmap();  // Clear background if rendering failed
+    // Display the newly rendered page (thread-safe)
+    {
+        QMutexLocker locker(&pdfCacheMutex);
+        if (pdfCache.contains(pageNumber)) {
+            backgroundImage = *pdfCache.object(pageNumber);
+        } else {
+            backgroundImage = QPixmap();  // Clear background if rendering failed
+        }
     }
     
     loadPage(pageNumber);  // Load existing canvas annotations
@@ -1904,14 +1931,20 @@ void InkCanvas::saveToFile(int pageNumber) {
             
             mergedNextImage.save(nextFilePath, "PNG");
             
-            // Update cache for next page with merged content
+        // Update cache for next page with merged content
+        {
+            QMutexLocker locker(&noteCacheMutex);
             noteCache.insert(nextPageNumber, new QPixmap(QPixmap::fromImage(mergedNextImage)));
+        }
             
             // Note: Cache invalidation is now handled during page switching for better timing
         }
         
         // Update cache for current page
-        noteCache.insert(pageNumber, new QPixmap(currentPageBuffer));
+        {
+            QMutexLocker locker(&noteCacheMutex);
+            noteCache.insert(pageNumber, new QPixmap(currentPageBuffer));
+        }
         
     } else {
         // Standard single page save
@@ -1923,7 +1956,10 @@ void InkCanvas::saveToFile(int pageNumber) {
         image.save(filePath, "PNG");
         
         // Update note cache with the saved buffer
-        noteCache.insert(pageNumber, new QPixmap(buffer));
+        {
+            QMutexLocker locker(&noteCacheMutex);
+            noteCache.insert(pageNumber, new QPixmap(buffer));
+        }
     }
     
     edited = false;
@@ -2028,21 +2064,31 @@ void InkCanvas::loadPage(int pageNumber) {
 
     // CRITICAL FIX: Always invalidate cache for combined pages when switching
     // This ensures we get fresh content that might have been updated by other views
-    if (pageNumber > 0) {
-        noteCache.remove(pageNumber - 1); // Remove "page (n-1),n" cache
+    {
+        QMutexLocker locker(&noteCacheMutex);
+        if (pageNumber > 0) {
+            noteCache.remove(pageNumber - 1); // Remove "page (n-1),n" cache
+        }
     }
-    noteCache.remove(pageNumber);         // Remove "page n,(n+1)" cache
-    noteCache.remove(pageNumber + 1);     // Remove "page (n+1),(n+2)" cache
+    {
+        QMutexLocker locker(&noteCacheMutex);
+        noteCache.remove(pageNumber);         // Remove "page n,(n+1)" cache
+        noteCache.remove(pageNumber + 1);     // Remove "page (n+1),(n+2)" cache
+    }
 
     // Now load fresh from disk (no cache check since we just invalidated)
     loadNotePageToCache(pageNumber);
     
     // Use the newly cached page or initialize buffer if loading failed
     bool loadedFromCache = false;
-    if (noteCache.contains(pageNumber)) {
-        buffer = *noteCache.object(pageNumber);
-        loadedFromCache = true;
-    } else {
+    {
+        QMutexLocker locker(&noteCacheMutex);
+        if (noteCache.contains(pageNumber)) {
+            buffer = *noteCache.object(pageNumber);
+            loadedFromCache = true;
+        }
+    }
+    if (!loadedFromCache) {
         initializeBuffer(); // Clear the canvas if no file exists
         loadedFromCache = false;
     }
@@ -2052,18 +2098,20 @@ void InkCanvas::loadPage(int pageNumber) {
     
     // Handle background image loading (PDF or custom background)
     if (isPdfLoaded && pdfDocument && pageNumber >= 0 && pageNumber < pdfDocument->numPages()) {
-        // Use PDF as background (should already be cached by loadPdfPage)
-        if (pdfCache.contains(pageNumber)) {
-        backgroundImage = *pdfCache.object(pageNumber);
+        // Use PDF as background (should already be cached by loadPdfPage) - thread-safe
+        {
+            QMutexLocker locker(&pdfCacheMutex);
+            if (pdfCache.contains(pageNumber)) {
+                backgroundImage = *pdfCache.object(pageNumber);
             
             // Resize canvas buffer to match PDF page size if needed
             // BUT: Don't resize if we have a combined canvas (double height)
             bool isCombinedCanvas = false;
-            if (buffer.height() >= backgroundImage.height() * 1.8) {
-                isCombinedCanvas = true;
-            }
-            
-            if (!isCombinedCanvas && backgroundImage.size() != buffer.size()) {
+                if (buffer.height() >= backgroundImage.height() * 1.8) {
+                    isCombinedCanvas = true;
+                }
+                
+                if (!isCombinedCanvas && backgroundImage.size() != buffer.size()) {
                 QPixmap newBuffer(backgroundImage.size());
                 newBuffer.fill(Qt::transparent);
 
@@ -2076,9 +2124,13 @@ void InkCanvas::loadPage(int pageNumber) {
                 // The paintEvent will center the PDF content within the widget
             
                 // Update cache with resized buffer
-                noteCache.insert(pageNumber, new QPixmap(buffer));
+                {
+                    QMutexLocker locker(&noteCacheMutex);
+                    noteCache.insert(pageNumber, new QPixmap(buffer));
+                }
             }
         }
+        } // Close pdfCacheMutex scope
     } else {
         // Handle custom background images
         QString bgFileName = saveFolder + QString("/bg_%1_%2.png").arg(notebookId).arg(pageNumber, 5, 10, QChar('0'));
@@ -2113,7 +2165,10 @@ void InkCanvas::loadPage(int pageNumber) {
                 setMaximumSize(bgWidth, bgHeight);
                 
                 // Update cache with resized buffer
-                noteCache.insert(pageNumber, new QPixmap(buffer));
+                {
+                    QMutexLocker locker(&noteCacheMutex);
+                    noteCache.insert(pageNumber, new QPixmap(buffer));
+                }
             }
         } else {
             backgroundImage = QPixmap(); // No background for this page
@@ -2799,6 +2854,8 @@ QString InkCanvas::getSelectedPdfText() const {
 
 void InkCanvas::loadPdfTextBoxes(int pageNumber) {
     // Clear existing text boxes and page number tracking
+    // CRITICAL: Clear selectedTextBoxes first to prevent crashes in paintEvent
+    selectedTextBoxes.clear();  // Must clear before deleting currentPdfTextBoxes
     qDeleteAll(currentPdfTextBoxes);
     currentPdfTextBoxes.clear();
     currentPdfTextBoxPageNumbers.clear();
@@ -3207,15 +3264,18 @@ void InkCanvas::renderPdfPageToCache(int pageNumber) {
         return;
     }
 
-    // Check if already cached
-    if (pdfCache.contains(pageNumber)) {
-        return;
-    }
-    
-    // Ensure the cache holds only 6 pages max
-    if (pdfCache.count() >= 6) {
-        auto oldestKey = pdfCache.keys().first();
-        pdfCache.remove(oldestKey);
+    // Check if already cached and manage cache size (thread-safe)
+    {
+        QMutexLocker locker(&pdfCacheMutex);
+        if (pdfCache.contains(pageNumber)) {
+            return;
+        }
+        
+        // Ensure the cache holds only 6 pages max
+        if (pdfCache.count() >= 6) {
+            auto oldestKey = pdfCache.keys().first();
+            pdfCache.remove(oldestKey);
+        }
     }
     
     // Render current page
@@ -3279,10 +3339,13 @@ void InkCanvas::renderPdfPageToCache(int pageNumber) {
         painter.end();
     }
     
-    // Cache the combined image
+    // Cache the combined image (thread-safe)
     if (!combinedImage.isNull()) {
         QPixmap cachedPixmap = QPixmap::fromImage(combinedImage);
-        pdfCache.insert(pageNumber, new QPixmap(cachedPixmap));
+        {
+            QMutexLocker locker(&pdfCacheMutex);
+            pdfCache.insert(pageNumber, new QPixmap(cachedPixmap));
+        }
     }
 }
 
@@ -3296,11 +3359,15 @@ void InkCanvas::checkAndCacheAdjacentPages(int targetPage) {
     int nextPage = targetPage + 1;
     int nextNextPage = targetPage + 2; // Added for pseudo smooth scrolling
     
-    // Check what needs to be cached
-    bool needPrevPage = isValidPageNumber(prevPage) && !pdfCache.contains(prevPage);
-    bool needCurrentPage = !pdfCache.contains(targetPage);
-    bool needNextPage = isValidPageNumber(nextPage) && !pdfCache.contains(nextPage);
-    bool needNextNextPage = isValidPageNumber(nextNextPage) && !pdfCache.contains(nextNextPage);
+    // Check what needs to be cached (thread-safe)
+    bool needPrevPage, needCurrentPage, needNextPage, needNextNextPage;
+    {
+        QMutexLocker locker(&pdfCacheMutex);
+        needPrevPage = isValidPageNumber(prevPage) && !pdfCache.contains(prevPage);
+        needCurrentPage = !pdfCache.contains(targetPage);
+        needNextPage = isValidPageNumber(nextPage) && !pdfCache.contains(nextPage);
+        needNextNextPage = isValidPageNumber(nextNextPage) && !pdfCache.contains(nextNextPage);
+    }
     
     // If all pages are cached, nothing to do
     if (!needPrevPage && !needCurrentPage && !needNextPage && !needNextNextPage) {
@@ -3345,19 +3412,23 @@ void InkCanvas::cacheAdjacentPages() {
     // Create list of pages to cache asynchronously
     QList<int> pagesToCache;
     
-    // Add previous page if needed
-    if (isValidPageNumber(prevPage) && !pdfCache.contains(prevPage)) {
-        pagesToCache.append(prevPage);
-    }
-    
-    // Add next page if needed
-    if (isValidPageNumber(nextPage) && !pdfCache.contains(nextPage)) {
-        pagesToCache.append(nextPage);
-    }
-    
-    // Add next-next page if needed (for pseudo smooth scrolling)
-    if (isValidPageNumber(nextNextPage) && !pdfCache.contains(nextNextPage)) {
-        pagesToCache.append(nextNextPage);
+    // Add pages that need caching (thread-safe check)
+    {
+        QMutexLocker locker(&pdfCacheMutex);
+        // Add previous page if needed
+        if (isValidPageNumber(prevPage) && !pdfCache.contains(prevPage)) {
+            pagesToCache.append(prevPage);
+        }
+        
+        // Add next page if needed
+        if (isValidPageNumber(nextPage) && !pdfCache.contains(nextPage)) {
+            pagesToCache.append(nextPage);
+        }
+        
+        // Add next-next page if needed (for pseudo smooth scrolling)
+        if (isValidPageNumber(nextNextPage) && !pdfCache.contains(nextNextPage)) {
+            pagesToCache.append(nextNextPage);
+        }
     }
     
     // Cache pages asynchronously
@@ -3392,9 +3463,12 @@ QString InkCanvas::getNotePageFilePath(int pageNumber) const {
 }
 
 void InkCanvas::loadNotePageToCache(int pageNumber) {
-    // Check if already cached
-    if (noteCache.contains(pageNumber)) {
-        return;
+    // Check if already cached (thread-safe)
+    {
+        QMutexLocker locker(&noteCacheMutex);
+        if (noteCache.contains(pageNumber)) {
+            return;
+        }
     }
     
     QString currentFilePath = getNotePageFilePath(pageNumber);
@@ -3402,13 +3476,16 @@ void InkCanvas::loadNotePageToCache(int pageNumber) {
         return;
     }
     
-    // Ensure the cache doesn't exceed its limit
-    if (noteCache.count() >= 6) {
-        // QCache will automatically remove least recently used items
-        // but we can be explicit about it
-        auto keys = noteCache.keys();
-        if (!keys.isEmpty()) {
-            noteCache.remove(keys.first());
+    // Ensure the cache doesn't exceed its limit (thread-safe)
+    {
+        QMutexLocker locker(&noteCacheMutex);
+        if (noteCache.count() >= 6) {
+            // QCache will automatically remove least recently used items
+            // but we can be explicit about it
+            auto keys = noteCache.keys();
+            if (!keys.isEmpty()) {
+                noteCache.remove(keys.first());
+            }
         }
     }
     
@@ -3474,8 +3551,11 @@ void InkCanvas::loadNotePageToCache(int pageNumber) {
         
         painter.end();
         
-        // Cache the combined canvas
-        noteCache.insert(pageNumber, new QPixmap(combinedCanvas));
+        // Cache the combined canvas (thread-safe)
+        {
+            QMutexLocker locker(&noteCacheMutex);
+            noteCache.insert(pageNumber, new QPixmap(combinedCanvas));
+        }
     }
     // If neither file exists, we don't cache anything - loadPage will handle initialization
 }
@@ -3490,11 +3570,15 @@ void InkCanvas::checkAndCacheAdjacentNotePages(int targetPage) {
     int nextPage = targetPage + 1;
     int nextNextPage = targetPage + 2; // Added for pseudo smooth scrolling
     
-    // Check what needs to be cached (we don't have a max page limit for notes)
-    bool needPrevPage = (prevPage >= 0) && !noteCache.contains(prevPage);
-    bool needCurrentPage = !noteCache.contains(targetPage);
-    bool needNextPage = !noteCache.contains(nextPage); // No upper limit check for notes
-    bool needNextNextPage = !noteCache.contains(nextNextPage); // No upper limit check for notes
+    // Check what needs to be cached (we don't have a max page limit for notes) - thread-safe
+    bool needPrevPage, needCurrentPage, needNextPage, needNextNextPage;
+    {
+        QMutexLocker locker(&noteCacheMutex);
+        needPrevPage = (prevPage >= 0) && !noteCache.contains(prevPage);
+        needCurrentPage = !noteCache.contains(targetPage);
+        needNextPage = !noteCache.contains(nextPage); // No upper limit check for notes
+        needNextNextPage = !noteCache.contains(nextNextPage); // No upper limit check for notes
+    }
     
     // If all nearby pages are cached, nothing to do
     if (!needPrevPage && !needCurrentPage && !needNextPage && !needNextNextPage) {
@@ -3539,19 +3623,23 @@ void InkCanvas::cacheAdjacentNotePages() {
     // Create list of note pages to cache asynchronously
     QList<int> notePagesToCache;
     
-    // Add previous page if needed (check for >= 0 since notes can start from page 0)
-    if (prevPage >= 0 && !noteCache.contains(prevPage)) {
-        notePagesToCache.append(prevPage);
-    }
-    
-    // Add next page if needed (no upper limit check for notes)
-    if (!noteCache.contains(nextPage)) {
-        notePagesToCache.append(nextPage);
-    }
-    
-    // Add next-next page if needed (for pseudo smooth scrolling)
-    if (!noteCache.contains(nextNextPage)) {
-        notePagesToCache.append(nextNextPage);
+    // Add pages that need caching (thread-safe check)
+    {
+        QMutexLocker locker(&noteCacheMutex);
+        // Add previous page if needed (check for >= 0 since notes can start from page 0)
+        if (prevPage >= 0 && !noteCache.contains(prevPage)) {
+            notePagesToCache.append(prevPage);
+        }
+        
+        // Add next page if needed (no upper limit check for notes)
+        if (!noteCache.contains(nextPage)) {
+            notePagesToCache.append(nextPage);
+        }
+        
+        // Add next-next page if needed (for pseudo smooth scrolling)
+        if (!noteCache.contains(nextNextPage)) {
+            notePagesToCache.append(nextNextPage);
+        }
     }
     
     // Cache note pages asynchronously
@@ -3578,6 +3666,7 @@ void InkCanvas::cacheAdjacentNotePages() {
 
 void InkCanvas::invalidateCurrentPageCache() {
     if (currentCachedNotePage >= 0) {
+        QMutexLocker locker(&noteCacheMutex);
         noteCache.remove(currentCachedNotePage);
     }
 }
@@ -4550,16 +4639,25 @@ void InkCanvas::checkAutoscrollThreshold(int oldPanY, int newPanY) {
     int threshold = singlePageHeight;
     
     // Define early save trigger zones (save when getting close to threshold)
-    int forwardSaveZone = threshold - 100;  // Save 100 pixels before forward threshold
-    int backwardSaveZone = 100;             // Save when 100 pixels into negative territory
+    int forwardSaveZone = threshold - 300;  // Save 300 pixels before forward threshold
+    int backwardSaveZone = -5;  // Save 5 pixels into negative territory for better timing on slower devices
+    int backwardSwitchThreshold = -300;  // Delay backward page switch to -300 pixels for save completion
+    
+    // Safety check: ensure we have a reasonable threshold size for our offsets
+    if (threshold < 600) {
+        // For very small thresholds, use proportional offsets instead of fixed 300px
+        forwardSaveZone = threshold - (threshold / 4);
+        backwardSaveZone = -(threshold / 4);
+        backwardSwitchThreshold = -(threshold / 4);
+    }
     
     // Proactive save triggers - save before reaching the actual scroll threshold
     if (edited && oldPanY < forwardSaveZone && newPanY >= forwardSaveZone) {
         // Approaching forward threshold - trigger save early
         emit earlySaveRequested();
     }
-    if (edited && oldPanY > -backwardSaveZone && newPanY <= -backwardSaveZone) {
-        // Approaching backward threshold - trigger save early  
+    if (edited && oldPanY > backwardSaveZone && newPanY <= backwardSaveZone) {
+        // Approaching backward threshold - trigger save early (much earlier now)
         emit earlySaveRequested();
     }
     
@@ -4568,9 +4666,10 @@ void InkCanvas::checkAutoscrollThreshold(int oldPanY, int newPanY) {
         emit autoScrollRequested(1); // 1 for forward
     }
     
-    // Check for backward autoscroll (scrolling up past 0 into negative territory)
-    if (oldPanY >= 0 && newPanY < 0) {
-        emit autoScrollRequested(-1); // -1 for backward
+    // Check for backward autoscroll (scrolling up past -300 for delayed switching)
+    // This gives more time for the save operation to complete on slower devices
+    if (oldPanY > backwardSwitchThreshold && newPanY <= backwardSwitchThreshold) {
+        emit autoScrollRequested(-1); // -1 for backward (delayed until -300)
     }
 }
 

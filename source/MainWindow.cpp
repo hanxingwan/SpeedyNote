@@ -1518,14 +1518,21 @@ void MainWindow::switchPage(int pageNumber) {
                     if (panYSlider) panYSlider->setValue(0);
                 });
             } else if (pageNumber < oldPage) {
-                // Backward page switching → scroll to just before the threshold
+                // Backward page switching → scroll to threshold - offset to match the new switch point
                 QTimer::singleShot(0, this, [this, canvas]() {
                     if (panYSlider && canvas) {
                         int threshold = canvas->getAutoscrollThreshold();
                         if (threshold > 0) {
-                            // A small offset to avoid being exactly on the edge and re-triggering
-                            int offset = 20;
-                            int targetPan = (threshold > offset) ? (threshold - offset) : 0;
+                            // Calculate the backward switch offset (matching InkCanvas logic)
+                            int backwardOffset = 300;
+                            if (threshold < 600) {
+                                // For small thresholds, use proportional offset
+                                backwardOffset = threshold / 4;
+                            }
+                            // Position at threshold - offset to match the new backward switch threshold
+                            int targetPan = threshold - backwardOffset;
+                            // Ensure we don't go negative if threshold is too small
+                            targetPan = qMax(0, targetPan);
                             panYSlider->setValue(targetPan);
                         } else {
                             // Fallback for non-combined canvases or error cases
@@ -1575,14 +1582,21 @@ void MainWindow::switchPageWithDirection(int pageNumber, int direction) {
                     if (panYSlider) panYSlider->setValue(0);
                 });
             } else if (direction < 0) {
-                // Backward page switching → scroll to just before the threshold
+                // Backward page switching → scroll to threshold - offset to match the new switch point
                 QTimer::singleShot(0, this, [this, canvas]() {
                     if (panYSlider && canvas) {
                         int threshold = canvas->getAutoscrollThreshold();
                         if (threshold > 0) {
-                            // A small offset to avoid being exactly on the edge and re-triggering
-                            int offset = 20;
-                            int targetPan = (threshold > offset) ? (threshold - offset) : 0;
+                            // Calculate the backward switch offset (matching InkCanvas logic)
+                            int backwardOffset = 300;
+                            if (threshold < 600) {
+                                // For small thresholds, use proportional offset
+                                backwardOffset = threshold / 4;
+                            }
+                            // Position at threshold - offset to match the new backward switch threshold
+                            int targetPan = threshold - backwardOffset;
+                            // Ensure we don't go negative if threshold is too small
+                            targetPan = qMax(0, targetPan);
                             panYSlider->setValue(targetPan);
                         } else {
                             // Fallback for non-combined canvases or error cases
@@ -1886,9 +1900,10 @@ void MainWindow::updatePanRange() {
         int minPanY = 0;
         if (canvas && canvas->getAutoscrollThreshold() > 0) {
             // For combined canvases, allow negative pan Y for backward scrolling
-            // Set negative range to about 10% of a single page height
             int threshold = canvas->getAutoscrollThreshold();
-            minPanY = -(threshold / 10); // Allow scrolling up to trigger backward navigation
+            // Calculate the required negative range based on the dynamic backward switch threshold
+            int backwardOffset = (threshold < 600) ? (threshold / 4) : 300;
+            minPanY = qMin(-backwardOffset, -(threshold / 10)); // Ensure we can reach the switch threshold
         }
         
         panYSlider->setRange(minPanY, maxPanY_scaled);
