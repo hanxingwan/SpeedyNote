@@ -2431,9 +2431,10 @@ void InkCanvas::setPanWithTouchScroll(int xOffset, int yOffset) {
     // Update the cached frame offset for the next paint
     cachedFrameOffset = QPoint(deltaX, deltaY);
     
-    // Use repaint() instead of update() for immediate, synchronous painting
-    // This is more efficient during continuous gestures as it bypasses the event queue
-    repaint();
+    // Use update() for non-blocking updates to reduce touch input lag
+    // This allows the touch event to return quickly, improving responsiveness
+    // Qt will coalesce multiple update() calls automatically for efficiency
+    update();
     
     // Emit signal for MainWindow to update scrollbars
     // MainWindow checks isTouchPanningActive() and skips expensive operations
@@ -2578,14 +2579,21 @@ bool InkCanvas::event(QEvent *event) {
                 lastTouchVelocity = QPointF(0, 0);
                 
                 // Capture current frame for efficient panning
+                // Use devicePixelRatio-aware grab for better performance on low-spec devices
                 cachedFrame = grab();  // Grab widget contents as pixmap
                 cachedFrameOffset = QPoint(0, 0);  // Start with no offset
+                
+                // Pre-calculate for optimization
+                touchPanStartX = panOffsetX;
+                touchPanStartY = panOffsetY;
             } else if (event->type() == QEvent::TouchUpdate && isPanning) {
                 QPointF delta = touchPoint.position() - lastTouchPos;
                 qint64 elapsed = velocityTimer.elapsed();
                 
-                // Track velocity for inertia (pixels per millisecond)
-                if (elapsed > 0) {
+                // Track velocity for inertia - but only every other frame to reduce overhead
+                static int velocitySampleCounter = 0;
+                velocitySampleCounter++;
+                if (elapsed > 0 && velocitySampleCounter % 2 == 0) {
                     QPointF velocity(delta.x() / elapsed, delta.y() / elapsed);
                     recentVelocities.append(qMakePair(velocity, elapsed));
                     

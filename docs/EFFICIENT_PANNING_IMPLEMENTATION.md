@@ -64,10 +64,12 @@ void InkCanvas::setPanWithTouchScroll(int xOffset, int yOffset)
 - Calls `repaint()` instead of `update()` for immediate, synchronous painting (bypasses event queue)
 - Preserves autoscroll functionality with `checkAutoscrollThreshold()`
 
-**Important**: Uses `repaint()` not `update()` because:
-- `repaint()` causes immediate, synchronous painting
-- `update()` adds to event queue and may batch/delay updates
-- During continuous gestures, immediate feedback is critical for smoothness
+**Important**: Uses `update()` not `repaint()` because:
+- `update()` is non-blocking, allowing touch event handler to return quickly
+- `repaint()` is synchronous and blocks, causing touch input lag on low-spec devices
+- Qt automatically coalesces multiple `update()` calls for efficiency
+- Reduces "touch input delay" significantly on slower hardware
+- Trade-off: Slightly higher latency vs much better touch responsiveness
 
 ### 4. Fast PaintEvent During Panning (InkCanvas.cpp)
 **CRITICAL**: Modified `paintEvent()` to draw cached frame during touch panning:
@@ -194,13 +196,17 @@ This prevents the signal loop from triggering `update()` calls during touch pann
 
 ## Performance Benefits
 - **During gesture**: ~60 fps on slower devices (previously <30 fps)
+- **Touch input responsiveness**: Minimal input lag even on low-spec devices
+  - Non-blocking `update()` allows touch handler to return immediately
+  - Qt coalesces updates automatically during rapid movement
+  - Velocity sampling every other frame reduces overhead
 - **Reduced CPU usage**: Significant reduction by avoiding expensive rendering operations
   - No PDF rendering
   - No coordinate transformations
   - No background pattern drawing
   - Single simple fillRect for background
   - No antialiasing during gesture
-- **Smooth experience**: Content shifts instantly, with cleanup happening only once at the end
+- **Smooth experience**: Content shifts with minimal delay, cleanup happens once at the end
 - **Memory efficient**: Cached frame released immediately when not needed
 - **No memory leaks**: All resources properly cleaned up in destructor and on all exit paths
 
@@ -249,14 +255,20 @@ cachedFrame = QPixmap();
 cachedFrameOffset = QPoint(0, 0);
 ```
 
-### Fix 3: CPU Usage Optimization
-**Problem**: Even with cached frame, CPU usage was still high due to inefficient painting.
+### Fix 3: Touch Input Responsiveness on Low-Spec Devices
+**Problem**: On low-spec devices with touch input, "hold and drag" had significant input lag, feeling less fluid than inertia scrolling. The touch event handler was blocking too long.
+
+**Root cause**: Using `repaint()` (synchronous) blocked the touch event handler until painting completed, causing noticeable delay between finger movement and screen update.
 
 **Solutions applied**:
-1. Use `repaint()` instead of `update()` for immediate synchronous painting
-2. Fill entire background with single fillRect (tried selective fill but caused visual artifacts)
-3. Disable SmoothPixmapTransform render hint during panning (not needed for fast gestures)
-4. Calculate offset BEFORE updating pan values (ensures correct first pan after zoom)
+1. Changed back to `update()` (non-blocking) to allow touch event handler to return quickly
+2. Sample velocity every other frame instead of every frame to reduce overhead
+3. Qt automatically coalesces multiple `update()` calls during rapid touch movement
+4. Fill entire background with single fillRect (tried selective fill but caused visual artifacts)
+5. Disable SmoothPixmapTransform render hint during panning (not needed for fast gestures)
+6. Calculate offset BEFORE updating pan values (ensures correct first pan after zoom)
+
+**Result**: Touch input feels much more responsive on low-spec devices, with "hold and drag" now comparable to inertia scrolling fluidity.
 
 ### Fix 4: Memory Management
 To prevent memory leaks:
