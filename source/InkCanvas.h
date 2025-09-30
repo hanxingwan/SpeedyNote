@@ -81,6 +81,8 @@ public:
 
     void setPanX(int xOffset);  // Setter for panOffsetX
     void setPanY(int yOffset);  // Setter for panOffsetY
+    
+    void setPanWithTouchScroll(int xOffset, int yOffset);  // Efficient pan update for touch gestures
 
     void loadPdf(const QString &pdfPath);
     void loadPdfPage(int pageNumber);
@@ -168,6 +170,7 @@ public:
     // Touch gesture support
     void setTouchGesturesEnabled(bool enabled) { touchGesturesEnabled = enabled; }
     bool areTouchGesturesEnabled() const { return touchGesturesEnabled; }
+    bool isTouchPanningActive() const { return isTouchPanning; } // Check if actively touch panning
 
     // Rope tool selection actions
     void deleteRopeSelection(); // Delete the current rope tool selection
@@ -372,6 +375,27 @@ private:
     qreal lastPinchScale = 1.0;
     bool isPanning = false;
     int activeTouchPoints = 0;
+    
+    // Efficient touch pan scrolling (Squid-style optimization)
+    bool isTouchPanning = false; // True when actively panning with touch (not mouse wheel)
+    QPixmap cachedFrame; // Cached frame for efficient touch panning
+    QPoint cachedFrameOffset; // Offset of cached frame during panning
+    int touchPanStartX = 0; // Pan X value when touch gesture started
+    int touchPanStartY = 0; // Pan Y value when touch gesture started
+    
+    // Inertia scrolling (momentum scrolling)
+    QTimer* inertiaTimer = nullptr; // Timer for inertia animation
+    qreal inertiaVelocityX = 0.0; // Current inertia velocity X
+    qreal inertiaVelocityY = 0.0; // Current inertia velocity Y
+    qreal inertiaPanX = 0.0; // Smooth pan X with sub-pixel precision
+    qreal inertiaPanY = 0.0; // Smooth pan Y with sub-pixel precision
+    QPointF lastTouchVelocity; // Last measured velocity for inertia
+    QElapsedTimer velocityTimer; // Timer for velocity calculation
+    QList<QPair<QPointF, qint64>> recentVelocities; // Recent velocities for smoothing
+    
+    // Page switch cooldown during inertia
+    QElapsedTimer pageSwitchCooldown; // Prevents rapid page switches during inertia
+    bool pageSwitchInProgress = false; // True when waiting for page switch to complete
 
     // Background style members (moved to unified JSON metadata section above)
 
@@ -458,6 +482,7 @@ private slots:
     void processPendingTextSelection(); // Process pending text selection updates (throttled to 60 FPS)
     void cacheAdjacentPages(); // Cache adjacent pages after delay
     void cacheAdjacentNotePages(); // Cache adjacent note pages after delay
+    void updateInertiaScroll(); // Update inertia scrolling animation
 };
 
 #endif // INKCANVAS_H
