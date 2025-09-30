@@ -112,6 +112,11 @@ InkCanvas::InkCanvas(QWidget *parent)
     // Connect pan/zoom signals to update picture window positions
     connect(this, &InkCanvas::panChanged, pictureManager, &PictureWindowManager::updateAllWindowPositions);
     connect(this, &InkCanvas::zoomChanged, pictureManager, &PictureWindowManager::updateAllWindowPositions);
+    
+    // Initialize inertia scrolling timer (60 FPS for smooth animation)
+    inertiaTimer = new QTimer(this);
+    inertiaTimer->setInterval(16); // ~60 FPS
+    connect(inertiaTimer, &QTimer::timeout, this, &InkCanvas::updateInertiaScroll);
 }
 
 InkCanvas::~InkCanvas() {
@@ -158,6 +163,14 @@ InkCanvas::~InkCanvas() {
         pdfTextSelectionTimer->stop();
         // Timer will be deleted automatically as child of this
     }
+    if (inertiaTimer) {
+        inertiaTimer->stop();
+        // Timer will be deleted automatically as child of this
+    }
+    
+    // ✅ Clear inertia scrolling resources
+    cachedFrame = QPixmap(); // Release cached frame memory
+    recentVelocities.clear(); // Clear velocity history
     
     // ✅ Cancel and clean up any active PDF watchers
     for (QFutureWatcher<void>* watcher : activePdfWatchers) {
@@ -488,6 +501,17 @@ void InkCanvas::resizeEvent(QResizeEvent *event) {
 
 void InkCanvas::paintEvent(QPaintEvent *event) {
     QPainter painter(this);
+    
+    // ⚡ SQUID-STYLE OPTIMIZATION: During touch panning, draw cached frame shifted by pan delta
+    if (isTouchPanning && !cachedFrame.isNull()) {
+        // Fill entire background (simpler and avoids visual artifacts)
+        painter.fillRect(rect(), palette().window().color());
+        
+        // Draw the cached frame at the offset position (no antialiasing for speed)
+        painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
+        painter.drawPixmap(cachedFrameOffset, cachedFrame);
+        return; // Skip expensive rendering during gesture
+    }
     
     // Save the painter state before transformations
     painter.save();
@@ -2341,7 +2365,12 @@ void InkCanvas::setZoom(int zoomLevel) {
     if (zoomFactor != newZoom) {
         zoomFactor = newZoom;
         internalZoomFactor = zoomFactor; // Sync internal zoom
-    update();
+        
+        // Clear cached frame when zoom changes to avoid mismatched zoom levels
+        cachedFrame = QPixmap();
+        cachedFrameOffset = QPoint(0, 0);
+        
+        update();
         emit zoomChanged(zoomFactor);
     }
 }
@@ -2380,6 +2409,38 @@ void InkCanvas::setPanY(int value) {
         emit panChanged(panOffsetX, panOffsetY);
         checkAutoscrollThreshold(oldPanOffsetY, value);
     }
+}
+
+void InkCanvas::setPanWithTouchScroll(int xOffset, int yOffset) {
+    // Squid-style efficient panning: draw cached frame shifted by pan delta
+    // This method is ONLY called during active touch panning gestures
+    
+    if (panOffsetX == xOffset && panOffsetY == yOffset) {
+        return; // No change
+    }
+    
+    int oldPanOffsetY = panOffsetY;
+    
+    // Calculate pixel delta BEFORE updating pan offsets (important for first pan after zoom)
+    int deltaX = -(xOffset - touchPanStartX) * (internalZoomFactor / 100.0);
+    int deltaY = -(yOffset - touchPanStartY) * (internalZoomFactor / 100.0);
+    
+    panOffsetX = xOffset;
+    panOffsetY = yOffset;
+    
+    // Update the cached frame offset for the next paint
+    cachedFrameOffset = QPoint(deltaX, deltaY);
+    
+    // Use repaint() instead of update() for immediate, synchronous painting
+    // This is more efficient during continuous gestures as it bypasses the event queue
+    repaint();
+    
+    // Emit signal for MainWindow to update scrollbars
+    // MainWindow checks isTouchPanningActive() and skips expensive operations
+    emit panChanged(panOffsetX, panOffsetY);
+    
+    // Check autoscroll threshold for page flipping
+    checkAutoscrollThreshold(oldPanOffsetY, yOffset);
 }
 
 bool InkCanvas::isPdfLoadedFunc() const {
@@ -2494,10 +2555,46 @@ bool InkCanvas::event(QEvent *event) {
             const QTouchEvent::TouchPoint &touchPoint = touchPoints.first();
             
             if (event->type() == QEvent::TouchBegin) {
+                // Stop any ongoing inertia
+                if (inertiaTimer->isActive()) {
+                    inertiaTimer->stop();
+                    cachedFrame = QPixmap(); // Clear old cache
+                }
+                
+                // Reset page switch cooldown
+                pageSwitchInProgress = false;
+                
                 isPanning = true;
+                isTouchPanning = true;  // Enable efficient scrolling mode
                 lastTouchPos = touchPoint.position();
+                
+                // Store starting pan position
+                touchPanStartX = panOffsetX;
+                touchPanStartY = panOffsetY;
+                
+                // Initialize velocity tracking
+                velocityTimer.start();
+                recentVelocities.clear();
+                lastTouchVelocity = QPointF(0, 0);
+                
+                // Capture current frame for efficient panning
+                cachedFrame = grab();  // Grab widget contents as pixmap
+                cachedFrameOffset = QPoint(0, 0);  // Start with no offset
             } else if (event->type() == QEvent::TouchUpdate && isPanning) {
                 QPointF delta = touchPoint.position() - lastTouchPos;
+                qint64 elapsed = velocityTimer.elapsed();
+                
+                // Track velocity for inertia (pixels per millisecond)
+                if (elapsed > 0) {
+                    QPointF velocity(delta.x() / elapsed, delta.y() / elapsed);
+                    recentVelocities.append(qMakePair(velocity, elapsed));
+                    
+                    // Keep only last 5 velocity samples for smoothing
+                    if (recentVelocities.size() > 5) {
+                        recentVelocities.removeFirst();
+                    }
+                }
+                velocityTimer.restart();
                 
                 // Make panning more responsive by using floating-point calculations
                 qreal scaledDeltaX = delta.x() / (internalZoomFactor / 100.0);
@@ -2519,14 +2616,17 @@ bool InkCanvas::event(QEvent *event) {
                     newPanY = 0;
                 }
                 
-                // Emit signal with integer values for compatibility
-                emit panChanged(qRound(newPanX), qRound(newPanY));
+                // Use efficient scrolling during touch gesture
+                int roundedPanX = qRound(newPanX);
+                int roundedPanY = qRound(newPanY);
+                setPanWithTouchScroll(roundedPanX, roundedPanY);
                 
                 lastTouchPos = touchPoint.position();
             }
         } else if (activeTouchPoints == 2) {
             // Two finger pinch zoom
             isPanning = false;
+            isTouchPanning = false;  // Disable efficient scrolling during pinch-zoom
             
             const QTouchEvent::TouchPoint &touch1 = touchPoints[0];
             const QTouchEvent::TouchPoint &touch2 = touchPoints[1];
@@ -2574,6 +2674,10 @@ bool InkCanvas::event(QEvent *event) {
                 // Emit zoom change even for small changes
                 emit zoomChanged(newZoom);
                 
+                // Clear cached frame when zoom changes during pinch gesture
+                cachedFrame = QPixmap();
+                cachedFrameOffset = QPoint(0, 0);
+                
                 // Adjust pan to keep center point fixed with sub-pixel precision
                 qreal newPanX = bufferCenter.x() - adjustedCenter.x() / (internalZoomFactor / 100.0);
                 qreal newPanY = bufferCenter.y() - adjustedCenter.y() / (internalZoomFactor / 100.0);
@@ -2599,6 +2703,7 @@ bool InkCanvas::event(QEvent *event) {
         } else {
             // More than 2 fingers - ignore
             isPanning = false;
+            isTouchPanning = false;  // Disable efficient scrolling
         }
         
         if (event->type() == QEvent::TouchEnd) {
@@ -2607,6 +2712,55 @@ bool InkCanvas::event(QEvent *event) {
             activeTouchPoints = 0;
             // Sync internal zoom with actual zoom
             internalZoomFactor = zoomFactor;
+            
+            // Start inertia scrolling if there's sufficient velocity
+            if (isTouchPanning && !recentVelocities.isEmpty()) {
+                // Calculate average velocity from recent samples (weighted by time)
+                QPointF avgVelocity(0, 0);
+                qreal totalWeight = 0;
+                for (const auto &sample : recentVelocities) {
+                    qreal weight = sample.second; // More recent samples have similar weight
+                    avgVelocity += sample.first * weight;
+                    totalWeight += weight;
+                }
+                if (totalWeight > 0) {
+                    avgVelocity /= totalWeight;
+                }
+                
+                // Convert velocity from pixels/ms to canvas units/ms (accounting for zoom)
+                avgVelocity /= (internalZoomFactor / 100.0);
+                
+                // Minimum velocity threshold for inertia (canvas units per ms)
+                const qreal minVelocity = 0.1; // Adjust for sensitivity
+                qreal velocityMagnitude = std::sqrt(avgVelocity.x() * avgVelocity.x() + 
+                                                     avgVelocity.y() * avgVelocity.y());
+                
+                if (velocityMagnitude > minVelocity) {
+                    // Start inertia with the calculated velocity
+                    inertiaVelocityX = avgVelocity.x();
+                    inertiaVelocityY = avgVelocity.y();
+                    inertiaPanX = panOffsetX;
+                    inertiaPanY = panOffsetY;
+                    
+                    // Keep the cached frame for inertia animation
+                    // Don't clear isTouchPanning yet - inertia will use it
+                    inertiaTimer->start();
+                } else {
+                    // No significant velocity, end immediately
+                    isTouchPanning = false;
+                    cachedFrame = QPixmap();
+                    cachedFrameOffset = QPoint(0, 0);
+                    update();
+                }
+            } else {
+                // No inertia, end immediately
+                if (isTouchPanning) {
+                    isTouchPanning = false;
+                    cachedFrame = QPixmap();
+                    cachedFrameOffset = QPoint(0, 0);
+                    update();
+                }
+            }
             
             // Emit signal that touch gesture has ended
             emit touchGestureEnded();
@@ -2617,6 +2771,53 @@ bool InkCanvas::event(QEvent *event) {
     }
     
     return QWidget::event(event);
+}
+
+void InkCanvas::updateInertiaScroll() {
+    // Deceleration factor (friction) - higher value = faster slowdown
+    const qreal friction = 0.92; // Retain 92% of velocity each frame (smooth deceleration)
+    const qreal minVelocity = 0.05; // Stop when velocity is very small
+    
+    // Apply friction
+    inertiaVelocityX *= friction;
+    inertiaVelocityY *= friction;
+    
+    // Check if velocity is too small to continue
+    qreal velocityMagnitude = std::sqrt(inertiaVelocityX * inertiaVelocityX + 
+                                         inertiaVelocityY * inertiaVelocityY);
+    
+    if (velocityMagnitude < minVelocity) {
+        // Stop inertia
+        inertiaTimer->stop();
+        isTouchPanning = false;
+        pageSwitchInProgress = false; // Reset page switch cooldown
+        cachedFrame = QPixmap();
+        cachedFrameOffset = QPoint(0, 0);
+        update(); // Final full redraw
+        return;
+    }
+    
+    // Update pan position (velocity is in canvas units per ms, timer is ~16ms)
+    inertiaPanX -= inertiaVelocityX * 16.0; // 16ms per frame at 60fps
+    inertiaPanY -= inertiaVelocityY * 16.0;
+    
+    // Clamp pan values
+    qreal scaledCanvasWidth = buffer.width() * (internalZoomFactor / 100.0);
+    qreal scaledCanvasHeight = buffer.height() * (internalZoomFactor / 100.0);
+    
+    if (scaledCanvasWidth < width()) {
+        inertiaPanX = 0;
+    }
+    if (scaledCanvasHeight < height()) {
+        inertiaPanY = 0;
+    }
+    
+    // Update pan offsets and trigger repaint
+    int newPanX = qRound(inertiaPanX);
+    int newPanY = qRound(inertiaPanY);
+    
+    // Use setPanWithTouchScroll for efficient rendering during inertia
+    setPanWithTouchScroll(newPanX, newPanY);
 }
 
 // Helper function to map LOGICAL widget coordinates to PHYSICAL buffer coordinates
@@ -4635,6 +4836,14 @@ void InkCanvas::checkAutoscrollThreshold(int oldPanY, int newPanY) {
         return; 
     }
     
+    // During inertia scrolling, enforce cooldown to prevent rapid page switches
+    if (isTouchPanning && inertiaTimer && inertiaTimer->isActive()) {
+        // Check if we're in cooldown period (500ms after last page switch)
+        if (pageSwitchInProgress && pageSwitchCooldown.isValid() && pageSwitchCooldown.elapsed() < 500) {
+            return; // Skip autoscroll checks during cooldown
+        }
+    }
+    
     // Threshold for autoscroll is the bottom of the first page in the combined view
     int threshold = singlePageHeight;
     
@@ -4664,12 +4873,36 @@ void InkCanvas::checkAutoscrollThreshold(int oldPanY, int newPanY) {
     // Check for forward autoscroll (scrolling down past the first page)
     if (oldPanY < threshold && newPanY >= threshold) {
         emit autoScrollRequested(1); // 1 for forward
+        
+        // Stop inertia during page switch to allow proper pan reset
+        if (isTouchPanning && inertiaTimer && inertiaTimer->isActive()) {
+            inertiaTimer->stop();
+            isTouchPanning = false;
+            pageSwitchInProgress = true;
+            pageSwitchCooldown.start();
+            
+            // Clear cached frame - page switch will load new content
+            cachedFrame = QPixmap();
+            cachedFrameOffset = QPoint(0, 0);
+        }
     }
     
     // Check for backward autoscroll (scrolling up past -300 for delayed switching)
     // This gives more time for the save operation to complete on slower devices
     if (oldPanY > backwardSwitchThreshold && newPanY <= backwardSwitchThreshold) {
         emit autoScrollRequested(-1); // -1 for backward (delayed until -300)
+        
+        // Stop inertia during page switch to allow proper pan reset
+        if (isTouchPanning && inertiaTimer && inertiaTimer->isActive()) {
+            inertiaTimer->stop();
+            isTouchPanning = false;
+            pageSwitchInProgress = true;
+            pageSwitchCooldown.start();
+            
+            // Clear cached frame - page switch will load new content
+            cachedFrame = QPixmap();
+            cachedFrameOffset = QPoint(0, 0);
+        }
     }
 }
 

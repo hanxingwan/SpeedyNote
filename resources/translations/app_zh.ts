@@ -675,8 +675,8 @@
     </message>
     <message>
         <location filename="../../source/ControlPanelDialog.cpp" line="741"/>
-        <source>Version 0.10.0</source>
-        <translation type="unfinished">0.10.0 公测版</translation>
+        <source>Version 0.10.1</source>
+        <translation type="unfinished">0.10.1 公测版</translation>
     </message>
     <message>
         <location filename="../../source/ControlPanelDialog.cpp" line="793"/>
@@ -1989,8 +1989,8 @@ Would you like to save it as a SpeedyNote Package (.spn) file before closing?</s
     </message>
     <message>
         <location filename="../../source/MainWindow.cpp" line="88"/>
-        <source>SpeedyNote Beta 0.10.0</source>
-        <translation type="unfinished">极疾记 Beta 0.10.0</translation>
+        <source>SpeedyNote Beta 0.10.1</source>
+        <translation type="unfinished">极疾记 Beta 0.10.1</translation>
     </message>
     <message>
         <location filename="../../source/MainWindow.cpp" line="219"/>

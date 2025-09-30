@@ -85,7 +85,7 @@ void setupLinuxSignalHandlers() {
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false), localServer(nullptr) {
 
-    setWindowTitle(tr("SpeedyNote Beta 0.10.0"));
+    setWindowTitle(tr("SpeedyNote Beta 0.10.1"));
 
 #ifdef Q_OS_LINUX
     // Setup signal handlers for proper cleanup on Linux
@@ -4935,17 +4935,36 @@ void MainWindow::handleTouchPanChange(int panX, int panY) {
     }
     scrollbarsVisible = true;
     
-    // Update sliders - allow panY signals for autoscroll, block panX to avoid redundancy
-    panXSlider->blockSignals(true);
-    panXSlider->setValue(panX);
-    panXSlider->blockSignals(false);
-    
-    // For panY: DON'T block signals so it triggers the same autoscroll flow as mouse wheel
-    panYSlider->setValue(panY); // This will trigger updatePanY() -> setPanY() -> autoscroll logic
-    
-    // Update canvas X pan directly (Y pan is handled by the setValue signal above)
     InkCanvas *canvas = currentCanvas();
-    if (canvas) {
+    if (!canvas) return;
+    
+    // ⚡ OPTIMIZATION: During touch panning, only update sliders (don't call setPanX/setPanY)
+    // The pan offsets are already set by setPanWithTouchScroll() in InkCanvas
+    // Calling setPanX/setPanY would trigger update() and defeat the optimization
+    if (canvas->isTouchPanningActive()) {
+        // Just update the slider positions without triggering canvas updates
+        panXSlider->blockSignals(true);
+        panXSlider->setValue(panX);
+        panXSlider->blockSignals(false);
+        
+        panYSlider->blockSignals(true);
+        panYSlider->setValue(panY);
+        panYSlider->blockSignals(false);
+        
+        // Store the pan values for later use
+        canvas->setLastPanX(panX);
+        canvas->setLastPanY(panY);
+    } else {
+        // Normal flow for non-touch panning (mouse wheel, etc.)
+        // Update sliders - allow panY signals for autoscroll, block panX to avoid redundancy
+        panXSlider->blockSignals(true);
+        panXSlider->setValue(panX);
+        panXSlider->blockSignals(false);
+        
+        // For panY: DON'T block signals so it triggers the same autoscroll flow as mouse wheel
+        panYSlider->setValue(panY); // This will trigger updatePanY() -> setPanY() -> autoscroll logic
+        
+        // Update canvas X pan directly (Y pan is handled by the setValue signal above)
         canvas->setPanX(panX);
         canvas->setLastPanX(panX);
         // Note: panY is handled by panYSlider->setValue() signal flow above
