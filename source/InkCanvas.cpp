@@ -170,6 +170,7 @@ InkCanvas::~InkCanvas() {
     
     // ✅ Clear inertia scrolling resources
     cachedFrame = QPixmap(); // Release cached frame memory
+    cachedFrameScale = 1.0; // Reset scale
     recentVelocities.clear(); // Clear velocity history
     
     // ✅ Cancel and clean up any active PDF watchers
@@ -507,9 +508,24 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
         // Fill entire background (simpler and avoids visual artifacts)
         painter.fillRect(rect(), palette().window().color());
         
-        // Draw the cached frame at the offset position (no antialiasing for speed)
-        painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
-        painter.drawPixmap(cachedFrameOffset, cachedFrame);
+        // Draw the cached frame at the offset position
+        if (cachedFrameScale < 1.0) {
+            // Half-resolution cache: scale up 2x when drawing
+            // Use smooth transform for better quality when upscaling from half-res
+            painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+            
+            // Scale offset by the inverse of cache scale (2x for 0.5 scale)
+            qreal scaleMultiplier = 1.0 / cachedFrameScale;
+            QPoint scaledOffset = cachedFrameOffset * scaleMultiplier;
+            
+            // Draw pixmap scaled up to full size
+            QRect targetRect(scaledOffset, cachedFrame.size() * scaleMultiplier);
+            painter.drawPixmap(targetRect, cachedFrame);
+        } else {
+            // Full-resolution cache: draw directly (no antialiasing for speed)
+            painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
+            painter.drawPixmap(cachedFrameOffset, cachedFrame);
+        }
         return; // Skip expensive rendering during gesture
     }
     
@@ -2369,6 +2385,7 @@ void InkCanvas::setZoom(int zoomLevel) {
         // Clear cached frame when zoom changes to avoid mismatched zoom levels
         cachedFrame = QPixmap();
         cachedFrameOffset = QPoint(0, 0);
+        cachedFrameScale = 1.0;
         
         update();
         emit zoomChanged(zoomFactor);
@@ -2429,7 +2446,8 @@ void InkCanvas::setPanWithTouchScroll(int xOffset, int yOffset) {
     panOffsetY = yOffset;
     
     // Update the cached frame offset for the next paint
-    cachedFrameOffset = QPoint(deltaX, deltaY);
+    // Scale offset based on cached frame scale (0.5 for half-res, 1.0 for full-res)
+    cachedFrameOffset = QPoint(deltaX * cachedFrameScale, deltaY * cachedFrameScale);
     
     // Use update() for non-blocking updates to reduce touch input lag
     // This allows the touch event to return quickly, improving responsiveness
@@ -2560,6 +2578,7 @@ bool InkCanvas::event(QEvent *event) {
                 if (inertiaTimer->isActive()) {
                     inertiaTimer->stop();
                     cachedFrame = QPixmap(); // Clear old cache
+                    cachedFrameScale = 1.0;
                 }
                 
                 // Reset page switch cooldown
@@ -2579,8 +2598,31 @@ bool InkCanvas::event(QEvent *event) {
                 lastTouchVelocity = QPointF(0, 0);
                 
                 // Capture current frame for efficient panning
-                // Use devicePixelRatio-aware grab for better performance on low-spec devices
-                cachedFrame = grab();  // Grab widget contents as pixmap
+                // ⚡ RESOLUTION-BASED OPTIMIZATION: Use half-res cache for large displays
+                // On displays >= 1920x1080, capture at 0.5x scale to reduce pixel operations by 4x
+                bool useLowResCache = (width() >= 1920 || height() >= 1080);
+                
+                if (useLowResCache) {
+                    // Render to half-resolution pixmap for 4x faster pixel operations
+                    int halfWidth = width() / 2;
+                    int halfHeight = height() / 2;
+                    
+                    QPixmap halfResFrame(halfWidth, halfHeight);
+                    halfResFrame.setDevicePixelRatio(1.0); // Ensure 1:1 pixel mapping
+                    
+                    QPainter painter(&halfResFrame);
+                    painter.scale(0.5, 0.5); // Scale down rendering
+                    render(&painter); // Render widget content at half scale
+                    painter.end();
+                    
+                    cachedFrame = halfResFrame;
+                    cachedFrameScale = 0.5;
+                } else {
+                    // Full resolution cache for smaller displays
+                    cachedFrame = grab();
+                    cachedFrameScale = 1.0;
+                }
+                
                 cachedFrameOffset = QPoint(0, 0);  // Start with no offset
                 
                 // Pre-calculate for optimization
@@ -2685,6 +2727,7 @@ bool InkCanvas::event(QEvent *event) {
                 // Clear cached frame when zoom changes during pinch gesture
                 cachedFrame = QPixmap();
                 cachedFrameOffset = QPoint(0, 0);
+                cachedFrameScale = 1.0;
                 
                 // Adjust pan to keep center point fixed with sub-pixel precision
                 qreal newPanX = bufferCenter.x() - adjustedCenter.x() / (internalZoomFactor / 100.0);
@@ -2758,6 +2801,7 @@ bool InkCanvas::event(QEvent *event) {
                     isTouchPanning = false;
                     cachedFrame = QPixmap();
                     cachedFrameOffset = QPoint(0, 0);
+                    cachedFrameScale = 1.0;
                     update();
                 }
             } else {
@@ -2766,6 +2810,7 @@ bool InkCanvas::event(QEvent *event) {
                     isTouchPanning = false;
                     cachedFrame = QPixmap();
                     cachedFrameOffset = QPoint(0, 0);
+                    cachedFrameScale = 1.0;
                     update();
                 }
             }
@@ -2801,6 +2846,7 @@ void InkCanvas::updateInertiaScroll() {
         pageSwitchInProgress = false; // Reset page switch cooldown
         cachedFrame = QPixmap();
         cachedFrameOffset = QPoint(0, 0);
+        cachedFrameScale = 1.0;
         update(); // Final full redraw
         return;
     }
@@ -4892,6 +4938,7 @@ void InkCanvas::checkAutoscrollThreshold(int oldPanY, int newPanY) {
             // Clear cached frame - page switch will load new content
             cachedFrame = QPixmap();
             cachedFrameOffset = QPoint(0, 0);
+            cachedFrameScale = 1.0;
         }
     }
     
@@ -4910,6 +4957,7 @@ void InkCanvas::checkAutoscrollThreshold(int oldPanY, int newPanY) {
             // Clear cached frame - page switch will load new content
             cachedFrame = QPixmap();
             cachedFrameOffset = QPoint(0, 0);
+            cachedFrameScale = 1.0;
         }
     }
 }
