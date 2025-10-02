@@ -380,7 +380,6 @@ private:
     bool isTouchPanning = false; // True when actively panning with touch (not mouse wheel)
     QPixmap cachedFrame; // Cached frame for efficient touch panning
     QPoint cachedFrameOffset; // Offset of cached frame during panning
-    qreal cachedFrameScale = 1.0; // Scale of cached frame (0.5 for half-res, 1.0 for full-res)
     int touchPanStartX = 0; // Pan X value when touch gesture started
     int touchPanStartY = 0; // Pan Y value when touch gesture started
     
