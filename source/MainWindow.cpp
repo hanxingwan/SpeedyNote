@@ -5916,14 +5916,11 @@ void MainWindow::processQt5OutlineElement(const QDomElement& element, QTreeWidge
         }
     }
     
-    // Process child elements recursively
-    QDomNodeList children = element.childNodes();
-    for (int i = 0; i < children.count(); ++i) {
-        QDomNode childNode = children.at(i);
-        if (childNode.isElement()) {
-            QDomElement childElement = childNode.toElement();
-            processQt5OutlineElement(childElement, item);
-        }
+    // Process child elements recursively - only process the FIRST child
+    // The recursive sibling handling will take care of the rest
+    QDomElement firstChild = element.firstChildElement();
+    if (!firstChild.isNull()) {
+        processQt5OutlineElement(firstChild, item);
     }
     
     // Also process sibling elements at the same level
