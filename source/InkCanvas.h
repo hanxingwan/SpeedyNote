@@ -17,6 +17,7 @@
 #include <QMenu>
 #include <QClipboard>
 #include <QFutureWatcher>
+#include <QMutex>
 #include "MarkdownWindowManager.h"
 #include "PictureWindowManager.h"
 #include "ToolType.h"
@@ -80,6 +81,8 @@ public:
 
     void setPanX(int xOffset);  // Setter for panOffsetX
     void setPanY(int yOffset);  // Setter for panOffsetY
+    
+    void setPanWithTouchScroll(int xOffset, int yOffset);  // Efficient pan update for touch gestures
 
     void loadPdf(const QString &pdfPath);
     void loadPdfPage(int pageNumber);
@@ -140,9 +143,15 @@ public:
 
     void setPDFRenderDPI(int dpi) { pdfRenderDPI = dpi; }  // ✅ Set PDF render DPI
 
-    void clearPdfCache() { pdfCache.clear(); }
+    void clearPdfCache() { 
+        QMutexLocker locker(&pdfCacheMutex);
+        pdfCache.clear(); 
+    }
     void clearNoteCache() { 
-        noteCache.clear(); 
+        {
+            QMutexLocker locker(&noteCacheMutex);
+            noteCache.clear(); 
+        }
         currentCachedNotePage = -1;
         if (noteCacheTimer && noteCacheTimer->isActive()) {
             noteCacheTimer->stop();
@@ -161,6 +170,7 @@ public:
     // Touch gesture support
     void setTouchGesturesEnabled(bool enabled) { touchGesturesEnabled = enabled; }
     bool areTouchGesturesEnabled() const { return touchGesturesEnabled; }
+    bool isTouchPanningActive() const { return isTouchPanning; } // Check if actively touch panning
 
     // Rope tool selection actions
     void deleteRopeSelection(); // Delete the current rope tool selection
@@ -221,12 +231,6 @@ public:
     
     // Background image getter for MainWindow
     QPixmap getBackgroundImage() const { return backgroundImage; }
-    
-    // Combined canvas window management
-    void saveCombinedWindowsForPage(int pageNumber); // Save windows for combined canvas pages
-    
-    // Autoscroll threshold detection (for touch gestures and external pan changes)
-    void checkAutoscrollThreshold(int oldPanY, int newPanY);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -291,6 +295,7 @@ private:
     
 
     QCache<int, QPixmap> pdfCache; // Caches 5 pages of the PDF
+    mutable QMutex pdfCacheMutex; // Thread safety for pdfCache
     std::unique_ptr<Poppler::Document> pdfDocument;
     int currentPdfPage;
     bool isPdfLoaded = false;
@@ -320,6 +325,12 @@ private:
 public:
     // ✅ Metadata management
     void loadNotebookId();
+    
+    // Combined canvas window management
+    void saveCombinedWindowsForPage(int pageNumber); // Save windows for combined canvas pages
+    
+    // Autoscroll threshold detection (for touch gestures and external pan changes)
+    void checkAutoscrollThreshold(int oldPanY, int newPanY);
     void saveNotebookId();
     void saveBackgroundMetadata();
     
@@ -350,13 +361,6 @@ private:
     // PDF text selection helpers for combined canvas
     void loadPdfTextBoxesForSinglePage(int pageNumber); // Load text boxes for single page
     void loadPdfTextBoxesForCombinedCanvas(int pageNumber, int singlePageHeight); // Load text boxes for combined canvas
-    
-    // Enhanced caching system
-    void checkAndCacheAdjacentPages(int targetPage); // Check and cache adjacent PDF pages
-    void cacheAdjacentPages(int targetPage); // Cache adjacent PDF pages
-    void checkAndCacheAdjacentNotePages(int targetPage); // Check and cache adjacent note pages  
-    void cacheAdjacentNotePages(int targetPage); // Cache adjacent note pages
-    
     // ✅ Migration from old txt files to JSON
     void migrateOldMetadataFiles();
     
@@ -371,6 +375,27 @@ private:
     qreal lastPinchScale = 1.0;
     bool isPanning = false;
     int activeTouchPoints = 0;
+    
+    // Efficient touch pan scrolling (Squid-style optimization)
+    bool isTouchPanning = false; // True when actively panning with touch (not mouse wheel)
+    QPixmap cachedFrame; // Cached frame for efficient touch panning
+    QPoint cachedFrameOffset; // Offset of cached frame during panning
+    int touchPanStartX = 0; // Pan X value when touch gesture started
+    int touchPanStartY = 0; // Pan Y value when touch gesture started
+    
+    // Inertia scrolling (momentum scrolling)
+    QTimer* inertiaTimer = nullptr; // Timer for inertia animation
+    qreal inertiaVelocityX = 0.0; // Current inertia velocity X
+    qreal inertiaVelocityY = 0.0; // Current inertia velocity Y
+    qreal inertiaPanX = 0.0; // Smooth pan X with sub-pixel precision
+    qreal inertiaPanY = 0.0; // Smooth pan Y with sub-pixel precision
+    QPointF lastTouchVelocity; // Last measured velocity for inertia
+    QElapsedTimer velocityTimer; // Timer for velocity calculation
+    QList<QPair<QPointF, qint64>> recentVelocities; // Recent velocities for smoothing
+    
+    // Page switch cooldown during inertia
+    QElapsedTimer pageSwitchCooldown; // Prevents rapid page switches during inertia
+    bool pageSwitchInProgress = false; // True when waiting for page switch to complete
 
     // Background style members (moved to unified JSON metadata section above)
 
@@ -400,6 +425,7 @@ private:
     
     // Intelligent note page cache system
     QCache<int, QPixmap> noteCache; // Cache for note pages (PNG files)
+    mutable QMutex noteCacheMutex; // Thread safety for noteCache
     QTimer* noteCacheTimer = nullptr; // Timer for delayed adjacent note page caching
     int currentCachedNotePage = -1; // Currently displayed note page for cache management
     int pendingNoteCacheTargetPage = -1; // Target page for pending note cache operation (to validate timer relevance)
@@ -456,6 +482,7 @@ private slots:
     void processPendingTextSelection(); // Process pending text selection updates (throttled to 60 FPS)
     void cacheAdjacentPages(); // Cache adjacent pages after delay
     void cacheAdjacentNotePages(); // Cache adjacent note pages after delay
+    void updateInertiaScroll(); // Update inertia scrolling animation
 };
 
 #endif // INKCANVAS_H

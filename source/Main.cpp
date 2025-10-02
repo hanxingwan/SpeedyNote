@@ -11,6 +11,7 @@
 #include <QSettings>
 #include <QStandardPaths>
 #include <QColor>
+#include <QFont>
 #include "MainWindow.h"
 #include "LauncherWindow.h"
 #include "SpnPackageManager.h"
@@ -56,8 +57,15 @@ int main(int argc, char *argv[]) {
 
 
     // Enable Windows IME support for multi-language input
+    // Qt5 requires high DPI attributes to be set BEFORE creating QApplication
     QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
     QCoreApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
+    
+    // Qt 5.14+ supports high DPI scale factor rounding policy for better font rendering
+    #if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+    QGuiApplication::setHighDpiScaleFactorRoundingPolicy(Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
+    #endif
+    
     QApplication app(argc, argv);
     
     // Ensure IME is properly enabled for Windows
@@ -113,6 +121,40 @@ int main(int argc, char *argv[]) {
         // Debug: Uncomment this line to see when translation loading fails
         // printf("No translation file found for language: %s\n", langCode.toStdString().c_str());
     }
+    
+    // Qt5: Set modern system font explicitly for better rendering on Windows
+    // This fixes the "Windows XP style old font" issue in Qt5
+    #ifdef Q_OS_WIN
+    QFont appFont = app.font();
+    
+    // Set appropriate modern font based on language
+    if (langCode == "zh") {
+        // Detect if it's Simplified or Traditional Chinese
+        QString locale = QLocale::system().name();
+        if (locale.startsWith("zh_TW") || locale.startsWith("zh_HK")) {
+            // Traditional Chinese - use Microsoft JhengHei
+            appFont.setFamily("Microsoft JhengHei UI");
+        } else {
+            // Simplified Chinese - use Microsoft YaHei
+            appFont.setFamily("Microsoft YaHei UI");
+        }
+        appFont.setPointSize(9);
+    } else if (langCode == "ja") {
+        // Japanese - use Yu Gothic UI
+        appFont.setFamily("Yu Gothic UI");
+        appFont.setPointSize(9);
+    } else if (langCode == "ko") {
+        // Korean - use Malgun Gothic
+        appFont.setFamily("Malgun Gothic");
+        appFont.setPointSize(9);
+    } else {
+        // English and other languages - use Segoe UI
+        appFont.setFamily("Segoe UI");
+        appFont.setPointSize(9);
+    }
+    
+    app.setFont(appFont);
+    #endif
 
     QString inputFile;
     bool createNewPackage = false;

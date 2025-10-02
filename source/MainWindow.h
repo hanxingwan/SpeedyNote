@@ -37,6 +37,8 @@
 #include <QLocalServer>
 #include <QLocalSocket>
 #include <QSharedMemory>
+#include <QDomDocument>
+#include <QDomElement>
 
 // Forward declarations
 class QTreeWidgetItem;
@@ -248,10 +250,6 @@ public:
 
     int getPdfDPI() const { return pdfRenderDPI; }
     void setPdfDPI(int dpi);
-    
-    // Autoscroll slots
-    void onAutoScrollRequested(int direction);
-    void onEarlySaveRequested();
 
     // void loadUserSettings();  // New
     void savePdfDPI(int dpi); // New
@@ -396,6 +394,8 @@ private slots:
 
 public slots:
     void updatePictureButtonState(); // Public slot for picture button state
+    void onAutoScrollRequested(int direction);
+    void onEarlySaveRequested();
 
 private:
     void onAnnotatedImageSaved(const QString &filePath); // ✅ Handle annotated image saved notification
@@ -417,8 +417,8 @@ private:
     void toggleOutlineSidebar();     // Toggle PDF outline sidebar
     void onOutlineItemClicked(QTreeWidgetItem *item, int column); // Handle outline item clicks
     void loadPdfOutline();           // Load PDF outline/bookmarks
-    void processOutlineElement(const QDomElement& element, QTreeWidgetItem* parentItem);
-    void processQt5OutlineElement(const QDomElement& element, QTreeWidgetItem* parentItem); // Add outline item recursively
+    void addOutlineItem(const Poppler::OutlineItem& outlineItem, QTreeWidgetItem* parentItem); // Add outline item recursively (Qt6 only - unused in Qt5)
+    void processQt5OutlineElement(const QDomElement& element, QTreeWidgetItem* parentItem); // Add outline item from DOM (Qt5)
     Poppler::Document* getPdfDocument(); // Get PDF document from current canvas
     
     // Bookmark sidebar functionality
@@ -617,6 +617,9 @@ private:
     QTimer *tooltipTimer;
     QWidget *lastHoveredWidget;
     QPoint pendingTooltipPos;
+    
+    // Concurrent save handling for autoscroll synchronization
+    QFuture<void> concurrentSaveFuture;
 
     void handleButtonHeld(const QString &buttonName);
     void handleButtonReleased(const QString &buttonName);
@@ -672,9 +675,6 @@ private:
     
     // Separator line for 2-row layout
     QFrame *separatorLine = nullptr;
-    
-    // Concurrent save future for autoscroll
-    QFuture<void> concurrentSaveFuture;
     
 protected:
     void resizeEvent(QResizeEvent *event) override;

@@ -237,7 +237,7 @@ bool SpnPackageManager::packDirectoryToSpn(const QString &dirPath, const QString
     }
     
     QDataStream stream(&spnFile);
-    stream.setVersion(QDataStream::Qt_5_15);
+    stream.setVersion(QDataStream::Qt_5_15); // Qt5 compatibility
     
     // Write header
     stream << QString("SPEEDYNOTE_PACKAGE");
@@ -289,7 +289,7 @@ bool SpnPackageManager::unpackSpnToDirectory(const QString &spnPath, const QStri
     }
     
     QDataStream stream(&spnFile);
-    stream.setVersion(QDataStream::Qt_5_15);
+    stream.setVersion(QDataStream::Qt_5_15); // Qt5 compatibility
     
     // Read and verify header
     QString header;

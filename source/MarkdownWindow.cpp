@@ -24,8 +24,19 @@ MarkdownWindow::MarkdownWindow(const QRect &rect, QWidget *parent)
     setupUI();
     applyStyle();
     
+    // ✅ PERFORMANCE: Set up throttle timer for pan updates
+    updateThrottleTimer = new QTimer(this);
+    updateThrottleTimer->setSingleShot(true);
+    updateThrottleTimer->setInterval(16); // ~60 FPS maximum update rate
+    connect(updateThrottleTimer, &QTimer::timeout, this, [this]() {
+        if (hasPendingUpdate) {
+            hasPendingUpdate = false;
+            updateScreenPositionImmediate();
+        }
+    });
+    
     // Set initial screen position based on canvas coordinates
-    updateScreenPosition();
+    updateScreenPositionImmediate();
     
     // Enable mouse tracking for resize handles
     setMouseTracking(true);
@@ -161,13 +172,25 @@ void MarkdownWindow::setCanvasRect(const QRect &rect) {
 }
 
 void MarkdownWindow::updateScreenPosition() {
+    // ✅ PERFORMANCE: Throttle updates during frequent pan operations
+    if (!updateThrottleTimer->isActive()) {
+        // If not currently throttling, update immediately and start throttling
+        updateScreenPositionImmediate();
+        updateThrottleTimer->start();
+    } else {
+        // If throttling is active, just mark that we have a pending update
+        hasPendingUpdate = true;
+    }
+}
+
+void MarkdownWindow::updateScreenPositionImmediate() {
     // Prevent recursive updates
     if (isUpdatingPosition) return;
     isUpdatingPosition = true;
     
     // Debug: Log when this is called due to external changes (not during mouse movement)
     if (!dragging && !resizing) {
-        // qDebug() << "MarkdownWindow::updateScreenPosition() called for window" << this << "Canvas rect:" << canvasRect;
+        // qDebug() << "MarkdownWindow::updateScreenPositionImmediate() called for window" << this << "Canvas rect:" << canvasRect;
     }
     
     // Get the canvas parent to access coordinate conversion methods
@@ -176,17 +199,17 @@ void MarkdownWindow::updateScreenPosition() {
         if (InkCanvas *inkCanvas = qobject_cast<InkCanvas*>(canvas)) {
             // Use the new coordinate conversion methods
             QRect screenRect = inkCanvas->mapCanvasToWidget(canvasRect);
-            // qDebug() << "MarkdownWindow::updateScreenPosition() - Canvas rect:" << canvasRect << "-> Screen rect:" << screenRect;
+            // qDebug() << "MarkdownWindow::updateScreenPositionImmediate() - Canvas rect:" << canvasRect << "-> Screen rect:" << screenRect;
             // qDebug() << "  Canvas size:" << inkCanvas->getCanvasSize() << "Zoom:" << inkCanvas->getZoomFactor() << "Pan:" << inkCanvas->getPanOffset();
             setGeometry(screenRect);
         } else {
             // Fallback: use canvas coordinates directly
-            // qDebug() << "MarkdownWindow::updateScreenPosition() - No InkCanvas parent, using canvas rect directly:" << canvasRect;
+            // qDebug() << "MarkdownWindow::updateScreenPositionImmediate() - No InkCanvas parent, using canvas rect directly:" << canvasRect;
             setGeometry(canvasRect);
         }
     } else {
         // No parent, use canvas coordinates directly
-        // qDebug() << "MarkdownWindow::updateScreenPosition() - No parent, using canvas rect directly:" << canvasRect;
+        // qDebug() << "MarkdownWindow::updateScreenPositionImmediate() - No parent, using canvas rect directly:" << canvasRect;
         setGeometry(canvasRect);
     }
     
@@ -248,7 +271,7 @@ void MarkdownWindow::deserialize(const QVariantMap &data) {
     // Ensure canvas connections are set up
     ensureCanvasConnections();
     
-    updateScreenPosition();
+    updateScreenPositionImmediate();
 }
 
 void MarkdownWindow::focusEditor() {

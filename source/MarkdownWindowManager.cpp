@@ -205,7 +205,7 @@ void MarkdownWindowManager::loadWindowsForPage(int pageNumber) {
         window->ensureCanvasConnections();
         
         window->show();
-        window->updateScreenPosition();
+        window->updateScreenPositionImmediate();
         // Make sure window is not transparent when loaded
         window->setTransparent(false);
     }
@@ -252,6 +252,76 @@ void MarkdownWindowManager::setSelectionMode(bool enabled) {
 
 QList<MarkdownWindow*> MarkdownWindowManager::getCurrentPageWindows() const {
     return currentWindows;
+}
+
+QList<MarkdownWindow*> MarkdownWindowManager::loadWindowsForPageSeparately(int pageNumber) {
+    if (!canvas) return QList<MarkdownWindow*>();
+
+    // Load windows from file without affecting current windows
+    QList<MarkdownWindow*> pageWindows = loadWindowData(pageNumber);
+    
+    // Apply bounds checking and setup connections
+    for (MarkdownWindow *window : pageWindows) {
+        // Validate that the window is within canvas bounds
+        if (!window->isValidForCanvas()) {
+            QRect canvasBounds = canvas->getCanvasRect();
+            QRect windowRect = window->getCanvasRect();
+            
+            // Clamp the window position to canvas bounds
+            int newX = qMax(0, qMin(windowRect.x(), canvasBounds.width() - windowRect.width()));
+            int newY = qMax(0, qMin(windowRect.y(), canvasBounds.height() - windowRect.height()));
+            
+            if (newX != windowRect.x() || newY != windowRect.y()) {
+                QRect adjustedRect(newX, newY, windowRect.width(), windowRect.height());
+                window->setCanvasRect(adjustedRect);
+            }
+        }
+        
+        // Ensure canvas connections are set up for loaded windows
+        window->ensureCanvasConnections();
+        
+        // Connect window signals
+        connectWindowSignals(window);
+        
+        // DON'T show the window here - let setCombinedWindows handle visibility
+        window->updateScreenPositionImmediate();
+        // Make sure window is not transparent when loaded
+        window->setTransparent(false);
+    }
+    
+    return pageWindows;
+}
+
+void MarkdownWindowManager::setCombinedWindows(const QList<MarkdownWindow*> &windows) {
+    // Hide current windows first
+    for (MarkdownWindow *window : currentWindows) {
+        window->hide();
+    }
+    
+    // Set new combined windows as current
+    currentWindows = windows;
+    
+    // Show all combined windows
+    for (MarkdownWindow *window : currentWindows) {
+        window->show();
+        window->updateScreenPositionImmediate();
+        window->setTransparent(false);
+    }
+    
+    // Start transparency timer if there are windows but none are focused
+    if (!currentWindows.isEmpty()) {
+        resetTransparencyTimer();
+    }
+}
+
+void MarkdownWindowManager::saveWindowsForPageSeparately(int pageNumber, const QList<MarkdownWindow*> &windows) {
+    if (!canvas) return;
+    
+    // Update page windows map for this specific page
+    pageWindows[pageNumber] = windows;
+    
+    // Save to file
+    saveWindowData(pageNumber, windows);
 }
 
 void MarkdownWindowManager::onWindowDeleteRequested(MarkdownWindow *window) {
@@ -390,7 +460,7 @@ void MarkdownWindowManager::updateAllWindowPositions() {
     // Update positions of all current windows
     for (MarkdownWindow *window : currentWindows) {
         if (window) {
-            window->updateScreenPosition();
+            window->updateScreenPositionImmediate();
         }
     }
 }

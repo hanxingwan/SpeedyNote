@@ -41,8 +41,6 @@
 #include "LauncherWindow.h" // Added for launcher access
 #include "PdfOpenDialog.h" // Added for PDF file association
 #include <poppler-qt5.h> // For PDF outline parsing
-#include <QDomDocument> // For PDF outline DOM parsing
-#include <QRegExp> // For regex parsing in Qt5
 #include <memory> // For std::shared_ptr
 
 // Linux-specific includes for signal handling
@@ -87,7 +85,7 @@ void setupLinuxSignalHandlers() {
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false), localServer(nullptr) {
 
-    setWindowTitle(tr("SpeedyNote Beta 0.9.3"));
+    setWindowTitle(tr("SpeedyNote Beta 0.10.1"));
 
 #ifdef Q_OS_LINUX
     // Setup signal handlers for proper cleanup on Linux
@@ -733,23 +731,18 @@ void MainWindow::setupUi() {
     bookmarksSidebar = new QWidget(this);
     bookmarksSidebar->setFixedWidth(250);
     bookmarksSidebar->setVisible(false); // Hidden by default
-    
     QVBoxLayout *bookmarksLayout = new QVBoxLayout(bookmarksSidebar);
     bookmarksLayout->setContentsMargins(5, 5, 5, 5);
-    
     QLabel *bookmarksLabel = new QLabel(tr("Bookmarks"), bookmarksSidebar);
     bookmarksLabel->setStyleSheet("font-weight: bold; padding: 5px;");
     bookmarksLayout->addWidget(bookmarksLabel);
-    
     bookmarksTree = new QTreeWidget(bookmarksSidebar);
     bookmarksTree->setHeaderHidden(true);
     bookmarksTree->setRootIsDecorated(false);
     bookmarksTree->setIndentation(0);
     bookmarksLayout->addWidget(bookmarksTree);
-    
     // Connect bookmarks tree item clicks
     connect(bookmarksTree, &QTreeWidget::itemClicked, this, &MainWindow::onBookmarkItemClicked);
-
     // 🌟 Horizontal Tab Bar (like modern web browsers)
     tabList = new QListWidget(this);
     tabList->setFlow(QListView::LeftToRight);  // Make it horizontal
@@ -757,7 +750,6 @@ void MainWindow::setupUi() {
     tabList->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     tabList->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     tabList->setSelectionMode(QAbstractItemView::SingleSelection);
-
     // Style the tab bar like a modern browser with transparent scrollbar
     tabList->setStyleSheet(R"(
         QListWidget {
@@ -1462,6 +1454,8 @@ bool MainWindow::selectFolder() {
                     // User cancelled PDF relinking, don't continue
                     return false;
                 }
+                // ✅ Update scroll behavior based on PDF loading state after relinking
+                setScrollOnTopEnabled(canvas->isPdfLoadedFunc());
             }
             
             // ✅ Show last accessed page dialog if available
@@ -1524,14 +1518,21 @@ void MainWindow::switchPage(int pageNumber) {
                     if (panYSlider) panYSlider->setValue(0);
                 });
             } else if (pageNumber < oldPage) {
-                // Backward page switching → scroll to just before the threshold
+                // Backward page switching → scroll to threshold - offset to match the new switch point
                 QTimer::singleShot(0, this, [this, canvas]() {
                     if (panYSlider && canvas) {
                         int threshold = canvas->getAutoscrollThreshold();
                         if (threshold > 0) {
-                            // A small offset to avoid being exactly on the edge and re-triggering
-                            int offset = 20;
-                            int targetPan = (threshold > offset) ? (threshold - offset) : 0;
+                            // Calculate the backward switch offset (matching InkCanvas logic)
+                            int backwardOffset = 300;
+                            if (threshold < 600) {
+                                // For small thresholds, use proportional offset
+                                backwardOffset = threshold / 4;
+                            }
+                            // Position at threshold - offset to match the new backward switch threshold
+                            int targetPan = threshold - backwardOffset;
+                            // Ensure we don't go negative if threshold is too small
+                            targetPan = qMax(0, targetPan);
                             panYSlider->setValue(targetPan);
                         } else {
                             // Fallback for non-combined canvases or error cases
@@ -1545,7 +1546,6 @@ void MainWindow::switchPage(int pageNumber) {
     updateDialDisplay();
     updateBookmarkButtonState(); // Update bookmark button state when switching pages
 }
-
 void MainWindow::switchPageWithDirection(int pageNumber, int direction) {
     InkCanvas *canvas = currentCanvas();
     if (!canvas) return;
@@ -1582,14 +1582,21 @@ void MainWindow::switchPageWithDirection(int pageNumber, int direction) {
                     if (panYSlider) panYSlider->setValue(0);
                 });
             } else if (direction < 0) {
-                // Backward page switching → scroll to just before the threshold
+                // Backward page switching → scroll to threshold - offset to match the new switch point
                 QTimer::singleShot(0, this, [this, canvas]() {
                     if (panYSlider && canvas) {
                         int threshold = canvas->getAutoscrollThreshold();
                         if (threshold > 0) {
-                            // A small offset to avoid being exactly on the edge and re-triggering
-                            int offset = 20;
-                            int targetPan = (threshold > offset) ? (threshold - offset) : 0;
+                            // Calculate the backward switch offset (matching InkCanvas logic)
+                            int backwardOffset = 300;
+                            if (threshold < 600) {
+                                // For small thresholds, use proportional offset
+                                backwardOffset = threshold / 4;
+                            }
+                            // Position at threshold - offset to match the new backward switch threshold
+                            int targetPan = threshold - backwardOffset;
+                            // Ensure we don't go negative if threshold is too small
+                            targetPan = qMax(0, targetPan);
                             panYSlider->setValue(targetPan);
                         } else {
                             // Fallback for non-combined canvases or error cases
@@ -1694,14 +1701,29 @@ void MainWindow::saveCurrentPageConcurrent() {
     // Create a copy of the buffer for concurrent saving
     QPixmap bufferCopy = canvas->getBuffer();
     
-    // Save markdown windows for this page (this must be done on the main thread)
-    if (canvas->getMarkdownManager()) {
-        canvas->getMarkdownManager()->saveWindowsForPage(pageNumber);
+    // Check if this is a combined canvas first to determine window saving strategy
+    QPixmap backgroundImage = canvas->getBackgroundImage();
+    bool isCombinedCanvas = false;
+    
+    // If we have a background image (PDF) and buffer is roughly double its height, it's combined
+    if (!backgroundImage.isNull() && bufferCopy.height() >= backgroundImage.height() * 1.8) {
+        isCombinedCanvas = true;
+    } else if (bufferCopy.height() > 2000) { // Fallback heuristic for very tall buffers
+        isCombinedCanvas = true;
     }
     
-    // ✅ Save picture windows for this page (this must be done on the main thread)
-    if (canvas->getPictureManager()) {
-        canvas->getPictureManager()->saveWindowsForPage(pageNumber);
+    // Save windows using the appropriate strategy (this must be done on the main thread)
+    if (isCombinedCanvas) {
+        // Use combined window saving logic for cross-page coordinate adjustments
+        canvas->saveCombinedWindowsForPage(pageNumber);
+    } else {
+        // Use standard single-page window saving
+        if (canvas->getMarkdownManager()) {
+            canvas->getMarkdownManager()->saveWindowsForPage(pageNumber);
+        }
+        if (canvas->getPictureManager()) {
+            canvas->getPictureManager()->saveWindowsForPage(pageNumber);
+        }
     }
     
     // ✅ Get notebook ID from JSON metadata before concurrent operation
@@ -1711,15 +1733,84 @@ void MainWindow::saveCurrentPageConcurrent() {
         notebookId = canvas->getNotebookId();
     }
     
+    // Calculate single page height for canvas splitting
+    int singlePageHeight = bufferCopy.height();
+    if (isCombinedCanvas) {
+        if (!backgroundImage.isNull()) {
+            singlePageHeight = backgroundImage.height() / 2; // Each PDF page in the combined image
+        } else {
+            singlePageHeight = bufferCopy.height() / 2; // Fallback for combined canvas
+        }
+    }
+    
     // Run the save operation concurrently
-    QFuture<void> future = QtConcurrent::run([saveFolder, pageNumber, bufferCopy, notebookId]() {
-        QString filePath = saveFolder + QString("/%1_%2.png").arg(notebookId).arg(pageNumber, 5, 10, QChar('0'));
-        
-        QImage image(bufferCopy.size(), QImage::Format_ARGB32);
-        image.fill(Qt::transparent);
-        QPainter painter(&image);
-        painter.drawPixmap(0, 0, bufferCopy);
-        image.save(filePath, "PNG");
+    concurrentSaveFuture = QtConcurrent::run([saveFolder, pageNumber, bufferCopy, notebookId, isCombinedCanvas, singlePageHeight]() {
+        if (isCombinedCanvas) {
+            // Split the combined canvas and save both halves
+            int bufferWidth = bufferCopy.width();
+            
+            // Save current page (top half)
+            QString currentFilePath = saveFolder + QString("/%1_%2.png").arg(notebookId).arg(pageNumber, 5, 10, QChar('0'));
+            QPixmap currentPageBuffer = bufferCopy.copy(0, 0, bufferWidth, singlePageHeight);
+            QImage currentImage(currentPageBuffer.size(), QImage::Format_ARGB32);
+            currentImage.fill(Qt::transparent);
+            {
+                QPainter painter(&currentImage);
+                painter.drawPixmap(0, 0, currentPageBuffer);
+            }
+            currentImage.save(currentFilePath, "PNG");
+            
+            // Save next page (bottom half) by MERGING with existing content
+            int nextPageNumber = pageNumber + 1;
+            QString nextFilePath = saveFolder + QString("/%1_%2.png").arg(notebookId).arg(nextPageNumber, 5, 10, QChar('0'));
+            QPixmap nextPageBuffer = bufferCopy.copy(0, singlePageHeight, bufferWidth, singlePageHeight);
+            
+            // Check if bottom half has any non-transparent content
+            QImage nextCheck = nextPageBuffer.toImage();
+            bool hasNewContent = false;
+            for (int y = 0; y < nextCheck.height() && !hasNewContent; ++y) {
+                const QRgb *row = reinterpret_cast<const QRgb*>(nextCheck.scanLine(y));
+                for (int x = 0; x < nextCheck.width() && !hasNewContent; ++x) {
+                    if (qAlpha(row[x]) != 0) {
+                        hasNewContent = true;
+                    }
+                }
+            }
+            
+            if (hasNewContent) {
+                // Load existing next page content and merge with new content
+                QPixmap existingNextPage;
+                if (QFile::exists(nextFilePath)) {
+                    existingNextPage.load(nextFilePath);
+                }
+                
+                // Create merged image
+                QImage mergedNextImage(nextPageBuffer.size(), QImage::Format_ARGB32);
+                mergedNextImage.fill(Qt::transparent);
+                {
+                    QPainter painter(&mergedNextImage);
+                    
+                    // Draw existing content first
+                    if (!existingNextPage.isNull()) {
+                        painter.drawPixmap(0, 0, existingNextPage);
+                    }
+                    
+                    // Draw new content on top
+                    painter.drawPixmap(0, 0, nextPageBuffer);
+                }
+                
+                mergedNextImage.save(nextFilePath, "PNG");
+            }
+        } else {
+            // Standard single page save
+            QString filePath = saveFolder + QString("/%1_%2.png").arg(notebookId).arg(pageNumber, 5, 10, QChar('0'));
+            
+            QImage image(bufferCopy.size(), QImage::Format_ARGB32);
+            image.fill(Qt::transparent);
+            QPainter painter(&image);
+            painter.drawPixmap(0, 0, bufferCopy);
+            image.save(filePath, "PNG");
+        }
     });
     
     // Mark as not edited since we're saving
@@ -1809,9 +1900,10 @@ void MainWindow::updatePanRange() {
         int minPanY = 0;
         if (canvas && canvas->getAutoscrollThreshold() > 0) {
             // For combined canvases, allow negative pan Y for backward scrolling
-            // Set negative range to about 10% of a single page height
             int threshold = canvas->getAutoscrollThreshold();
-            minPanY = -(threshold / 10); // Allow scrolling up to trigger backward navigation
+            // Calculate the required negative range based on the dynamic backward switch threshold
+            int backwardOffset = (threshold < 600) ? (threshold / 4) : 300;
+            minPanY = qMin(-backwardOffset, -(threshold / 10)); // Ensure we can reach the switch threshold
         }
         
         panYSlider->setRange(minPanY, maxPanY_scaled);
@@ -2051,6 +2143,9 @@ void MainWindow::switchTab(int index) {
             updateToolButtonStates();   // Update tool button states when switching tabs
             updateThicknessSliderForCurrentTool(); // Update thickness slider for current tool when switching tabs
             
+            // ✅ Update scroll on top behavior based on PDF loading state
+            setScrollOnTopEnabled(canvas->isPdfLoadedFunc());
+            
             // Refresh PDF outline if sidebar is visible
             if (outlineSidebarVisible) {
                 loadPdfOutline();
@@ -2289,6 +2384,8 @@ void MainWindow::addNewTab() {
     });
     connect(newCanvas, &InkCanvas::markdownSelectionModeChanged, this, &MainWindow::updateMarkdownButtonState);
     connect(newCanvas, &InkCanvas::annotatedImageSaved, this, &MainWindow::onAnnotatedImageSaved);
+    connect(newCanvas, &InkCanvas::autoScrollRequested, this, &MainWindow::onAutoScrollRequested);
+    connect(newCanvas, &InkCanvas::earlySaveRequested, this, &MainWindow::onEarlySaveRequested);
     
     // Install event filter to detect mouse movement for scrollbar visibility
     newCanvas->setMouseTracking(true);
@@ -2339,13 +2436,15 @@ void MainWindow::addNewTab() {
     newCanvas->setBackgroundStyle(defaultStyle);
     newCanvas->setBackgroundColor(defaultColor);
     newCanvas->setBackgroundDensity(defaultDensity);
+    
+    // ✅ New tabs start without PDFs, so disable scroll on top initially
+    // It will be automatically enabled when a PDF is loaded
+    setScrollOnTopEnabled(false);
     newCanvas->setPDFRenderDPI(getPdfDPI());
     
     // Update color button states for the new tab
     updateColorButtonStates();
 }
-
-
 void MainWindow::removeTabAt(int index) {
     if (!tabList || !canvasStack) return; // Ensure UI elements exist
     if (index < 0 || index >= canvasStack->count()) return;
@@ -3000,10 +3099,6 @@ void MainWindow::handleToolSelection(int angle) {
 void MainWindow::onToolReleased() {
     
 }
-
-
-
-
 bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
     static bool dragging = false;
     static QPoint lastMousePos;
@@ -3066,7 +3161,7 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
         else if (event->type() == QEvent::TabletMove) {
             try {
                 QTabletEvent* tabletEvent = static_cast<QTabletEvent*>(event);
-                handleEdgeProximity(canvas, tabletEvent->pos());
+                handleEdgeProximity(canvas, tabletEvent->pos()); // Qt5 pos() already returns QPoint
             } catch (...) {
                 // Ignore tablet event errors to prevent crashes
             }
@@ -3586,7 +3681,6 @@ void MainWindow::setUseCustomAccentColor(bool use) {
         saveThemeSettings();
     }
 }
-
 void MainWindow::updateTheme() {
     // Update control bar background color
     QColor accentColor = getAccentColor();
@@ -4302,7 +4396,6 @@ QString MainWindow::migrateOldActionString(const QString &oldString) {
     if (oldString == "Toggle PDF Text Selection") return "toggle_pdf_text_selection";
     return oldString; // Return as-is if not found (might already be new format)
 }
-
 void MainWindow::handleControllerButton(const QString &buttonName) {  // This is for single press functions
     ControllerAction action = buttonPressActionMapping.value(buttonName, ControllerAction::None);
 
@@ -4430,6 +4523,9 @@ void MainWindow::openPdfFile(const QString &pdfPath) {
         // Load the PDF
         canvas->loadPdf(pdfPath);
         
+        // ✅ Automatically enable scroll on top when PDF is loaded (required for pseudo smooth scrolling)
+        setScrollOnTopEnabled(true);
+        
         // Update tab label
         updateTabLabel();
         updateBookmarkButtonState(); // ✅ Update bookmark button state after loading notebook
@@ -4512,6 +4608,9 @@ void MainWindow::openPdfFile(const QString &pdfPath) {
         // Load the PDF
         canvas->loadPdf(pdfPath);
         
+        // ✅ Automatically enable scroll on top when PDF is loaded (required for pseudo smooth scrolling)
+        setScrollOnTopEnabled(true);
+        
         // Update tab label
         updateTabLabel();
         
@@ -4587,9 +4686,13 @@ void MainWindow::openPdfFile(const QString &pdfPath) {
                 // User cancelled PDF relinking, don't continue
                 return;
             }
+            // ✅ Update scroll behavior based on PDF loading state after relinking
+            setScrollOnTopEnabled(canvas->isPdfLoadedFunc());
         } else {
             // Load the PDF for regular folders
             canvas->loadPdf(pdfPath);
+            // ✅ Automatically enable scroll on top when PDF is loaded (required for pseudo smooth scrolling)
+            setScrollOnTopEnabled(true);
         }
         
         // Update tab label
@@ -4832,17 +4935,36 @@ void MainWindow::handleTouchPanChange(int panX, int panY) {
     }
     scrollbarsVisible = true;
     
-    // Update sliders - allow panY signals for autoscroll, block panX to avoid redundancy
-    panXSlider->blockSignals(true);
-    panXSlider->setValue(panX);
-    panXSlider->blockSignals(false);
-    
-    // For panY: DON'T block signals so it triggers the same autoscroll flow as mouse wheel
-    panYSlider->setValue(panY); // This will trigger updatePanY() -> setPanY() -> autoscroll logic
-    
-    // Update canvas X pan directly (Y pan is handled by the setValue signal above)
     InkCanvas *canvas = currentCanvas();
-    if (canvas) {
+    if (!canvas) return;
+    
+    // ⚡ OPTIMIZATION: During touch panning, only update sliders (don't call setPanX/setPanY)
+    // The pan offsets are already set by setPanWithTouchScroll() in InkCanvas
+    // Calling setPanX/setPanY would trigger update() and defeat the optimization
+    if (canvas->isTouchPanningActive()) {
+        // Just update the slider positions without triggering canvas updates
+        panXSlider->blockSignals(true);
+        panXSlider->setValue(panX);
+        panXSlider->blockSignals(false);
+        
+        panYSlider->blockSignals(true);
+        panYSlider->setValue(panY);
+        panYSlider->blockSignals(false);
+        
+        // Store the pan values for later use
+        canvas->setLastPanX(panX);
+        canvas->setLastPanY(panY);
+    } else {
+        // Normal flow for non-touch panning (mouse wheel, etc.)
+        // Update sliders - allow panY signals for autoscroll, block panX to avoid redundancy
+        panXSlider->blockSignals(true);
+        panXSlider->setValue(panX);
+        panXSlider->blockSignals(false);
+        
+        // For panY: DON'T block signals so it triggers the same autoscroll flow as mouse wheel
+        panYSlider->setValue(panY); // This will trigger updatePanY() -> setPanY() -> autoscroll logic
+        
+        // Update canvas X pan directly (Y pan is handled by the setValue signal above)
         canvas->setPanX(panX);
         canvas->setLastPanX(panX);
         // Note: panY is handled by panYSlider->setValue() signal flow above
@@ -5078,7 +5200,6 @@ void MainWindow::updateScrollbarPositions() {
         containerHeight - cornerOffset - margin*2  // Full height minus corner and bottom margin
     );
 }
-
 // Add the new helper method for edge detection
 void MainWindow::handleEdgeProximity(InkCanvas* canvas, const QPoint& pos) {
     if (!canvas) return;
@@ -5761,6 +5882,11 @@ void MainWindow::loadPdfOutline() {
     outlineTree->expandToDepth(0);
 }
 
+void MainWindow::addOutlineItem(const Poppler::OutlineItem& outlineItem, QTreeWidgetItem* parentItem) {
+    // This function is no longer used in Qt5, but kept for compatibility
+    // Qt5 uses the DOM-based approach instead
+}
+
 void MainWindow::processQt5OutlineElement(const QDomElement& element, QTreeWidgetItem* parentItem) {
     if (element.isNull()) return;
     
@@ -5804,56 +5930,6 @@ void MainWindow::processQt5OutlineElement(const QDomElement& element, QTreeWidge
     QDomElement nextSibling = element.nextSiblingElement();
     if (!nextSibling.isNull()) {
         processQt5OutlineElement(nextSibling, parentItem);
-    }
-}
-
-void MainWindow::processOutlineElement(const QDomElement& element, QTreeWidgetItem* parentItem) {
-    if (element.isNull()) return;
-    
-    // Process all child elements
-    QDomNodeList children = element.childNodes();
-    for (int i = 0; i < children.count(); ++i) {
-        QDomNode childNode = children.at(i);
-        if (childNode.isElement()) {
-            QDomElement childElement = childNode.toElement();
-            
-            // Create tree widget item
-            QTreeWidgetItem* item;
-            if (parentItem) {
-                item = new QTreeWidgetItem(parentItem);
-            } else {
-                item = new QTreeWidgetItem(outlineTree);
-            }
-            
-            // Set the title from the element
-            QString title = childElement.attribute("Title");
-            if (title.isEmpty()) {
-                title = childElement.attribute("title");
-            }
-            if (title.isEmpty()) {
-                title = childElement.text();
-            }
-            if (title.isEmpty()) {
-                title = QString("Item %1").arg(i + 1);
-            }
-            item->setText(0, title);
-            
-            // Try to get the page number from the destination
-            QString destination = childElement.attribute("Destination");
-            if (!destination.isEmpty()) {
-                // Parse page number from destination string
-                QRegExp pageRegex("page=(\\d+)");
-                if (pageRegex.indexIn(destination) != -1) {
-                    int pageNumber = pageRegex.cap(1).toInt();
-                    if (pageNumber > 0) {
-                        item->setData(0, Qt::UserRole, pageNumber);
-                    }
-                }
-            }
-            
-            // Process child elements recursively
-            processOutlineElement(childElement, item);
-        }
     }
 }
 
@@ -5939,7 +6015,6 @@ void MainWindow::showRopeSelectionMenu(const QPoint &position) {
     // Show the menu at the specified position
     contextMenu->popup(globalPos);
 }
-
 void MainWindow::updatePdfTextSelectButtonState() {
     // Check if PDF text selection is enabled
     bool isEnabled = currentCanvas() && currentCanvas()->isPdfTextSelectionEnabled();
@@ -6367,6 +6442,9 @@ void MainWindow::openSpnPackage(const QString &spnPath)
         return;
     }
     
+    // ✅ Update scroll behavior based on PDF loading state after relinking
+    setScrollOnTopEnabled(canvas->isPdfLoadedFunc());
+    
     // Update tab label
     updateTabLabel();
     updateBookmarkButtonState(); // ✅ Update bookmark button state after loading notebook
@@ -6730,7 +6808,6 @@ void MainWindow::wheelEvent(QWheelEvent *event) {
     
     QMainWindow::wheelEvent(event);
 }
-
 QString MainWindow::mouseButtonCombinationToString(const QSet<Qt::MouseButton> &buttons) const {
     QStringList buttonNames;
     
@@ -6876,7 +6953,8 @@ void MainWindow::onAutoScrollRequested(int direction)
 {
     // If there's a pending concurrent save, wait for it to complete before autoscrolling
     // This ensures that content is saved before switching pages
-    if (concurrentSaveFuture.isValid() && !concurrentSaveFuture.isFinished()) {
+    // Qt5 doesn't have isValid(), so we check isStarted() and isFinished() instead
+    if (concurrentSaveFuture.isStarted() && !concurrentSaveFuture.isFinished()) {
         // Wait for the save to complete (this should be very fast since it's just file I/O)
         concurrentSaveFuture.waitForFinished();
     }
