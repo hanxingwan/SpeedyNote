@@ -6884,7 +6884,7 @@ void MainWindow::handleMouseWheelDial(int delta) {
     }
     
     // Convert wheel delta to dial angle change
-    int angleChange = (delta > 0) ? stepDegrees : -stepDegrees;
+    int angleChange = (delta > 0) ? -stepDegrees : stepDegrees;
     
     // Apply the angle change to the dial
     int currentAngle = pageDial->value();

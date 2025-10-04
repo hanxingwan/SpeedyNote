@@ -179,6 +179,10 @@ void MarkdownWindowManager::loadWindowsForPage(int pageNumber) {
 
     // qDebug() << "Loaded" << newPageWindows.size() << "windows for page" << pageNumber;
 
+    // Clear the currently focused window since we're loading a new page
+    currentlyFocusedWindow = nullptr;
+    windowsAreTransparent = false;
+
     // Update the current window list and show the windows
     currentWindows = newPageWindows;
     for (MarkdownWindow *window : currentWindows) {
@@ -206,14 +210,19 @@ void MarkdownWindowManager::loadWindowsForPage(int pageNumber) {
         
         window->show();
         window->updateScreenPositionImmediate();
-        // Make sure window is not transparent when loaded
-        window->setTransparent(false);
+        // Start windows as semi-transparent when arriving at a new page
+        window->setTransparent(true);
     }
     
-    // Start transparency timer if there are windows but none are focused
+    // Mark that windows are currently transparent
+    windowsAreTransparent = true;
+    
+    // Start transparency timer if there are windows
+    // When timer expires, windows will remain transparent (or become transparent again)
     if (!currentWindows.isEmpty()) {
         // qDebug() << "Starting transparency timer for" << currentWindows.size() << "windows";
-        resetTransparencyTimer();
+        transparencyTimer->stop();
+        transparencyTimer->start();
     } else {
         // qDebug() << "No windows to show, not starting timer";
     }
@@ -285,8 +294,8 @@ QList<MarkdownWindow*> MarkdownWindowManager::loadWindowsForPageSeparately(int p
         
         // DON'T show the window here - let setCombinedWindows handle visibility
         window->updateScreenPositionImmediate();
-        // Make sure window is not transparent when loaded
-        window->setTransparent(false);
+        // Start windows as semi-transparent (they'll be shown by setCombinedWindows)
+        window->setTransparent(true);
     }
     
     return pageWindows;
@@ -298,6 +307,10 @@ void MarkdownWindowManager::setCombinedWindows(const QList<MarkdownWindow*> &win
         window->hide();
     }
     
+    // Clear the currently focused window since we're switching to combined view
+    currentlyFocusedWindow = nullptr;
+    windowsAreTransparent = false;
+    
     // Set new combined windows as current
     currentWindows = windows;
     
@@ -305,12 +318,18 @@ void MarkdownWindowManager::setCombinedWindows(const QList<MarkdownWindow*> &win
     for (MarkdownWindow *window : currentWindows) {
         window->show();
         window->updateScreenPositionImmediate();
-        window->setTransparent(false);
+        // Start windows as semi-transparent when switching to combined view
+        window->setTransparent(true);
     }
     
-    // Start transparency timer if there are windows but none are focused
+    // Mark that windows are currently transparent
+    windowsAreTransparent = true;
+    
+    // Start transparency timer if there are windows
+    // When timer expires, windows will remain transparent (or become transparent again)
     if (!currentWindows.isEmpty()) {
-        resetTransparencyTimer();
+        transparencyTimer->stop();
+        transparencyTimer->start();
     }
 }
 
@@ -469,9 +488,8 @@ void MarkdownWindowManager::resetTransparencyTimer() {
     // qDebug() << "MarkdownWindowManager::resetTransparencyTimer() called";
     transparencyTimer->stop();
     
-    // DON'T make all windows opaque here - only stop the timer
-    // The focused window should be made opaque by the caller if needed
-    windowsAreTransparent = false; // Reset the state
+    // DON'T make all windows opaque here - only the interacted window should be opaque
+    // The caller is responsible for setting the specific window's transparency
     
     // Start the timer again
     transparencyTimer->start();
@@ -525,14 +543,17 @@ void MarkdownWindowManager::onWindowFocusChanged(MarkdownWindow *window, bool fo
     // qDebug() << "MarkdownWindowManager::onWindowFocusChanged(" << window << ", " << focused << ")";
     
     if (focused) {
-        // A window gained focus - make it opaque immediately and reset timer
+        // A window gained focus - make only this window opaque and reset timer
         // qDebug() << "Window gained focus, setting as currently focused";
         currentlyFocusedWindow = window;
         
-        // Make the focused window opaque immediately
+        // Make only this window opaque
         window->setTransparent(false);
         
-        // Reset timer to start counting down for making other windows transparent
+        // Update state since at least one window is now opaque
+        windowsAreTransparent = false;
+        
+        // Reset timer
         resetTransparencyTimer();
     } else {
         // A window lost focus
@@ -551,6 +572,8 @@ void MarkdownWindowManager::onWindowFocusChanged(MarkdownWindow *window, bool fo
                 currentlyFocusedWindow = w;
                 // Make the newly focused window opaque
                 w->setTransparent(false);
+                // Update state since at least one window is now opaque
+                windowsAreTransparent = false;
                 break;
             }
         }
@@ -572,7 +595,12 @@ void MarkdownWindowManager::onWindowContentChanged(MarkdownWindow *window) {
     
     // Content changed, make this window the focused one and reset transparency timer
     currentlyFocusedWindow = window;
-    window->setTransparent(false); // Make the active window opaque
+    
+    // Make only this window opaque
+    window->setTransparent(false);
+    
+    // Update state since at least one window is now opaque
+    windowsAreTransparent = false;
     
     // Reset transparency timer
     resetTransparencyTimer();
@@ -607,9 +635,16 @@ void MarkdownWindowManager::connectWindowSignals(MarkdownWindow *window) {
     connect(window, &MarkdownWindow::windowMoved, this, [this, window](MarkdownWindow*) {
         // qDebug() << "Window moved:" << window;
         
-        // Window was moved, make it the focused one and reset transparency timer
-        currentlyFocusedWindow = window;
-        window->setTransparent(false); // Make the active window opaque
+        // Window was moved, make it temporarily opaque and reset transparency timer
+        // DON'T set currentlyFocusedWindow - moving doesn't mean editing
+        
+        // Make only this window opaque
+        window->setTransparent(false);
+        
+        // Update state since at least one window is now opaque
+        windowsAreTransparent = false;
+        
+        // Reset transparency timer - after 10 seconds this window will become transparent again
         resetTransparencyTimer();
         
         // Mark canvas as edited since window was moved
@@ -620,9 +655,16 @@ void MarkdownWindowManager::connectWindowSignals(MarkdownWindow *window) {
     connect(window, &MarkdownWindow::windowResized, this, [this, window](MarkdownWindow*) {
         // qDebug() << "Window resized:" << window;
         
-        // Window was resized, make it the focused one and reset transparency timer
-        currentlyFocusedWindow = window;
-        window->setTransparent(false); // Make the active window opaque
+        // Window was resized, make it temporarily opaque and reset transparency timer
+        // DON'T set currentlyFocusedWindow - resizing doesn't mean editing
+        
+        // Make only this window opaque
+        window->setTransparent(false);
+        
+        // Update state since at least one window is now opaque
+        windowsAreTransparent = false;
+        
+        // Reset transparency timer - after 10 seconds this window will become transparent again
         resetTransparencyTimer();
         
         // Mark canvas as edited since window was resized
@@ -637,9 +679,17 @@ void MarkdownWindowManager::connectWindowSignals(MarkdownWindow *window) {
     connect(window, &MarkdownWindow::windowInteracted, this, [this, window](MarkdownWindow*) {
         // qDebug() << "Window interacted:" << window;
         
-        // Window was clicked/interacted with, make it the focused one and reset transparency timer
-        currentlyFocusedWindow = window;
-        window->setTransparent(false); // Make the active window opaque
+        // Window was clicked/interacted with, make it temporarily opaque and reset transparency timer
+        // DON'T set currentlyFocusedWindow - clicking window border/header doesn't mean editing
+        // (The editor focus signals will set currentlyFocusedWindow if user clicks inside the editor)
+        
+        // Make only this window opaque
+        window->setTransparent(false);
+        
+        // Update state since at least one window is now opaque
+        windowsAreTransparent = false;
+        
+        // Reset transparency timer - after 10 seconds this window will become transparent again
         resetTransparencyTimer();
     });
     
