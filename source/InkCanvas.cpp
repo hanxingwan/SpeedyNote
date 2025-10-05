@@ -3469,8 +3469,12 @@ bool InkCanvas::isValidPageNumber(int pageNumber) const {
 }
 
 void InkCanvas::renderPdfPageToCache(int pageNumber) {
-    if (!pdfDocument || !isValidPageNumber(pageNumber)) {
-        return;
+    renderPdfPageToCacheThreadSafe(pageNumber, pdfDocument.get());
+}
+
+
+void InkCanvas::renderPdfPageToCacheThreadSafe(int pageNumber, Poppler::Document* sharedDocument) {
+    if (!sharedDocument || !isValidPageNumber(pageNumber)) {        return;
     }
 
     // Check if already cached and manage cache size (thread-safe)
@@ -3488,7 +3492,7 @@ void InkCanvas::renderPdfPageToCache(int pageNumber) {
     }
     
     // Render current page
-    std::unique_ptr<Poppler::Page> currentPage(pdfDocument->page(pageNumber));
+    std::unique_ptr<Poppler::Page> currentPage(sharedDocument->page(pageNumber));
     if (!currentPage) {
         return;
     }
@@ -3502,7 +3506,7 @@ void InkCanvas::renderPdfPageToCache(int pageNumber) {
     QImage nextPageImage;
     int nextPageNumber = pageNumber + 1;
     if (isValidPageNumber(nextPageNumber)) {
-        std::unique_ptr<Poppler::Page> nextPage(pdfDocument->page(nextPageNumber));
+        std::unique_ptr<Poppler::Page> nextPage(sharedDocument->page(nextPageNumber));
         if (nextPage) {
             nextPageImage = nextPage->renderToImage(pdfRenderDPI, pdfRenderDPI);
         }
@@ -3641,6 +3645,14 @@ void InkCanvas::cacheAdjacentPages() {
     }
     
     // Cache pages asynchronously
+    // ✅ PERFORMANCE: Get PDF path once for all threads to avoid race conditions
+    QString pdfFilePath = this->pdfPath;
+    if (pdfFilePath.isEmpty()) {
+        return; // No PDF path available
+    }
+    
+    // ✅ MULTITHREADED OPTIMIZATION: Cache pages truly in parallel with independent document instances
+    // Each thread loads its own Poppler::Document to avoid contention on shared resources
     for (int pageNum : pagesToCache) {
         QFutureWatcher<void> *watcher = new QFutureWatcher<void>(this);
         
@@ -3654,8 +3666,24 @@ void InkCanvas::cacheAdjacentPages() {
         });
         
         // Capture pageNum by value to avoid issues with lambda capture
-        QFuture<void> future = QtConcurrent::run([this, pageNum]() {
-            renderPdfPageToCache(pageNum);
+        // ✅ Each thread gets its own document instance for true parallel rendering
+        QFuture<void> future = QtConcurrent::run([this, pageNum, pdfFilePath]() {
+            // Load a fresh document instance in this thread (thread-safe, no shared state)
+            std::unique_ptr<Poppler::Document> threadDocument = std::unique_ptr<Poppler::Document>(Poppler::Document::load(pdfFilePath));
+
+            
+            if (!threadDocument || threadDocument->isLocked()) {
+                return;
+            }
+            
+            // Apply same render hints as main document for consistency
+            threadDocument->setRenderHint(Poppler::Document::Antialiasing, true);
+            threadDocument->setRenderHint(Poppler::Document::TextAntialiasing, true);
+            threadDocument->setRenderHint(Poppler::Document::TextHinting, true);
+            threadDocument->setRenderHint(Poppler::Document::TextSlightHinting, true);
+            
+            // Render using the thread-local document instance
+            renderPdfPageToCacheThreadSafe(pageNum, threadDocument.get());
         });
         
         watcher->setFuture(future);

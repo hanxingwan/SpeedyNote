@@ -470,6 +470,7 @@ private:
     
     // Intelligent PDF cache helper methods
     void renderPdfPageToCache(int pageNumber); // Render a single page and add to cache
+    void renderPdfPageToCacheThreadSafe(int pageNumber, Poppler::Document* sharedDocument);
     void checkAndCacheAdjacentPages(int targetPage); // Check and cache adjacent pages if needed
     bool isValidPageNumber(int pageNumber) const; // Check if page number is valid
     
