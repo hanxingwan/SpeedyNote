@@ -221,6 +221,10 @@ void InkCanvas::initializeBuffer() {
     // Get logical screen size
     QSize logicalSize = screen ? screen->size() : QSize(1440, 900);
     QSize pixelSize = logicalSize * dpr;
+    
+    // ✅ Double the vertical height for pseudo smooth scrolling system
+    // This allows combining two pages vertically for seamless scrolling
+    pixelSize.setHeight(pixelSize.height() * 2);
 
     buffer = QPixmap(pixelSize);
     buffer.fill(Qt::transparent);
@@ -1894,7 +1898,7 @@ void InkCanvas::saveToFile(int pageNumber) {
     if (!backgroundImage.isNull() && buffer.height() >= backgroundImage.height() * 1.8) {
         isCombinedCanvas = true;
         singlePageHeight = backgroundImage.height() / 2; // Each PDF page in the combined image
-    } else if (buffer.height() > 2000) { // Fallback heuristic for very tall buffers
+    } else if (buffer.height() > 1400) { // Fallback heuristic for tall buffers (handles 720p+)
         isCombinedCanvas = true;
         singlePageHeight = buffer.height() / 2;
     }
@@ -2203,6 +2207,9 @@ void InkCanvas::loadPage(int pageNumber) {
                 qreal dpr = screen ? screen->devicePixelRatio() : 1.0;
                 QSize logicalSize = screen ? screen->size() : QSize(1440, 900);
                 QSize expectedPixelSize = logicalSize * dpr;
+                
+                // ✅ Double the vertical height for pseudo smooth scrolling system
+                expectedPixelSize.setHeight(expectedPixelSize.height() * 2);
                 
                 if (buffer.size() != expectedPixelSize) {
                     // Buffer is wrong size, need to resize it properly
@@ -2612,14 +2619,21 @@ bool InkCanvas::event(QEvent *event) {
                 qreal newPanX = panOffsetX - scaledDeltaX;
                 qreal newPanY = panOffsetY - scaledDeltaY;
                 
-                // Clamp pan values when canvas is smaller than viewport
+                // Clamp pan X to valid range (pan Y is not clamped for pseudo smooth scrolling)
                 qreal scaledCanvasWidth = buffer.width() * (internalZoomFactor / 100.0);
                 qreal scaledCanvasHeight = buffer.height() * (internalZoomFactor / 100.0);
                 
                 // If canvas is smaller than widget, lock pan to 0 (centered)
-                if (scaledCanvasWidth < width()) {
+                if (scaledCanvasWidth <= width()) {
                     newPanX = 0;
+                } else {
+                    // ✅ Enforce pan X range: [0, scaledCanvasWidth - width()]
+                    qreal maxPanX = scaledCanvasWidth - width();
+                    newPanX = qBound(0.0, newPanX, maxPanX);
                 }
+                
+                // Pan Y is intentionally NOT clamped here to allow pseudo smooth scrolling
+                // (scrolling beyond bounds triggers page switching)
                 if (scaledCanvasHeight < height()) {
                     newPanY = 0;
                 }
@@ -2690,13 +2704,20 @@ bool InkCanvas::event(QEvent *event) {
                 qreal newPanX = bufferCenter.x() - adjustedCenter.x() / (internalZoomFactor / 100.0);
                 qreal newPanY = bufferCenter.y() - adjustedCenter.y() / (internalZoomFactor / 100.0);
                 
-                // After zoom, check if we need to center
+                // After zoom, clamp pan X to valid range (pan Y is not clamped for pseudo smooth scrolling)
                 qreal newScaledCanvasWidth = buffer.width() * (internalZoomFactor / 100.0);
                 qreal newScaledCanvasHeight = buffer.height() * (internalZoomFactor / 100.0);
                 
-                if (newScaledCanvasWidth < width()) {
+                if (newScaledCanvasWidth <= width()) {
                     newPanX = 0;
+                } else {
+                    // ✅ Enforce pan X range: [0, scaledCanvasWidth - width()]
+                    qreal maxPanX = newScaledCanvasWidth - width();
+                    newPanX = qBound(0.0, newPanX, maxPanX);
                 }
+                
+                // Pan Y is intentionally NOT clamped here to allow pseudo smooth scrolling
+                // (scrolling beyond bounds triggers page switching)
                 if (newScaledCanvasHeight < height()) {
                     newPanY = 0;
                 }
@@ -2809,15 +2830,28 @@ void InkCanvas::updateInertiaScroll() {
     inertiaPanX -= inertiaVelocityX * 16.0; // 16ms per frame at 60fps
     inertiaPanY -= inertiaVelocityY * 16.0;
     
-    // Clamp pan values
+    // Clamp pan X to valid range (pan Y is not clamped for pseudo smooth scrolling)
     qreal scaledCanvasWidth = buffer.width() * (internalZoomFactor / 100.0);
     qreal scaledCanvasHeight = buffer.height() * (internalZoomFactor / 100.0);
     
-    if (scaledCanvasWidth < width()) {
+    if (scaledCanvasWidth <= width()) {
         inertiaPanX = 0;
+    } else {
+        // ✅ Enforce pan X range: [0, scaledCanvasWidth - width()]
+        qreal maxPanX = scaledCanvasWidth - width();
+        inertiaPanX = qBound(0.0, inertiaPanX, maxPanX);
     }
+    
+    // Pan Y is intentionally NOT clamped here to allow pseudo smooth scrolling
+    // (scrolling beyond bounds triggers page switching)
     if (scaledCanvasHeight < height()) {
         inertiaPanY = 0;
+    }
+    
+    // Stop inertia X velocity if we hit a boundary
+    if ((inertiaPanX == 0 && inertiaVelocityX < 0) || 
+        (inertiaPanX >= scaledCanvasWidth - width() && inertiaVelocityX > 0)) {
+        inertiaVelocityX = 0;
     }
     
     // Update pan offsets and trigger repaint
@@ -3080,7 +3114,7 @@ void InkCanvas::loadPdfTextBoxes(int pageNumber) {
     if (!backgroundImage.isNull() && buffer.height() >= backgroundImage.height() * 1.8) {
         isCombinedCanvas = true;
         singlePageHeight = backgroundImage.height() / 2;
-    } else if (buffer.height() > 2000) {
+    } else if (buffer.height() > 1400) { // Fallback heuristic for tall buffers (handles 720p+)
         isCombinedCanvas = true;
         singlePageHeight = buffer.height() / 2;
     }
@@ -3179,7 +3213,7 @@ QPointF InkCanvas::mapWidgetToPdfCoordinates(const QPointF &widgetPoint) {
     if (!backgroundImage.isNull() && buffer.height() >= backgroundImage.height() * 1.8) {
         isCombinedCanvas = true;
         singlePageHeight = backgroundImage.height() / 2;
-    } else if (buffer.height() > 2000) {
+    } else if (buffer.height() > 1400) { // Fallback heuristic for tall buffers (handles 720p+)
         isCombinedCanvas = true;
         singlePageHeight = buffer.height() / 2;
     }
@@ -3228,7 +3262,7 @@ QPointF InkCanvas::mapPdfToWidgetCoordinates(const QPointF &pdfPoint, int pageNu
     if (!backgroundImage.isNull() && buffer.height() >= backgroundImage.height() * 1.8) {
         isCombinedCanvas = true;
         singlePageHeight = backgroundImage.height() / 2;
-    } else if (buffer.height() > 2000) {
+    } else if (buffer.height() > 1400) { // Fallback heuristic for tall buffers (handles 720p+)
         isCombinedCanvas = true;
         singlePageHeight = buffer.height() / 2;
     }
@@ -3934,7 +3968,7 @@ void InkCanvas::loadCombinedWindowsForPage(int pageNumber) {
     if (!backgroundImage.isNull() && buffer.height() >= backgroundImage.height() * 1.8) {
         isCombinedCanvas = true;
         singlePageHeight = backgroundImage.height() / 2;
-    } else if (buffer.height() > 2000) {
+    } else if (buffer.height() > 1400) { // Fallback heuristic for tall buffers (handles 720p+)
         isCombinedCanvas = true;
         singlePageHeight = buffer.height() / 2;
     }
@@ -4024,7 +4058,7 @@ void InkCanvas::saveCombinedWindowsForPage(int pageNumber) {
     if (!backgroundImage.isNull() && buffer.height() >= backgroundImage.height() * 1.8) {
         isCombinedCanvas = true;
         singlePageHeight = backgroundImage.height() / 2;
-    } else if (buffer.height() > 2000) {
+    } else if (buffer.height() > 1400) { // Fallback heuristic for tall buffers (handles 720p+)
         isCombinedCanvas = true;
         singlePageHeight = buffer.height() / 2;
     }
@@ -4859,7 +4893,7 @@ void InkCanvas::checkAutoscrollThreshold(int oldPanY, int newPanY) {
     if (!backgroundImage.isNull() && buffer.height() >= backgroundImage.height() * 1.8 && backgroundImage.height() > 0) {
         isCombinedCanvas = true;
         singlePageHeight = backgroundImage.height() / 2;
-    } else if (buffer.height() > 2000) { 
+    } else if (buffer.height() > 1400) { // Fallback heuristic for tall buffers (handles 720p+)
         isCombinedCanvas = true;
         singlePageHeight = buffer.height() / 2;
     }
@@ -4946,7 +4980,7 @@ int InkCanvas::getAutoscrollThreshold() const {
     if (!backgroundImage.isNull() && buffer.height() >= backgroundImage.height() * 1.8 && backgroundImage.height() > 0) {
         isCombinedCanvas = true;
         singlePageHeight = backgroundImage.height() / 2;
-    } else if (buffer.height() > 2000) { 
+    } else if (buffer.height() > 1400) { // Fallback heuristic for tall buffers (handles 720p+)
         isCombinedCanvas = true;
         singlePageHeight = buffer.height() / 2;
     }
