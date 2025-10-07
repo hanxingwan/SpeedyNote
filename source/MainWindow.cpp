@@ -1511,7 +1511,7 @@ void MainWindow::switchPage(int pageNumber) {
     canvas->setLastPanY(panYSlider->maximum());
         
         // ✅ Enhanced scroll-on-top functionality with explicit direction
-        if (scrollOnTopEnabled && panYSlider->maximum() > 0) {
+        if (panYSlider->maximum() > 0) {
             if (pageNumber > oldPage) {
                 // Forward page switching → scroll to top
                 QTimer::singleShot(0, this, [this]() {
@@ -1575,7 +1575,7 @@ void MainWindow::switchPageWithDirection(int pageNumber, int direction) {
         canvas->setLastPanY(panYSlider->maximum());
         
         // ✅ Enhanced scroll-on-top functionality with explicit direction
-        if (scrollOnTopEnabled && panYSlider->maximum() > 0) {
+        if (panYSlider->maximum() > 0) {
             if (direction > 0) {
                 // Forward page switching → scroll to top
                 QTimer::singleShot(0, this, [this]() {
