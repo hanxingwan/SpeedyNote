@@ -95,23 +95,25 @@ void LauncherWindow::setupUi()
     
     // Create main splitter
     mainSplitter = new QSplitter(Qt::Horizontal, this);
+    mainSplitter->setHandleWidth(1); // Minimal handle width to remove gap
+    mainSplitter->setChildrenCollapsible(false); // Prevent accidental collapse
     
     // Create sidebar with tabs
     tabList = new QListWidget();
     tabList->setObjectName("sidebarTabList"); // Give it a specific name for styling
-    tabList->setFixedWidth(250);
+    tabList->setFixedWidth(205);
     tabList->setSpacing(4);
     
     // Add tab items with explicit sizing
     QListWidgetItem *returnItem = new QListWidgetItem(loadThemedIcon("cross"), tr("Return"));
     QListWidgetItem *newItem = new QListWidgetItem(loadThemedIcon("addtab"), tr("New"));
     QListWidgetItem *openPdfItem = new QListWidgetItem(loadThemedIcon("pdf"), tr("Open PDF"));
-    QListWidgetItem *openNotebookItem = new QListWidgetItem(loadThemedIcon("folder"), tr("Open Notebook"));
+    QListWidgetItem *openNotebookItem = new QListWidgetItem(loadThemedIcon("folder"), tr("Open Notes"));
     QListWidgetItem *recentItem = new QListWidgetItem(loadThemedIcon("recent"), tr("Recent"));
     QListWidgetItem *starredItem = new QListWidgetItem(loadThemedIcon("star"), tr("Starred"));
     
     // Set explicit size hints for touch-friendly interface
-    QSize itemSize(230, 60); // Width, Height - much taller for touch
+    QSize itemSize(190, 60); // Width, Height - much taller for touch
     returnItem->setSizeHint(itemSize);
     newItem->setSizeHint(itemSize);
     openPdfItem->setSizeHint(itemSize);
@@ -161,7 +163,15 @@ void LauncherWindow::setupUi()
     // Add to splitter
     mainSplitter->addWidget(tabList);
     mainSplitter->addWidget(contentStack);
-    mainSplitter->setStretchFactor(1, 1);
+    
+    // Configure stretch factors: sidebar doesn't stretch, content area does
+    mainSplitter->setStretchFactor(0, 0); // Sidebar: no stretch
+    mainSplitter->setStretchFactor(1, 1); // Content: stretch to fill
+    
+    // Set initial sizes to remove gap: sidebar gets its fixed width, content gets the rest
+    QList<int> sizes;
+    sizes << 205 << 1000; // Sidebar: 205px (matches fixed width), Content: large value
+    mainSplitter->setSizes(sizes);
     
     // Main layout
     QHBoxLayout *mainLayout = new QHBoxLayout(centralWidget);
@@ -218,7 +228,7 @@ void LauncherWindow::setupNewTab()
     // Create button
     QPushButton *createBtn = new QPushButton(tr("Create New Notebook"));
     createBtn->setObjectName("primaryButton");
-    createBtn->setFixedSize(250, 50);
+    createBtn->setFixedSize(190, 50);
     connect(createBtn, &QPushButton::clicked, this, &LauncherWindow::onNewNotebookClicked);
     layout->addWidget(createBtn, 0, Qt::AlignCenter);
     
@@ -248,7 +258,7 @@ void LauncherWindow::setupOpenPdfTab()
     // Open button
     QPushButton *openBtn = new QPushButton(tr("Browse for PDF"));
     openBtn->setObjectName("primaryButton");
-    openBtn->setFixedSize(250, 50);
+    openBtn->setFixedSize(190, 50);
     connect(openBtn, &QPushButton::clicked, this, &LauncherWindow::onOpenPdfClicked);
     layout->addWidget(openBtn, 0, Qt::AlignCenter);
     
@@ -278,7 +288,7 @@ void LauncherWindow::setupOpenNotebookTab()
     // Open button
     QPushButton *openBtn = new QPushButton(tr("Browse for Notebook"));
     openBtn->setObjectName("primaryButton");
-    openBtn->setFixedSize(250, 50);
+    openBtn->setFixedSize(190, 50);
     connect(openBtn, &QPushButton::clicked, this, &LauncherWindow::onOpenNotebookClicked);
     layout->addWidget(openBtn, 0, Qt::AlignCenter);
     

@@ -1445,101 +1445,105 @@ Path: %1</source>
         <translation type="unfinished">SpeedyNote 启动器</translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="106"/>
+        <location filename="../../source/LauncherWindow.cpp" line="108"/>
         <source>Return</source>
         <translation type="unfinished">返回</translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="107"/>
+        <location filename="../../source/LauncherWindow.cpp" line="109"/>
         <source>New</source>
         <translation type="unfinished">新建</translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="108"/>
-        <location filename="../../source/LauncherWindow.cpp" line="236"/>
+        <location filename="../../source/LauncherWindow.cpp" line="110"/>
+        <location filename="../../source/LauncherWindow.cpp" line="238"/>
         <source>Open PDF</source>
         <translation type="unfinished">打开 PDF</translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="109"/>
-        <location filename="../../source/LauncherWindow.cpp" line="266"/>
+        <location filename="../../source/LauncherWindow.cpp" line="268"/>
         <source>Open Notebook</source>
         <translation type="unfinished">打开笔记本</translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="110"/>
+        <location filename="../../source/LauncherWindow.cpp" line="112"/>
         <source>Recent</source>
         <translation type="unfinished">最近</translation>
     </message>
     <message>
         <location filename="../../source/LauncherWindow.cpp" line="111"/>
+        <source>Open Notes</source>
+        <translation type="unfinished">打开笔记本</translation>
+    </message>
+    <message>
+        <location filename="../../source/LauncherWindow.cpp" line="113"/>
         <source>Starred</source>
         <translation type="unfinished">收藏夹</translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="183"/>
+        <location filename="../../source/LauncherWindow.cpp" line="185"/>
         <source>Return to Previous Document</source>
         <translation type="unfinished">返回先前的文件</translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="189"/>
+        <location filename="../../source/LauncherWindow.cpp" line="191"/>
         <source>Click the Return tab to go back to your previous document</source>
         <translation type="unfinished">点击“返回”来回到刚才的文件</translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="206"/>
-        <location filename="../../source/LauncherWindow.cpp" line="219"/>
+        <location filename="../../source/LauncherWindow.cpp" line="208"/>
+        <location filename="../../source/LauncherWindow.cpp" line="221"/>
         <source>Create New Notebook</source>
         <translation type="unfinished">创建新笔记本</translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="212"/>
+        <location filename="../../source/LauncherWindow.cpp" line="214"/>
         <source>Start a new notebook with a blank canvas</source>
         <translation type="unfinished">新建一个带有空白画布的新笔记本</translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="242"/>
+        <location filename="../../source/LauncherWindow.cpp" line="244"/>
         <source>Select a PDF file to create a notebook for annotation</source>
         <translation type="unfinished">选中一个PDF文件来注释</translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="249"/>
+        <location filename="../../source/LauncherWindow.cpp" line="251"/>
         <source>Browse for PDF</source>
         <translation type="unfinished">浏览 PDF</translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="272"/>
+        <location filename="../../source/LauncherWindow.cpp" line="274"/>
         <source>Select an existing SpeedyNote notebook (.spn) to open</source>
         <translation type="unfinished">选中一个已经存在的SpeedyNote笔记本(.spn格式）并打开</translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="279"/>
+        <location filename="../../source/LauncherWindow.cpp" line="281"/>
         <source>Browse for Notebook</source>
         <translation type="unfinished">浏览笔记本</translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="295"/>
+        <location filename="../../source/LauncherWindow.cpp" line="297"/>
         <source>Recent Notebooks</source>
         <translation type="unfinished">最近打开的笔记本</translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="327"/>
+        <location filename="../../source/LauncherWindow.cpp" line="329"/>
         <source>Starred Notebooks</source>
         <translation type="unfinished">笔记本收藏夹</translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="511"/>
-        <location filename="../../source/LauncherWindow.cpp" line="516"/>
+        <location filename="../../source/LauncherWindow.cpp" line="513"/>
+        <location filename="../../source/LauncherWindow.cpp" line="518"/>
         <source>No Preview</source>
         <translation type="unfinished">没有预览</translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="579"/>
+        <location filename="../../source/LauncherWindow.cpp" line="581"/>
         <source>Open PDF File</source>
         <translation type="unfinished">打开PDF文件</translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="581"/>
+        <location filename="../../source/LauncherWindow.cpp" line="583"/>
         <source>PDF Files (*.pdf)</source>
         <translation type="unfinished">PDF 文件 (*.pdf)</translation>
     </message>
@@ -1566,42 +1570,42 @@ Do you want to open the existing package?</source>
         <translation type="obsolete">创建SpeedyNote笔记本失败。</translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="627"/>
+        <location filename="../../source/LauncherWindow.cpp" line="629"/>
         <source>Open SpeedyNote Notebook</source>
         <translation type="unfinished">打开 SpeedyNote 笔记本</translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="629"/>
+        <location filename="../../source/LauncherWindow.cpp" line="631"/>
         <source>SpeedyNote Files (*.spn)</source>
         <translation type="unfinished">SpeedyNote 笔记本 (*.spn)</translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="766"/>
+        <location filename="../../source/LauncherWindow.cpp" line="768"/>
         <source>Remove from Starred</source>
         <translation type="unfinished">踢出收藏夹</translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="768"/>
+        <location filename="../../source/LauncherWindow.cpp" line="770"/>
         <source>Add to Starred</source>
         <translation type="unfinished">添加到收藏夹</translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="778"/>
+        <location filename="../../source/LauncherWindow.cpp" line="780"/>
         <source>Remove from Recent</source>
         <translation type="unfinished">从最近中删除</translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="787"/>
+        <location filename="../../source/LauncherWindow.cpp" line="789"/>
         <source>Show in Explorer</source>
         <translation type="unfinished">在文件管理器里打开</translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="1103"/>
+        <location filename="../../source/LauncherWindow.cpp" line="1105"/>
         <source>No Document</source>
         <translation type="unfinished">没有文件</translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="1104"/>
+        <location filename="../../source/LauncherWindow.cpp" line="1106"/>
         <source>There is no previous document to return to.</source>
         <translation type="unfinished">没有可返回的文件。</translation>
     </message>

@@ -1386,141 +1386,145 @@ Path: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="106"/>
+        <location filename="../../source/LauncherWindow.cpp" line="108"/>
         <source>Return</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="107"/>
+        <location filename="../../source/LauncherWindow.cpp" line="109"/>
         <source>New</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="108"/>
-        <location filename="../../source/LauncherWindow.cpp" line="236"/>
+        <location filename="../../source/LauncherWindow.cpp" line="110"/>
+        <location filename="../../source/LauncherWindow.cpp" line="238"/>
         <source>Open PDF</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="109"/>
-        <location filename="../../source/LauncherWindow.cpp" line="266"/>
+        <location filename="../../source/LauncherWindow.cpp" line="268"/>
         <source>Open Notebook</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="110"/>
+        <location filename="../../source/LauncherWindow.cpp" line="112"/>
         <source>Recent</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../source/LauncherWindow.cpp" line="111"/>
+        <source>Open Notes</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../source/LauncherWindow.cpp" line="113"/>
         <source>Starred</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="183"/>
+        <location filename="../../source/LauncherWindow.cpp" line="185"/>
         <source>Return to Previous Document</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="189"/>
+        <location filename="../../source/LauncherWindow.cpp" line="191"/>
         <source>Click the Return tab to go back to your previous document</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="206"/>
-        <location filename="../../source/LauncherWindow.cpp" line="219"/>
+        <location filename="../../source/LauncherWindow.cpp" line="208"/>
+        <location filename="../../source/LauncherWindow.cpp" line="221"/>
         <source>Create New Notebook</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="212"/>
+        <location filename="../../source/LauncherWindow.cpp" line="214"/>
         <source>Start a new notebook with a blank canvas</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="242"/>
+        <location filename="../../source/LauncherWindow.cpp" line="244"/>
         <source>Select a PDF file to create a notebook for annotation</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="249"/>
+        <location filename="../../source/LauncherWindow.cpp" line="251"/>
         <source>Browse for PDF</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="272"/>
+        <location filename="../../source/LauncherWindow.cpp" line="274"/>
         <source>Select an existing SpeedyNote notebook (.spn) to open</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="279"/>
+        <location filename="../../source/LauncherWindow.cpp" line="281"/>
         <source>Browse for Notebook</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="295"/>
+        <location filename="../../source/LauncherWindow.cpp" line="297"/>
         <source>Recent Notebooks</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="327"/>
+        <location filename="../../source/LauncherWindow.cpp" line="329"/>
         <source>Starred Notebooks</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="511"/>
-        <location filename="../../source/LauncherWindow.cpp" line="516"/>
+        <location filename="../../source/LauncherWindow.cpp" line="513"/>
+        <location filename="../../source/LauncherWindow.cpp" line="518"/>
         <source>No Preview</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="579"/>
+        <location filename="../../source/LauncherWindow.cpp" line="581"/>
         <source>Open PDF File</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="581"/>
+        <location filename="../../source/LauncherWindow.cpp" line="583"/>
         <source>PDF Files (*.pdf)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="627"/>
+        <location filename="../../source/LauncherWindow.cpp" line="629"/>
         <source>Open SpeedyNote Notebook</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="629"/>
+        <location filename="../../source/LauncherWindow.cpp" line="631"/>
         <source>SpeedyNote Files (*.spn)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="766"/>
+        <location filename="../../source/LauncherWindow.cpp" line="768"/>
         <source>Remove from Starred</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="768"/>
+        <location filename="../../source/LauncherWindow.cpp" line="770"/>
         <source>Add to Starred</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="778"/>
+        <location filename="../../source/LauncherWindow.cpp" line="780"/>
         <source>Remove from Recent</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="787"/>
+        <location filename="../../source/LauncherWindow.cpp" line="789"/>
         <source>Show in Explorer</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="1103"/>
+        <location filename="../../source/LauncherWindow.cpp" line="1105"/>
         <source>No Document</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/LauncherWindow.cpp" line="1104"/>
+        <location filename="../../source/LauncherWindow.cpp" line="1106"/>
         <source>There is no previous document to return to.</source>
         <translation type="unfinished"></translation>
     </message>
