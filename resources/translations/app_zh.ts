@@ -601,12 +601,12 @@
     <message>
         <location filename="../../source/ControlPanelDialog.cpp" line="91"/>
         <source>Invert PDF Colors (Dark Mode)</source>
-        <translation type="unfinished"></translation>
+        <translation type="unfinished">（黑暗模式下）PDF反色</translation>
     </message>
     <message>
         <location filename="../../source/ControlPanelDialog.cpp" line="92"/>
         <source>Inverts PDF colors for better readability in dark mode. Useful for PDFs with light backgrounds.</source>
-        <translation type="unfinished"></translation>
+        <translation type="unfinished">为在黑暗模式下提升可读性，给PDF做反色处理。通常适用于白底黑字的PDF。</translation>
     </message>
     <message>
         <location filename="../../source/ControlPanelDialog.cpp" line="586"/>
