@@ -1,3 +1,8 @@
+param(
+    [switch]$old,
+    [switch]$legacy
+)
+
 rm -r build
 mkdir build
 
@@ -9,7 +14,17 @@ mkdir build
 Copy-Item -Path ".\resources\translations\*.qm" -Destination ".\build" -Force
 
 cd .\build
-cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release .. 
+
+# Determine CPU architecture target
+$cpuArch = "modern"
+if ($old -or $legacy) {
+    $cpuArch = "old"
+    Write-Host "Building for older CPUs (SSE4.2 compatible)..." -ForegroundColor Yellow
+} else {
+    Write-Host "Building for modern CPUs (AVX2 compatible)..." -ForegroundColor Green
+}
+
+cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DCPU_ARCH=$cpuArch .. 
 cmake --build . --config Release -- -j16
 
 

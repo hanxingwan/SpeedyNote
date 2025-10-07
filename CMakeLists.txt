@@ -40,17 +40,36 @@ if (WIN32)
     # Prevent SDL2 from redefining main()
     add_compile_definitions(SDL_MAIN_HANDLED)
 
-    # Enable modern instruction sets and optimizations for Windows
-    add_compile_options(
-        -march=haswell          # Enable AVX2, FMA, BMI1, BMI2 instructions
-        -mtune=haswell          # Optimize for Haswell+ architectures
-        -mavx2                  # Explicitly enable AVX2
-        -mfma                   # Enable FMA (Fused Multiply-Add)
-        -mbmi                   # Enable BMI1 (Bit Manipulation Instructions)
-        -mbmi2                  # Enable BMI2
-        -O3                     # Maximum optimization level
-        -DNDEBUG                # Disable debug assertions for performance
-    )
+    # CPU architecture optimization target (can be set via -DCPU_ARCH=old)
+    if(NOT DEFINED CPU_ARCH)
+        set(CPU_ARCH "modern")
+    endif()
+
+    if(CPU_ARCH STREQUAL "old")
+        # Optimizations for older CPUs (SSE4.2, compatible with older Pentium/Atom/Core CPUs)
+        message(STATUS "Building for older CPUs (SSE4.2 compatible)")
+        add_compile_options(
+            -march=nehalem          # Enable SSE4.2 and earlier instructions (2008+ CPUs)
+            -mtune=generic          # Optimize for broad CPU compatibility
+            -msse4.2                # Explicitly enable SSE4.2
+            -mpopcnt                # Enable POPCNT instruction (comes with SSE4.2)
+            -O3                     # Maximum optimization level
+            -DNDEBUG                # Disable debug assertions for performance
+        )
+    else()
+        # Optimizations for modern CPUs (AVX2, Haswell and newer)
+        message(STATUS "Building for modern CPUs (AVX2 compatible)")
+        add_compile_options(
+            -march=haswell          # Enable AVX2, FMA, BMI1, BMI2 instructions
+            -mtune=haswell          # Optimize for Haswell+ architectures
+            -mavx2                  # Explicitly enable AVX2
+            -mfma                   # Enable FMA (Fused Multiply-Add)
+            -mbmi                   # Enable BMI1 (Bit Manipulation Instructions)
+            -mbmi2                  # Enable BMI2
+            -O3                     # Maximum optimization level
+            -DNDEBUG                # Disable debug assertions for performance
+        )
+    endif()
 
     # Windows resource file
     enable_language(RC)

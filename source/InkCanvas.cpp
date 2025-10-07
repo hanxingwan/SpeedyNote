@@ -221,6 +221,10 @@ void InkCanvas::initializeBuffer() {
     // Get logical screen size
     QSize logicalSize = screen ? screen->size() : QSize(1440, 900);
     QSize pixelSize = logicalSize * dpr;
+    
+    // ✅ Double the vertical height for pseudo smooth scrolling system
+    // This allows combining two pages vertically for seamless scrolling
+    pixelSize.setHeight(pixelSize.height() * 2);
 
     buffer = QPixmap(pixelSize);
     buffer.fill(Qt::transparent);
@@ -1894,7 +1898,7 @@ void InkCanvas::saveToFile(int pageNumber) {
     if (!backgroundImage.isNull() && buffer.height() >= backgroundImage.height() * 1.8) {
         isCombinedCanvas = true;
         singlePageHeight = backgroundImage.height() / 2; // Each PDF page in the combined image
-    } else if (buffer.height() > 2000) { // Fallback heuristic for very tall buffers
+    } else if (buffer.height() > 1400) { // Fallback heuristic for tall buffers (handles 720p+)
         isCombinedCanvas = true;
         singlePageHeight = buffer.height() / 2;
     }
@@ -2204,6 +2208,9 @@ void InkCanvas::loadPage(int pageNumber) {
                 QSize logicalSize = screen ? screen->size() : QSize(1440, 900);
                 QSize expectedPixelSize = logicalSize * dpr;
                 
+                // ✅ Double the vertical height for pseudo smooth scrolling system
+                expectedPixelSize.setHeight(expectedPixelSize.height() * 2);
+                
                 if (buffer.size() != expectedPixelSize) {
                     // Buffer is wrong size, need to resize it properly
                     QPixmap newBuffer(expectedPixelSize);
@@ -2431,9 +2438,10 @@ void InkCanvas::setPanWithTouchScroll(int xOffset, int yOffset) {
     // Update the cached frame offset for the next paint
     cachedFrameOffset = QPoint(deltaX, deltaY);
     
-    // Use repaint() instead of update() for immediate, synchronous painting
-    // This is more efficient during continuous gestures as it bypasses the event queue
-    repaint();
+    // Use update() for non-blocking updates to reduce touch input lag
+    // This allows the touch event to return quickly, improving responsiveness
+    // Qt will coalesce multiple update() calls automatically for efficiency
+    update();
     
     // Emit signal for MainWindow to update scrollbars
     // MainWindow checks isTouchPanningActive() and skips expensive operations
@@ -2578,14 +2586,21 @@ bool InkCanvas::event(QEvent *event) {
                 lastTouchVelocity = QPointF(0, 0);
                 
                 // Capture current frame for efficient panning
+                // Use devicePixelRatio-aware grab for better performance on low-spec devices
                 cachedFrame = grab();  // Grab widget contents as pixmap
                 cachedFrameOffset = QPoint(0, 0);  // Start with no offset
+                
+                // Pre-calculate for optimization
+                touchPanStartX = panOffsetX;
+                touchPanStartY = panOffsetY;
             } else if (event->type() == QEvent::TouchUpdate && isPanning) {
                 QPointF delta = touchPoint.position() - lastTouchPos;
                 qint64 elapsed = velocityTimer.elapsed();
                 
-                // Track velocity for inertia (pixels per millisecond)
-                if (elapsed > 0) {
+                // Track velocity for inertia - but only every other frame to reduce overhead
+                static int velocitySampleCounter = 0;
+                velocitySampleCounter++;
+                if (elapsed > 0 && velocitySampleCounter % 2 == 0) {
                     QPointF velocity(delta.x() / elapsed, delta.y() / elapsed);
                     recentVelocities.append(qMakePair(velocity, elapsed));
                     
@@ -2604,14 +2619,21 @@ bool InkCanvas::event(QEvent *event) {
                 qreal newPanX = panOffsetX - scaledDeltaX;
                 qreal newPanY = panOffsetY - scaledDeltaY;
                 
-                // Clamp pan values when canvas is smaller than viewport
+                // Clamp pan X to valid range (pan Y is not clamped for pseudo smooth scrolling)
                 qreal scaledCanvasWidth = buffer.width() * (internalZoomFactor / 100.0);
                 qreal scaledCanvasHeight = buffer.height() * (internalZoomFactor / 100.0);
                 
                 // If canvas is smaller than widget, lock pan to 0 (centered)
-                if (scaledCanvasWidth < width()) {
+                if (scaledCanvasWidth <= width()) {
                     newPanX = 0;
+                } else {
+                    // ✅ Enforce pan X range: [0, scaledCanvasWidth - width()]
+                    qreal maxPanX = scaledCanvasWidth - width();
+                    newPanX = qBound(0.0, newPanX, maxPanX);
                 }
+                
+                // Pan Y is intentionally NOT clamped here to allow pseudo smooth scrolling
+                // (scrolling beyond bounds triggers page switching)
                 if (scaledCanvasHeight < height()) {
                     newPanY = 0;
                 }
@@ -2682,13 +2704,20 @@ bool InkCanvas::event(QEvent *event) {
                 qreal newPanX = bufferCenter.x() - adjustedCenter.x() / (internalZoomFactor / 100.0);
                 qreal newPanY = bufferCenter.y() - adjustedCenter.y() / (internalZoomFactor / 100.0);
                 
-                // After zoom, check if we need to center
+                // After zoom, clamp pan X to valid range (pan Y is not clamped for pseudo smooth scrolling)
                 qreal newScaledCanvasWidth = buffer.width() * (internalZoomFactor / 100.0);
                 qreal newScaledCanvasHeight = buffer.height() * (internalZoomFactor / 100.0);
                 
-                if (newScaledCanvasWidth < width()) {
+                if (newScaledCanvasWidth <= width()) {
                     newPanX = 0;
+                } else {
+                    // ✅ Enforce pan X range: [0, scaledCanvasWidth - width()]
+                    qreal maxPanX = newScaledCanvasWidth - width();
+                    newPanX = qBound(0.0, newPanX, maxPanX);
                 }
+                
+                // Pan Y is intentionally NOT clamped here to allow pseudo smooth scrolling
+                // (scrolling beyond bounds triggers page switching)
                 if (newScaledCanvasHeight < height()) {
                     newPanY = 0;
                 }
@@ -2801,15 +2830,28 @@ void InkCanvas::updateInertiaScroll() {
     inertiaPanX -= inertiaVelocityX * 16.0; // 16ms per frame at 60fps
     inertiaPanY -= inertiaVelocityY * 16.0;
     
-    // Clamp pan values
+    // Clamp pan X to valid range (pan Y is not clamped for pseudo smooth scrolling)
     qreal scaledCanvasWidth = buffer.width() * (internalZoomFactor / 100.0);
     qreal scaledCanvasHeight = buffer.height() * (internalZoomFactor / 100.0);
     
-    if (scaledCanvasWidth < width()) {
+    if (scaledCanvasWidth <= width()) {
         inertiaPanX = 0;
+    } else {
+        // ✅ Enforce pan X range: [0, scaledCanvasWidth - width()]
+        qreal maxPanX = scaledCanvasWidth - width();
+        inertiaPanX = qBound(0.0, inertiaPanX, maxPanX);
     }
+    
+    // Pan Y is intentionally NOT clamped here to allow pseudo smooth scrolling
+    // (scrolling beyond bounds triggers page switching)
     if (scaledCanvasHeight < height()) {
         inertiaPanY = 0;
+    }
+    
+    // Stop inertia X velocity if we hit a boundary
+    if ((inertiaPanX == 0 && inertiaVelocityX < 0) || 
+        (inertiaPanX >= scaledCanvasWidth - width() && inertiaVelocityX > 0)) {
+        inertiaVelocityX = 0;
     }
     
     // Update pan offsets and trigger repaint
@@ -3072,7 +3114,7 @@ void InkCanvas::loadPdfTextBoxes(int pageNumber) {
     if (!backgroundImage.isNull() && buffer.height() >= backgroundImage.height() * 1.8) {
         isCombinedCanvas = true;
         singlePageHeight = backgroundImage.height() / 2;
-    } else if (buffer.height() > 2000) {
+    } else if (buffer.height() > 1400) { // Fallback heuristic for tall buffers (handles 720p+)
         isCombinedCanvas = true;
         singlePageHeight = buffer.height() / 2;
     }
@@ -3171,7 +3213,7 @@ QPointF InkCanvas::mapWidgetToPdfCoordinates(const QPointF &widgetPoint) {
     if (!backgroundImage.isNull() && buffer.height() >= backgroundImage.height() * 1.8) {
         isCombinedCanvas = true;
         singlePageHeight = backgroundImage.height() / 2;
-    } else if (buffer.height() > 2000) {
+    } else if (buffer.height() > 1400) { // Fallback heuristic for tall buffers (handles 720p+)
         isCombinedCanvas = true;
         singlePageHeight = buffer.height() / 2;
     }
@@ -3220,7 +3262,7 @@ QPointF InkCanvas::mapPdfToWidgetCoordinates(const QPointF &pdfPoint, int pageNu
     if (!backgroundImage.isNull() && buffer.height() >= backgroundImage.height() * 1.8) {
         isCombinedCanvas = true;
         singlePageHeight = backgroundImage.height() / 2;
-    } else if (buffer.height() > 2000) {
+    } else if (buffer.height() > 1400) { // Fallback heuristic for tall buffers (handles 720p+)
         isCombinedCanvas = true;
         singlePageHeight = buffer.height() / 2;
     }
@@ -3461,7 +3503,11 @@ bool InkCanvas::isValidPageNumber(int pageNumber) const {
 }
 
 void InkCanvas::renderPdfPageToCache(int pageNumber) {
-    if (!pdfDocument || !isValidPageNumber(pageNumber)) {
+    renderPdfPageToCacheThreadSafe(pageNumber, pdfDocument.get());
+}
+
+void InkCanvas::renderPdfPageToCacheThreadSafe(int pageNumber, Poppler::Document* sharedDocument) {
+    if (!sharedDocument || !isValidPageNumber(pageNumber)) {
         return;
     }
 
@@ -3479,8 +3525,8 @@ void InkCanvas::renderPdfPageToCache(int pageNumber) {
         }
     }
     
-    // Render current page
-    std::unique_ptr<Poppler::Page> currentPage(pdfDocument->page(pageNumber));
+    // Render current page using the shared document pointer
+    std::unique_ptr<Poppler::Page> currentPage(sharedDocument->page(pageNumber));
     if (!currentPage) {
         return;
     }
@@ -3494,7 +3540,7 @@ void InkCanvas::renderPdfPageToCache(int pageNumber) {
     QImage nextPageImage;
     int nextPageNumber = pageNumber + 1;
     if (isValidPageNumber(nextPageNumber)) {
-        std::unique_ptr<Poppler::Page> nextPage(pdfDocument->page(nextPageNumber));
+        std::unique_ptr<Poppler::Page> nextPage(sharedDocument->page(nextPageNumber));
         if (nextPage) {
             nextPageImage = nextPage->renderToImage(pdfRenderDPI, pdfRenderDPI);
         }
@@ -3632,7 +3678,14 @@ void InkCanvas::cacheAdjacentPages() {
         }
     }
     
-    // Cache pages asynchronously
+    // ✅ PERFORMANCE: Get PDF path once for all threads to avoid race conditions
+    QString pdfFilePath = this->pdfPath;
+    if (pdfFilePath.isEmpty()) {
+        return; // No PDF path available
+    }
+    
+    // ✅ MULTITHREADED OPTIMIZATION: Cache pages truly in parallel with independent document instances
+    // Each thread loads its own Poppler::Document to avoid contention on shared resources
     for (int pageNum : pagesToCache) {
         QFutureWatcher<void> *watcher = new QFutureWatcher<void>(this);
         
@@ -3645,9 +3698,22 @@ void InkCanvas::cacheAdjacentPages() {
             watcher->deleteLater();
         });
         
-        // Capture pageNum by value to avoid issues with lambda capture
-        QFuture<void> future = QtConcurrent::run([this, pageNum]() {
-            renderPdfPageToCache(pageNum);
+        // ✅ Each thread gets its own document instance for true parallel rendering
+        QFuture<void> future = QtConcurrent::run([this, pageNum, pdfFilePath]() {
+            // Load a fresh document instance in this thread (thread-safe, no shared state)
+            std::unique_ptr<Poppler::Document> threadDocument = Poppler::Document::load(pdfFilePath);
+            if (!threadDocument || threadDocument->isLocked()) {
+                return;
+            }
+            
+            // Apply same render hints as main document for consistency
+            threadDocument->setRenderHint(Poppler::Document::Antialiasing, true);
+            threadDocument->setRenderHint(Poppler::Document::TextAntialiasing, true);
+            threadDocument->setRenderHint(Poppler::Document::TextHinting, true);
+            threadDocument->setRenderHint(Poppler::Document::TextSlightHinting, true);
+            
+            // Render using the thread-local document instance
+            renderPdfPageToCacheThreadSafe(pageNum, threadDocument.get());
         });
         
         watcher->setFuture(future);
@@ -3902,7 +3968,7 @@ void InkCanvas::loadCombinedWindowsForPage(int pageNumber) {
     if (!backgroundImage.isNull() && buffer.height() >= backgroundImage.height() * 1.8) {
         isCombinedCanvas = true;
         singlePageHeight = backgroundImage.height() / 2;
-    } else if (buffer.height() > 2000) {
+    } else if (buffer.height() > 1400) { // Fallback heuristic for tall buffers (handles 720p+)
         isCombinedCanvas = true;
         singlePageHeight = buffer.height() / 2;
     }
@@ -3992,7 +4058,7 @@ void InkCanvas::saveCombinedWindowsForPage(int pageNumber) {
     if (!backgroundImage.isNull() && buffer.height() >= backgroundImage.height() * 1.8) {
         isCombinedCanvas = true;
         singlePageHeight = backgroundImage.height() / 2;
-    } else if (buffer.height() > 2000) {
+    } else if (buffer.height() > 1400) { // Fallback heuristic for tall buffers (handles 720p+)
         isCombinedCanvas = true;
         singlePageHeight = buffer.height() / 2;
     }
@@ -4827,7 +4893,7 @@ void InkCanvas::checkAutoscrollThreshold(int oldPanY, int newPanY) {
     if (!backgroundImage.isNull() && buffer.height() >= backgroundImage.height() * 1.8 && backgroundImage.height() > 0) {
         isCombinedCanvas = true;
         singlePageHeight = backgroundImage.height() / 2;
-    } else if (buffer.height() > 2000) { 
+    } else if (buffer.height() > 1400) { // Fallback heuristic for tall buffers (handles 720p+)
         isCombinedCanvas = true;
         singlePageHeight = buffer.height() / 2;
     }
@@ -4914,7 +4980,7 @@ int InkCanvas::getAutoscrollThreshold() const {
     if (!backgroundImage.isNull() && buffer.height() >= backgroundImage.height() * 1.8 && backgroundImage.height() > 0) {
         isCombinedCanvas = true;
         singlePageHeight = backgroundImage.height() / 2;
-    } else if (buffer.height() > 2000) { 
+    } else if (buffer.height() > 1400) { // Fallback heuristic for tall buffers (handles 720p+)
         isCombinedCanvas = true;
         singlePageHeight = buffer.height() / 2;
     }

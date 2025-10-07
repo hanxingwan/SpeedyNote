@@ -138,9 +138,15 @@ void MarkdownWindow::applyStyle() {
         )").arg(headerBackgroundColor, borderColor));
     }
     
-    // Reset the markdown editor style to default (opaque)
+    // Set the markdown editor to have an explicit opaque background
     if (markdownEditor) {
-        markdownEditor->setStyleSheet(""); // Clear any custom styles
+        QString editorBg = isDarkMode ? "#2b2b2b" : "white";
+        markdownEditor->setStyleSheet(QString(R"(
+            QMarkdownTextEdit {
+                background-color: %1;
+                border: none;
+            }
+        )").arg(editorBg));
     }
 }
 

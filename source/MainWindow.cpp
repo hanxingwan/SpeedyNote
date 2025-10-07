@@ -85,7 +85,7 @@ void setupLinuxSignalHandlers() {
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false), localServer(nullptr) {
 
-    setWindowTitle(tr("SpeedyNote Beta 0.10.1"));
+    setWindowTitle(tr("SpeedyNote Beta 0.10.2"));
 
 #ifdef Q_OS_LINUX
     // Setup signal handlers for proper cleanup on Linux
@@ -1511,7 +1511,8 @@ void MainWindow::switchPage(int pageNumber) {
     canvas->setLastPanY(panYSlider->maximum());
         
         // ✅ Enhanced scroll-on-top functionality with explicit direction
-        if (scrollOnTopEnabled && panYSlider->maximum() > 0) {
+        // Now enabled for all notebooks, not just PDFs
+        if (panYSlider->maximum() > 0) {
             if (pageNumber > oldPage) {
                 // Forward page switching → scroll to top
                 QTimer::singleShot(0, this, [this]() {
@@ -1575,7 +1576,8 @@ void MainWindow::switchPageWithDirection(int pageNumber, int direction) {
         canvas->setLastPanY(panYSlider->maximum());
         
         // ✅ Enhanced scroll-on-top functionality with explicit direction
-        if (scrollOnTopEnabled && panYSlider->maximum() > 0) {
+        // Now enabled for all notebooks, not just PDFs
+        if (panYSlider->maximum() > 0) {
             if (direction > 0) {
                 // Forward page switching → scroll to top
                 QTimer::singleShot(0, this, [this]() {
@@ -6864,8 +6866,8 @@ void MainWindow::handleMouseWheelDial(int delta) {
             break;
     }
     
-    // Convert wheel delta to dial angle change
-    int angleChange = (delta > 0) ? stepDegrees : -stepDegrees;
+    // Convert wheel delta to dial angle change (reversed: down = increase, up = decrease)
+    int angleChange = (delta > 0) ? -stepDegrees : stepDegrees;
     
     // Apply the angle change to the dial
     int currentAngle = pageDial->value();
