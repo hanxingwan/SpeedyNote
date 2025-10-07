@@ -4,6 +4,9 @@
 #include "SpnPackageManager.h"
 #include <QApplication>
 #include <QVBoxLayout>
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 #include <QHBoxLayout>
 #include <QGridLayout>
 #include <QPushButton>
@@ -462,10 +465,9 @@ QPushButton* LauncherWindow::createNotebookButton(const QString &path, bool isSt
     coverLabel->setAlignment(Qt::AlignCenter);
     
     // Apply theme-appropriate styling for cover
-    QSettings settings("SpeedyNote", "App");
-    bool isDarkMode = settings.value("useDarkMode", false).toBool();
-    QString coverBg = isDarkMode ? "#2b2b2b" : "white";
-    QString coverBorder = isDarkMode ? "#555555" : "#ddd";
+    bool isDarkModeActive = isDarkMode();
+    QString coverBg = isDarkModeActive ? "#2b2b2b" : "white";
+    QString coverBorder = isDarkModeActive ? "#555555" : "#ddd";
     coverLabel->setStyleSheet(QString("border: 1px solid %1; border-radius: 0px; background: %2;").arg(coverBorder).arg(coverBg));
     
     // Set scaling mode to fill the entire area
@@ -507,12 +509,12 @@ QPushButton* LauncherWindow::createNotebookButton(const QString &path, bool isSt
             coverLabel->setPixmap(finalPixmap);
         } else {
             coverLabel->setText(tr("No Preview"));
-            QString textColor = isDarkMode ? "#cccccc" : "#666";
+            QString textColor = isDarkModeActive ? "#cccccc" : "#666";
             coverLabel->setStyleSheet(coverLabel->styleSheet() + QString(" color: %1;").arg(textColor));
         }
     } else {
         coverLabel->setText(tr("No Preview"));
-        QString textColor = isDarkMode ? "#cccccc" : "#666";
+        QString textColor = isDarkModeActive ? "#cccccc" : "#666";
         coverLabel->setStyleSheet(coverLabel->styleSheet() + QString(" color: %1;").arg(textColor));
     }
     
@@ -852,30 +854,21 @@ void LauncherWindow::refreshStarredNotebooks()
 
 void LauncherWindow::applyModernStyling()
 {
-    // Detect dark mode
-    bool isDarkMode = false;
-    QSettings settings("SpeedyNote", "App");
-    if (settings.contains("useDarkMode")) {
-        isDarkMode = settings.value("useDarkMode", false).toBool();
-    } else {
-        // Auto-detect system dark mode
-        QPalette palette = QApplication::palette();
-        QColor windowColor = palette.color(QPalette::Window);
-        isDarkMode = windowColor.lightness() < 128;
-    }
+    // Detect dark mode using the isDarkMode() method
+    bool isDarkModeActive = isDarkMode();
     
     // Apply theme-appropriate styling
-    QString mainBg = isDarkMode ? "#2b2b2b" : "#f8f9fa";
-    QString cardBg = isDarkMode ? "#3c3c3c" : "#ffffff";
-    QString borderColor = isDarkMode ? "#555555" : "#e9ecef";
-    QString textColor = isDarkMode ? "#ffffff" : "#212529";
-    QString secondaryTextColor = isDarkMode ? "#cccccc" : "#6c757d";
-    QString hoverBorderColor = isDarkMode ? "#0078d4" : "#007bff";
-    QString selectedBg = isDarkMode ? "#0078d4" : "#007bff";
-    QString hoverBg = isDarkMode ? "#404040" : "#e9ecef";
-    QString scrollBg = isDarkMode ? "#2b2b2b" : "#f8f9fa";
-    QString scrollHandle = isDarkMode ? "#666666" : "#ced4da";
-    QString scrollHandleHover = isDarkMode ? "#777777" : "#adb5bd";
+    QString mainBg = isDarkModeActive ? "#2b2b2b" : "#f8f9fa";
+    QString cardBg = isDarkModeActive ? "#3c3c3c" : "#ffffff";
+    QString borderColor = isDarkModeActive ? "#555555" : "#e9ecef";
+    QString textColor = isDarkModeActive ? "#ffffff" : "#212529";
+    QString secondaryTextColor = isDarkModeActive ? "#cccccc" : "#6c757d";
+    QString hoverBorderColor = isDarkModeActive ? "#0078d4" : "#007bff";
+    QString selectedBg = isDarkModeActive ? "#0078d4" : "#007bff";
+    QString hoverBg = isDarkModeActive ? "#404040" : "#e9ecef";
+    QString scrollBg = isDarkModeActive ? "#2b2b2b" : "#f8f9fa";
+    QString scrollHandle = isDarkModeActive ? "#666666" : "#ced4da";
+    QString scrollHandleHover = isDarkModeActive ? "#777777" : "#adb5bd";
     
     // Main window styling
     setStyleSheet(QString(R"(
@@ -982,8 +975,8 @@ void LauncherWindow::applyModernStyling()
        .arg(borderColor)                               // %3
        .arg(selectedBg)                                // %4
        .arg(hoverBg)                                   // %5
-       .arg(isDarkMode ? "#005a9e" : "#0056b3")        // %6
-       .arg(isDarkMode ? "#004578" : "#004085")        // %7
+       .arg(isDarkModeActive ? "#005a9e" : "#0056b3")        // %6
+       .arg(isDarkModeActive ? "#004578" : "#004085")        // %7
        .arg(hoverBorderColor)                          // %8
        .arg(scrollBg)                                  // %9
        .arg(scrollHandle)                              // %10
@@ -1033,6 +1026,33 @@ void LauncherWindow::hideEvent(QHideEvent *event)
     lastCalculatedWidth = 0;
 }
 
+#ifdef Q_OS_WIN
+bool LauncherWindow::nativeEvent(const QByteArray &eventType, void *message, qintptr *result) {
+    // Detect Windows theme changes at runtime
+    if (eventType == "windows_generic_MSG") {
+        MSG *msg = static_cast<MSG *>(message);
+        
+        // WM_SETTINGCHANGE (0x001A) is sent when system settings change
+        if (msg->message == 0x001A) {
+            // Check if this is a theme-related setting change
+            if (msg->lParam != 0) {
+                const wchar_t *lparam = reinterpret_cast<const wchar_t *>(msg->lParam);
+                if (lparam && wcscmp(lparam, L"ImmersiveColorSet") == 0) {
+                    // Windows theme changed - update Qt palette and our UI
+                    // Use a small delay to ensure registry has been updated
+                    QTimer::singleShot(100, this, [this]() {
+                        MainWindow::updateApplicationPalette(); // Update Qt's global palette
+                        applyModernStyling(); // Update our custom styling
+                    });
+                }
+            }
+        }
+    }
+    
+    return QMainWindow::nativeEvent(eventType, message, result);
+}
+#endif
+
 bool LauncherWindow::isDarkMode() const
 {
     QSettings settings("SpeedyNote", "App");
@@ -1040,9 +1060,22 @@ bool LauncherWindow::isDarkMode() const
         return settings.value("useDarkMode", false).toBool();
     } else {
         // Auto-detect system dark mode
+#ifdef Q_OS_WIN
+        // On Windows, read the registry to detect dark mode
+        // This works on Windows 10 1809+ and Windows 11
+        QSettings winSettings("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", 
+                              QSettings::NativeFormat);
+        
+        // AppsUseLightTheme: 0 = dark mode, 1 = light mode
+        // If the key doesn't exist (older Windows), default to light mode
+        int appsUseLightTheme = winSettings.value("AppsUseLightTheme", 1).toInt();
+        return (appsUseLightTheme == 0);
+#else
+        // On Linux and other platforms, use palette-based detection
         QPalette palette = QApplication::palette();
         QColor windowColor = palette.color(QPalette::Window);
         return windowColor.lightness() < 128;
+#endif
     }
 }
 

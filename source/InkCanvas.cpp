@@ -232,6 +232,31 @@ void InkCanvas::initializeBuffer() {
     setMaximumSize(pixelSize); // 🔥 KEY LINE to make full canvas drawable
 }
 
+// Helper function to invert PDF colors for dark mode
+static QImage invertPdfImage(const QImage &original) {
+    if (original.isNull()) {
+        return original;
+    }
+    
+    QImage inverted = original.copy();
+    inverted.invertPixels(QImage::InvertRgb);  // Invert RGB, keep alpha
+    return inverted;
+}
+
+void InkCanvas::setPdfInversionEnabled(bool enabled) {
+    if (pdfInversionEnabled != enabled) {
+        pdfInversionEnabled = enabled;
+        
+        // Clear PDF cache to force re-rendering with new inversion setting
+        clearPdfCache();
+        
+        // Save to metadata
+        if (!saveFolder.isEmpty()) {
+            saveNotebookMetadata();
+        }
+    }
+}
+
 void InkCanvas::loadPdf(const QString &pdfPath) {
     // ✅ Clear existing PDF cache before loading new PDF to prevent old pages from showing
     {
@@ -410,6 +435,11 @@ void InkCanvas::loadPdfPreviewAsync(int pageNumber) {
 
         QImage currentPageImage = currentPage->renderToImage(96, 96);
         if (currentPageImage.isNull()) return QPixmap();
+        
+        // Apply PDF inversion if enabled
+        if (pdfInversionEnabled) {
+            currentPageImage = invertPdfImage(currentPageImage);
+        }
 
         // Try to render next page for combination
         QImage nextPageImage;
@@ -418,6 +448,11 @@ void InkCanvas::loadPdfPreviewAsync(int pageNumber) {
             std::unique_ptr<Poppler::Page> nextPage(pdfDocument->page(nextPageNumber));
             if (nextPage) {
                 nextPageImage = nextPage->renderToImage(96, 96);
+                
+                // Apply PDF inversion if enabled
+                if (pdfInversionEnabled) {
+                    nextPageImage = invertPdfImage(nextPageImage);
+                }
             }
         }
 
@@ -3536,6 +3571,11 @@ void InkCanvas::renderPdfPageToCacheThreadSafe(int pageNumber, Poppler::Document
         return;
     }
     
+    // Apply PDF inversion if enabled
+    if (pdfInversionEnabled) {
+        currentPageImage = invertPdfImage(currentPageImage);
+    }
+    
     // Try to render next page for combination
     QImage nextPageImage;
     int nextPageNumber = pageNumber + 1;
@@ -3543,6 +3583,11 @@ void InkCanvas::renderPdfPageToCacheThreadSafe(int pageNumber, Poppler::Document
         std::unique_ptr<Poppler::Page> nextPage(sharedDocument->page(nextPageNumber));
         if (nextPage) {
             nextPageImage = nextPage->renderToImage(pdfRenderDPI, pdfRenderDPI);
+            
+            // Apply PDF inversion if enabled
+            if (pdfInversionEnabled) {
+                nextPageImage = invertPdfImage(nextPageImage);
+            }
         }
     }
     
@@ -4309,6 +4354,9 @@ void InkCanvas::loadNotebookMetadata() {
     backgroundColor = QColor(obj["background_color"].toString("#ffffff"));
     backgroundDensity = obj["background_density"].toInt(20);
     
+    // PDF inversion setting (default to false for existing notebooks)
+    pdfInversionEnabled = obj["pdf_inversion_enabled"].toBool(false);
+    
     // Load bookmarks
     bookmarks.clear();
     QJsonArray bookmarkArray = obj["bookmarks"].toArray();
@@ -4345,6 +4393,9 @@ void InkCanvas::saveNotebookMetadata() {
     obj["background_style"] = bgStyleStr;
     obj["background_color"] = backgroundColor.name();
     obj["background_density"] = backgroundDensity;
+    
+    // PDF inversion setting
+    obj["pdf_inversion_enabled"] = pdfInversionEnabled;
     
     // Save bookmarks
     QJsonArray bookmarkArray;

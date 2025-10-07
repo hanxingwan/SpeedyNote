@@ -143,6 +143,10 @@ public:
 
     void setPDFRenderDPI(int dpi) { pdfRenderDPI = dpi; }  // ✅ Set PDF render DPI
 
+    // PDF inversion for dark mode
+    void setPdfInversionEnabled(bool enabled);
+    bool isPdfInversionEnabled() const { return pdfInversionEnabled; }
+
     void clearPdfCache() { 
         QMutexLocker locker(&pdfCacheMutex);
         pdfCache.clear(); 
@@ -368,6 +372,7 @@ private:
     QString pasteImageFromClipboard(); // Returns path to saved clipboard image or empty string on failure
 
     int pdfRenderDPI = 192;  // Default to 288 DPI
+    bool pdfInversionEnabled = false;  // PDF color inversion for dark mode
 
     // Touch gesture support
     bool touchGesturesEnabled = false;
