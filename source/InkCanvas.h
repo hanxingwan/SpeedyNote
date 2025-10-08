@@ -43,6 +43,7 @@ signals:
     void zoomChanged(int newZoom);
     void panChanged(int panX, int panY);
     void touchGestureEnded(); // Signal emitted when touch gestures end
+    void touchPanningChanged(bool active); // Signal emitted when touch panning starts/stops (for window performance optimization)
     void ropeSelectionCompleted(const QPoint &position); // Signal emitted when rope tool selection is completed
     void pdfLinkClicked(int targetPage); // Signal emitted when a PDF link is clicked
     void pdfTextSelected(const QString &text); // Signal emitted when PDF text is selected

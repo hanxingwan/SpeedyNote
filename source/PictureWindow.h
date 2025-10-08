@@ -80,6 +80,10 @@ public:
     // Aspect ratio management
     bool getMaintainAspectRatio() const { return maintainAspectRatio; }
     double getAspectRatio() const { return aspectRatio; }
+    
+    // Frame-only mode (for performance during touch panning)
+    void setFrameOnlyMode(bool enabled);
+    bool isFrameOnlyMode() const;
 
 signals:
     void deleteRequested(PictureWindow *window);
@@ -154,6 +158,9 @@ private:
     // Touch interaction
     QPoint touchStartPos;
     QPoint touchStartGlobalPos;
+    
+    // Frame-only mode state (for performance)
+    bool frameOnlyMode;
 };
 
 #endif // PICTUREWINDOW_H

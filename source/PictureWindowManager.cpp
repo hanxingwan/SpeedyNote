@@ -264,6 +264,15 @@ void PictureWindowManager::hideAllWindows() {
     }
 }
 
+void PictureWindowManager::setWindowsFrameOnlyMode(bool enabled) {
+    // Set frame-only mode for all current windows
+    for (PictureWindow* window : currentWindows) {
+        if (window) {
+            window->setFrameOnlyMode(enabled);
+        }
+    }
+}
+
 void PictureWindowManager::setSelectionMode(bool enabled) {
     selectionMode = enabled;
     

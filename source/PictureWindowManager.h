@@ -55,6 +55,9 @@ public:
     void clearCurrentPageWindows(); // Clear all pictures from current page
     QString getSaveFolder() const;
     QString getNotebookId() const;
+    
+    // Frame-only mode (for performance during touch panning)
+    void setWindowsFrameOnlyMode(bool enabled);
 
 signals:
     void windowCreated(PictureWindow *window);

@@ -382,6 +382,7 @@ private slots:
     void handleTouchZoomChange(int newZoom);
     void handleTouchPanChange(int panX, int panY);
     void handleTouchGestureEnd(); // Add handler for touch gesture completion
+    void handleTouchPanningChanged(bool active); // Handler for touch panning start/stop (window performance optimization)
     
     // Color button state management
     void updateColorButtonStates();

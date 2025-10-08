@@ -49,6 +49,9 @@ public:
     void resetTransparencyTimer();
     void setWindowsTransparent(bool transparent);
     void hideAllWindows(); // Hide all windows and stop transparency timer
+    
+    // Frame-only mode (for performance during touch panning)
+    void setWindowsFrameOnlyMode(bool enabled);
 
 signals:
     void windowCreated(MarkdownWindow *window);

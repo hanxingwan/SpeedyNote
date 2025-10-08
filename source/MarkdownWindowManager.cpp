@@ -539,6 +539,15 @@ void MarkdownWindowManager::hideAllWindows() {
     }
 }
 
+void MarkdownWindowManager::setWindowsFrameOnlyMode(bool enabled) {
+    // Set frame-only mode for all current windows
+    for (MarkdownWindow* window : currentWindows) {
+        if (window) {
+            window->setFrameOnlyMode(enabled);
+        }
+    }
+}
+
 void MarkdownWindowManager::onWindowFocusChanged(MarkdownWindow *window, bool focused) {
     // qDebug() << "MarkdownWindowManager::onWindowFocusChanged(" << window << ", " << focused << ")";
     

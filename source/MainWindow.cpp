@@ -2373,6 +2373,7 @@ void MainWindow::addNewTab() {
     connect(newCanvas, &InkCanvas::zoomChanged, this, &MainWindow::handleTouchZoomChange);
     connect(newCanvas, &InkCanvas::panChanged, this, &MainWindow::handleTouchPanChange);
     connect(newCanvas, &InkCanvas::touchGestureEnded, this, &MainWindow::handleTouchGestureEnd);
+    connect(newCanvas, &InkCanvas::touchPanningChanged, this, &MainWindow::handleTouchPanningChanged);
     connect(newCanvas, &InkCanvas::ropeSelectionCompleted, this, &MainWindow::showRopeSelectionMenu);
     connect(newCanvas, &InkCanvas::pdfLinkClicked, this, [this](int targetPage) {
         // Navigate to the target page when a PDF link is clicked
@@ -5075,6 +5076,33 @@ void MainWindow::handleTouchGestureEnd() {
     panXSlider->setVisible(false);
     panYSlider->setVisible(false);
     scrollbarsVisible = false;
+}
+
+void MainWindow::handleTouchPanningChanged(bool active) {
+    // ✅ PERFORMANCE: Control window frame-only mode for touch panning
+    InkCanvas* canvas = currentCanvas();
+    if (!canvas) return;
+    
+    MarkdownWindowManager* markdownMgr = canvas->getMarkdownManager();
+    PictureWindowManager* pictureMgr = canvas->getPictureManager();
+    
+    if (active) {
+        // Touch panning started - enable frame-only mode for performance
+        if (markdownMgr) {
+            markdownMgr->setWindowsFrameOnlyMode(true);
+        }
+        if (pictureMgr) {
+            pictureMgr->setWindowsFrameOnlyMode(true);
+        }
+    } else {
+        // Touch panning ended - restore full window display
+        if (markdownMgr) {
+            markdownMgr->setWindowsFrameOnlyMode(false);
+        }
+        if (pictureMgr) {
+            pictureMgr->setWindowsFrameOnlyMode(false);
+        }
+    }
 }
 
 void MainWindow::updateColorButtonStates() {
