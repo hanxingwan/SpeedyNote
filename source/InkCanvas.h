@@ -428,6 +428,7 @@ private:
     // Intelligent note page cache system
     QCache<int, QPixmap> noteCache; // Cache for note pages (PNG files)
     mutable QMutex noteCacheMutex; // Thread safety for noteCache
+    QList<int> noteCacheAccessOrder; // Track access order for LRU eviction (most recent at end)
     QTimer* noteCacheTimer = nullptr; // Timer for delayed adjacent note page caching
     int currentCachedNotePage = -1; // Currently displayed note page for cache management
     int pendingNoteCacheTargetPage = -1; // Target page for pending note cache operation (to validate timer relevance)
@@ -476,7 +477,7 @@ private:
     bool isValidPageNumber(int pageNumber) const; // Check if page number is valid
     
     // Intelligent note cache helper methods
-    void loadNotePageToCache(int pageNumber); // Load a single note page and add to cache
+    void loadSingleNotePageToCache(int pageNumber); // Load a single note page and add to cache
     void checkAndCacheAdjacentNotePages(int targetPage); // Check and cache adjacent note pages if needed
     QString getNotePageFilePath(int pageNumber) const; // Get file path for note page
     

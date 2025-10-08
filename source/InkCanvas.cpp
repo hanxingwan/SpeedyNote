@@ -144,6 +144,7 @@ InkCanvas::~InkCanvas() {
     {
         QMutexLocker locker(&noteCacheMutex);
         noteCache.clear();
+        noteCacheAccessOrder.clear();
     }
     
     // ✅ Stop and clean up timers
@@ -1969,6 +1970,9 @@ void InkCanvas::saveToFile(int pageNumber) {
         {
             QMutexLocker locker(&noteCacheMutex);
             noteCache.insert(nextPageNumber, new QPixmap(QPixmap::fromImage(mergedNextImage)));
+            // ✅ LRU: Update access order
+            noteCacheAccessOrder.removeAll(nextPageNumber);
+            noteCacheAccessOrder.append(nextPageNumber);
         }
             
             // Note: Cache invalidation is now handled during page switching for better timing
@@ -1978,6 +1982,9 @@ void InkCanvas::saveToFile(int pageNumber) {
         {
             QMutexLocker locker(&noteCacheMutex);
             noteCache.insert(pageNumber, new QPixmap(currentPageBuffer));
+            // ✅ LRU: Update access order
+            noteCacheAccessOrder.removeAll(pageNumber);
+            noteCacheAccessOrder.append(pageNumber);
         }
         
     } else {
@@ -1993,6 +2000,9 @@ void InkCanvas::saveToFile(int pageNumber) {
         {
             QMutexLocker locker(&noteCacheMutex);
             noteCache.insert(pageNumber, new QPixmap(buffer));
+            // ✅ LRU: Update access order
+            noteCacheAccessOrder.removeAll(pageNumber);
+            noteCacheAccessOrder.append(pageNumber);
         }
     }
     
@@ -2096,34 +2106,69 @@ void InkCanvas::loadPage(int pageNumber) {
     // Update current note page tracker
     currentCachedNotePage = pageNumber;
 
-    // CRITICAL FIX: Always invalidate cache for combined pages when switching
-    // This ensures we get fresh content that might have been updated by other views
-    {
-        QMutexLocker locker(&noteCacheMutex);
-        if (pageNumber > 0) {
-            noteCache.remove(pageNumber - 1); // Remove "page (n-1),n" cache
-        }
-    }
-    {
-        QMutexLocker locker(&noteCacheMutex);
-        noteCache.remove(pageNumber);         // Remove "page n,(n+1)" cache
-        noteCache.remove(pageNumber + 1);     // Remove "page (n+1),(n+2)" cache
-    }
-
-    // Now load fresh from disk (no cache check since we just invalidated)
-    loadNotePageToCache(pageNumber);
+    // ✅ NEW APPROACH: Cache single pages, combine on-the-fly
+    // Load individual pages into cache (will skip if already cached)
+    loadSingleNotePageToCache(pageNumber);
+    loadSingleNotePageToCache(pageNumber + 1);
     
-    // Use the newly cached page or initialize buffer if loading failed
-    bool loadedFromCache = false;
+    // Combine the two pages on-the-fly to create the display buffer
+    QPixmap currentPageCanvas;
+    QPixmap nextPageCanvas;
+    bool currentExists = false;
+    bool nextExists = false;
+    bool loadedFromCache = false; // Track if we loaded anything from cache
+    
     {
         QMutexLocker locker(&noteCacheMutex);
         if (noteCache.contains(pageNumber)) {
-            buffer = *noteCache.object(pageNumber);
+            currentPageCanvas = *noteCache.object(pageNumber);
+            currentExists = true;
             loadedFromCache = true;
+            // ✅ LRU: Mark as recently accessed
+            noteCacheAccessOrder.removeAll(pageNumber);
+            noteCacheAccessOrder.append(pageNumber);
+        }
+        if (noteCache.contains(pageNumber + 1)) {
+            nextPageCanvas = *noteCache.object(pageNumber + 1);
+            nextExists = true;
+            loadedFromCache = true;
+            // ✅ LRU: Mark as recently accessed
+            noteCacheAccessOrder.removeAll(pageNumber + 1);
+            noteCacheAccessOrder.append(pageNumber + 1);
         }
     }
-    if (!loadedFromCache) {
-        initializeBuffer(); // Clear the canvas if no file exists
+    
+    // Combine the two pages into the display buffer
+    if (currentExists || nextExists) {
+        int combinedWidth = qMax(currentExists ? currentPageCanvas.width() : 0, 
+                                 nextExists ? nextPageCanvas.width() : 0);
+        int combinedHeight = (currentExists ? currentPageCanvas.height() : 0) + 
+                            (nextExists ? nextPageCanvas.height() : 0);
+        
+        // If only one page exists, double the height
+        if (currentExists && !nextExists) {
+            combinedHeight = currentPageCanvas.height() * 2;
+            combinedWidth = currentPageCanvas.width();
+        } else if (!currentExists && nextExists) {
+            combinedHeight = nextPageCanvas.height() * 2;
+            combinedWidth = nextPageCanvas.width();
+        }
+        
+        buffer = QPixmap(combinedWidth, combinedHeight);
+        buffer.fill(Qt::transparent);
+        
+        QPainter painter(&buffer);
+        if (currentExists) {
+            painter.drawPixmap(0, 0, currentPageCanvas);
+        }
+        if (nextExists) {
+            int yOffset = currentExists ? currentPageCanvas.height() : nextPageCanvas.height();
+            painter.drawPixmap(0, yOffset, nextPageCanvas);
+        }
+        painter.end();
+    } else {
+        // No pages exist - initialize empty buffer
+        initializeBuffer();
         loadedFromCache = false;
     }
     
@@ -2266,7 +2311,11 @@ void InkCanvas::deletePage(int pageNumber) {
     QFile::remove(metadataFileName);
 
     // Remove deleted page from note cache
-    noteCache.remove(pageNumber);
+    {
+        QMutexLocker locker(&noteCacheMutex);
+        noteCache.remove(pageNumber);
+        noteCacheAccessOrder.removeAll(pageNumber);
+    }
 
     // Delete markdown windows for this page
     if (markdownManager) {
@@ -3724,17 +3773,25 @@ QString InkCanvas::getNotePageFilePath(int pageNumber) const {
     return saveFolder + QString("/%1_%2.png").arg(notebookId).arg(pageNumber, 5, 10, QChar('0'));
 }
 
-void InkCanvas::loadNotePageToCache(int pageNumber) {
+void InkCanvas::loadSingleNotePageToCache(int pageNumber) {
     // Check if already cached (thread-safe)
     {
         QMutexLocker locker(&noteCacheMutex);
         if (noteCache.contains(pageNumber)) {
+            // ✅ LRU: Mark as recently accessed
+            noteCacheAccessOrder.removeAll(pageNumber);
+            noteCacheAccessOrder.append(pageNumber);
             return;
         }
     }
     
-    QString currentFilePath = getNotePageFilePath(pageNumber);
-    if (currentFilePath.isEmpty()) {
+    QString filePath = getNotePageFilePath(pageNumber);
+    if (filePath.isEmpty()) {
+        return;
+    }
+    
+    // Only cache if the file actually exists
+    if (!QFile::exists(filePath)) {
         return;
     }
     
@@ -3742,84 +3799,30 @@ void InkCanvas::loadNotePageToCache(int pageNumber) {
     {
         QMutexLocker locker(&noteCacheMutex);
         if (noteCache.count() >= 6) {
-            // QCache will automatically remove least recently used items
-            // but we can be explicit about it
-            auto keys = noteCache.keys();
-            if (!keys.isEmpty()) {
-                noteCache.remove(keys.first());
+            // ✅ LRU: Evict the LEAST recently used page (front of the list)
+            if (!noteCacheAccessOrder.isEmpty()) {
+                int pageToEvict = noteCacheAccessOrder.takeFirst();
+                noteCache.remove(pageToEvict);
+            } else {
+                // Fallback if access order is somehow empty
+                auto keys = noteCache.keys();
+                if (!keys.isEmpty()) {
+                    noteCache.remove(keys.first());
+                }
             }
         }
     }
     
-    // Load current page canvas
-    QPixmap currentPageCanvas;
-    bool currentExists = false;
-    if (QFile::exists(currentFilePath)) {
-        if (currentPageCanvas.load(currentFilePath)) {
-            currentExists = true;
-        }
+    // Load single page from disk
+    QPixmap singlePageCanvas;
+    if (singlePageCanvas.load(filePath)) {
+        // Cache the single page (thread-safe)
+        QMutexLocker locker(&noteCacheMutex);
+        noteCache.insert(pageNumber, new QPixmap(singlePageCanvas));
+        // ✅ LRU: Add newly cached page to end of access order (most recent)
+        noteCacheAccessOrder.removeAll(pageNumber); // Remove if already present
+        noteCacheAccessOrder.append(pageNumber);
     }
-    
-    // Load next page canvas for combination
-    QPixmap nextPageCanvas;
-    bool nextExists = false;
-    int nextPageNumber = pageNumber + 1;
-    QString nextFilePath = getNotePageFilePath(nextPageNumber);
-    if (!nextFilePath.isEmpty() && QFile::exists(nextFilePath)) {
-        if (nextPageCanvas.load(nextFilePath)) {
-            nextExists = true;
-        }
-    }
-    
-    // Create combined canvas
-    QPixmap combinedCanvas;
-    if (currentExists || nextExists) {
-        // Determine the size for the combined canvas
-        int combinedWidth = 0;
-        int combinedHeight = 0;
-        
-        if (currentExists && nextExists) {
-            // Both pages exist - combine them vertically
-            combinedWidth = qMax(currentPageCanvas.width(), nextPageCanvas.width());
-            combinedHeight = currentPageCanvas.height() + nextPageCanvas.height();
-        } else if (currentExists) {
-            // Only current page exists - create double height with current page on top
-            combinedWidth = currentPageCanvas.width();
-            combinedHeight = currentPageCanvas.height() * 2;
-        } else {
-            // Only next page exists - create double height with empty space on top
-            combinedWidth = nextPageCanvas.width();
-            combinedHeight = nextPageCanvas.height() * 2;
-        }
-        
-        // Create the combined canvas
-        combinedCanvas = QPixmap(combinedWidth, combinedHeight);
-        combinedCanvas.fill(Qt::transparent);
-        
-        QPainter painter(&combinedCanvas);
-        painter.setRenderHint(QPainter::Antialiasing, true);
-        painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
-        
-        // Draw current page at the top
-        if (currentExists) {
-            painter.drawPixmap(0, 0, currentPageCanvas);
-        }
-        
-        // Draw next page below current page
-        if (nextExists) {
-            int yOffset = currentExists ? currentPageCanvas.height() : nextPageCanvas.height();
-            painter.drawPixmap(0, yOffset, nextPageCanvas);
-        }
-        
-        painter.end();
-        
-        // Cache the combined canvas (thread-safe)
-        {
-            QMutexLocker locker(&noteCacheMutex);
-            noteCache.insert(pageNumber, new QPixmap(combinedCanvas));
-        }
-    }
-    // If neither file exists, we don't cache anything - loadPage will handle initialization
 }
 
 void InkCanvas::checkAndCacheAdjacentNotePages(int targetPage) {
@@ -3919,7 +3922,7 @@ void InkCanvas::cacheAdjacentNotePages() {
         
         // Capture pageNum by value to avoid issues with lambda capture
         QFuture<void> future = QtConcurrent::run([this, pageNum]() {
-            loadNotePageToCache(pageNum);
+            loadSingleNotePageToCache(pageNum);
         });
         
         watcher->setFuture(future);
@@ -3930,6 +3933,7 @@ void InkCanvas::invalidateCurrentPageCache() {
     if (currentCachedNotePage >= 0) {
         QMutexLocker locker(&noteCacheMutex);
         noteCache.remove(currentCachedNotePage);
+        noteCacheAccessOrder.removeAll(currentCachedNotePage);
     }
 }
 
