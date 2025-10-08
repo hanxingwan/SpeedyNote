@@ -72,6 +72,7 @@ private:
     QString getPictureDataFilePath(int pageNumber) const;
     void savePictureData(int pageNumber, const QList<PictureWindow*> &windows);
     QList<PictureWindow*> loadPictureData(int pageNumber);
+    void updatePermanentCacheForWindow(PictureWindow *modifiedWindow, int pageNumber);
     
     
     

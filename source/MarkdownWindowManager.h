@@ -89,6 +89,7 @@ private:
     QString getNotebookId() const;
     QRect convertScreenToCanvasRect(const QRect &screenRect) const;
     void connectWindowSignals(MarkdownWindow *window);
+    void updatePermanentCacheForWindow(MarkdownWindow *modifiedWindow, int pageNumber);
     
 public slots:
     void updateAllWindowPositions(); // Update all window positions when canvas pan/zoom changes

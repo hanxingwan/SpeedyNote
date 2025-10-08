@@ -170,8 +170,18 @@ void MarkdownWindowManager::clearCurrentPagePermanently(int pageNumber) {
 void MarkdownWindowManager::saveWindowsForPage(int pageNumber) {
     if (!canvas || currentWindows.isEmpty()) return;
     
-    // Update page windows map
-    pageWindows[pageNumber] = currentWindows;
+    // ✅ CRITICAL FIX: Don't update pageWindows cache during combined view mode
+    // In combined mode, currentWindows contains temporary clones that will be deleted
+    // Updating the cache with these clones causes memory leaks (clones of clones)
+    // Only update cache in single-page mode where currentWindows are the actual permanent instances
+    bool isCombinedMode = !combinedTempWindows.isEmpty();
+    if (!isCombinedMode) {
+        // Only update permanent cache in single-page mode
+        pageWindows[pageNumber] = currentWindows;
+        qDebug() << "[CACHE] MD saveWindowsForPage(" << pageNumber << ") - Updated permanent cache with" << currentWindows.size() << "windows";
+    } else {
+        qDebug() << "[CACHE] MD saveWindowsForPage(" << pageNumber << ") - SKIPPING cache update (combined mode with" << combinedTempWindows.size() << "temp windows)";
+    }
     
     // Save to file
     saveWindowData(pageNumber, currentWindows);
@@ -771,6 +781,29 @@ void MarkdownWindowManager::onTransparencyTimerTimeout() {
     setWindowsTransparent(true);
 }
 
+void MarkdownWindowManager::updatePermanentCacheForWindow(MarkdownWindow *modifiedWindow, int pageNumber) {
+    // ✅ USER MODIFICATION FIX: Update permanent cache when user moves/resizes a window
+    // This ensures changes persist even during combined mode
+    if (!pageWindows.contains(pageNumber)) {
+        return; // No cache for this page yet
+    }
+    
+    // Find the permanent cached window that corresponds to this modified window
+    // Match by content since that's the closest thing to a unique identifier
+    QString content = modifiedWindow->getMarkdownContent();
+    QList<MarkdownWindow*> &cachedWindows = pageWindows[pageNumber];
+    
+    for (MarkdownWindow *cachedWindow : cachedWindows) {
+        if (cachedWindow && cachedWindow->getMarkdownContent() == content) {
+            // Update the permanent cached window's position/size
+            cachedWindow->setCanvasRect(modifiedWindow->getCanvasRect());
+            qDebug() << "[CACHE] MD updatePermanentCacheForWindow - Updated cached window" << cachedWindow 
+                     << "for page" << pageNumber << "to match modified window" << modifiedWindow;
+            break;
+        }
+    }
+}
+
 void MarkdownWindowManager::connectWindowSignals(MarkdownWindow *window) {
     // qDebug() << "MarkdownWindowManager::connectWindowSignals() - Connecting signals for window" << window;
     
@@ -809,6 +842,10 @@ void MarkdownWindowManager::connectWindowSignals(MarkdownWindow *window) {
         // Mark canvas as edited since window was moved
         if (canvas) {
             canvas->setEdited(true);
+            
+            // ✅ USER MODIFICATION FIX: Update permanent cache even during combined mode
+            int currentPage = canvas->getLastActivePage();
+            updatePermanentCacheForWindow(window, currentPage);
         }
     });
     connect(window, &MarkdownWindow::windowResized, this, [this, window](MarkdownWindow*) {
@@ -829,6 +866,10 @@ void MarkdownWindowManager::connectWindowSignals(MarkdownWindow *window) {
         // Mark canvas as edited since window was resized
         if (canvas) {
             canvas->setEdited(true);
+            
+            // ✅ USER MODIFICATION FIX: Update permanent cache even during combined mode
+            int currentPage = canvas->getLastActivePage();
+            updatePermanentCacheForWindow(window, currentPage);
         }
     });
     
