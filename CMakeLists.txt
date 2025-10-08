@@ -17,18 +17,18 @@ set(CMAKE_GENERATOR "MinGW Makefiles" CACHE INTERNAL "" FORCE)
 project(NoteApp)
 set(CMAKE_CXX_STANDARD 17)
 
-# ✅ Compiler optimization flags for 32-bit Intel Atom N270 (SSE3 capable)
+# ✅ Compiler optimization flags for 32-bit Intel Atom Silvermont/Bay Trail (SSE4.2 capable)
 if (WIN32 AND CMAKE_COMPILER_IS_GNUCXX)
-    # Target Intel Atom N270 (supports SSE3) instead of generic i686
+    # Target Intel Atom Silvermont (Bay Trail) - supports SSE4.2, SSSE3, SSE4.1
     # This enables SSE for floating point instead of slow x87 FPU
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=bonnell -msse3 -mfpmath=sse -O2 -ffast-math")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=bonnell -msse3 -mfpmath=sse -O2 -ffast-math")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=silvermont -mtune=silvermont -msse4.2 -mfpmath=sse -O3 -ffast-math -funroll-loops")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=silvermont -mtune=silvermont -msse4.2 -mfpmath=sse -O3 -ffast-math -funroll-loops")
     
     # Additional optimizations
     set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -DNDEBUG -fomit-frame-pointer")
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -DNDEBUG -fomit-frame-pointer")
     
-    message(STATUS "🚀 Optimizing for Intel Atom N270+ (SSE3, no x87 FPU)")
+    message(STATUS "🚀 Optimizing for Intel Atom Silvermont/Bay Trail (SSE4.2, maximum performance)")
 endif()
 
 # Using Qt's MinGW with copied libraries for consistency
