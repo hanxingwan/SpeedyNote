@@ -195,9 +195,6 @@ void PictureWindowManager::saveWindowsForPage(int pageNumber) {
     if (!isCombinedMode) {
         // Only update permanent cache in single-page mode
         pageWindows[pageNumber] = currentWindows;
-        qDebug() << "[CACHE] saveWindowsForPage(" << pageNumber << ") - Updated permanent cache with" << currentWindows.size() << "windows";
-    } else {
-        qDebug() << "[CACHE] saveWindowsForPage(" << pageNumber << ") - SKIPPING cache update (combined mode with" << combinedTempWindows.size() << "temp windows)";
     }
     
     // Save to file (even if empty - this clears the file for cleared pages)
@@ -343,10 +340,6 @@ QList<PictureWindow*> PictureWindowManager::getCurrentPageWindows() const {
 QList<PictureWindow*> PictureWindowManager::loadWindowsForPageSeparately(int pageNumber) {
     if (!canvas) return QList<PictureWindow*>();
 
-    qDebug() << "[CACHE] PictureWindowManager::loadWindowsForPageSeparately() - Loading page" << pageNumber;
-    qDebug() << "[CACHE]   Current cache size:" << pageWindows.size() << "pages";
-    qDebug() << "[CACHE]   Current combinedTempWindows size:" << combinedTempWindows.size() << "windows";
-
     // ✅ PSEUDO-SMOOTH SCROLLING: Always create new window instances for combined views
     // The same notebook page appears at different Y-offsets in adjacent combined pages
     // (e.g., page 2 appears at bottom of display-page-1 and top of display-page-2)
@@ -358,7 +351,6 @@ QList<PictureWindow*> PictureWindowManager::loadWindowsForPageSeparately(int pag
     if (pageWindows.contains(pageNumber) && !pageWindows[pageNumber].isEmpty()) {
         // Clone the cached windows to create new instances with same data
         const QList<PictureWindow*> &cachedWindows = pageWindows[pageNumber];
-        qDebug() << "[CACHE]   CLONING from cache -" << cachedWindows.size() << "windows for page" << pageNumber;
         for (PictureWindow *cachedWindow : cachedWindows) {
             // Serialize the cached window and create a new instance from it
             QVariantMap data = cachedWindow->serialize();
@@ -369,13 +361,11 @@ QList<PictureWindow*> PictureWindowManager::loadWindowsForPageSeparately(int pag
                 PictureWindow *window = new PictureWindow(QRect(0, 0, 200, 150), imagePath, canvas);
                 window->deserialize(data);
                 windows.append(window);
-                qDebug() << "[CACHE]     Created clone window" << window << "from cached window" << cachedWindow;
             }
         }
     } else {
         // Load windows from file for the first time
         QList<PictureWindow*> loadedWindows = loadPictureData(pageNumber);
-        qDebug() << "[CACHE]   LOADING from file -" << loadedWindows.size() << "windows for page" << pageNumber;
         
         // ✅ CRITICAL FIX: Store CLONES in permanent cache, not the loaded instances
         // The loaded instances will be returned and potentially Y-adjusted for combined views
@@ -390,20 +380,17 @@ QList<PictureWindow*> PictureWindowManager::loadWindowsForPageSeparately(int pag
                 PictureWindow *cacheWindow = new PictureWindow(QRect(0, 0, 200, 150), imagePath, canvas);
                 cacheWindow->deserialize(data);
                 permanentCache.append(cacheWindow);
-                qDebug() << "[CACHE]     Created cache window" << cacheWindow << "from loaded window" << loadedWindow;
             }
         }
         
         // Store in permanent cache
         if (!permanentCache.isEmpty()) {
             pageWindows[pageNumber] = permanentCache;
-            qDebug() << "[CACHE]   Stored" << permanentCache.size() << "windows in permanent cache for page" << pageNumber;
             
             // ✅ MEMORY LEAK FIX: Limit cache size to prevent unbounded growth
             // Keep only the most recent 5 pages in cache
             const int MAX_CACHED_PAGES = 5;
             if (pageWindows.size() > MAX_CACHED_PAGES) {
-                qDebug() << "[CACHE]   EVICTION triggered - cache size:" << pageWindows.size() << "exceeds MAX:" << MAX_CACHED_PAGES;
                 // Find and remove the oldest cache entry (simple heuristic: lowest page number far from current)
                 int pageToRemove = -1;
                 int maxDistance = 0;
@@ -416,18 +403,14 @@ QList<PictureWindow*> PictureWindowManager::loadWindowsForPageSeparately(int pag
                 }
                 
                 if (pageToRemove >= 0) {
-                    qDebug() << "[CACHE]   EVICTING page" << pageToRemove << "(distance:" << maxDistance << "from current page" << pageNumber << ")";
                     // Delete all cached windows for this page
                     QList<PictureWindow*> oldWindows = pageWindows[pageToRemove];
-                    qDebug() << "[CACHE]   Deleting" << oldWindows.size() << "cached windows from page" << pageToRemove;
                     for (PictureWindow* oldWindow : oldWindows) {
                         if (oldWindow) {
-                            qDebug() << "[CACHE]     Deleting cached window" << oldWindow;
                             delete oldWindow;
                         }
                     }
                     pageWindows.remove(pageToRemove);
-                    qDebug() << "[CACHE]   New cache size:" << pageWindows.size();
                 }
             }
         }
@@ -469,9 +452,6 @@ QList<PictureWindow*> PictureWindowManager::loadWindowsForPageSeparately(int pag
 }
 
 void PictureWindowManager::setCombinedWindows(const QList<PictureWindow*> &windows) {
-    qDebug() << "[CACHE] PictureWindowManager::setCombinedWindows() - Setting" << windows.size() << "combined windows";
-    qDebug() << "[CACHE]   Current combinedTempWindows size:" << combinedTempWindows.size();
-    
     // ✅ CRASH FIX: Hide current windows BEFORE deleting any windows
     // Otherwise we might try to hide already-deleted windows
     for (PictureWindow *window : currentWindows) {
@@ -480,45 +460,32 @@ void PictureWindowManager::setCombinedWindows(const QList<PictureWindow*> &windo
     
     // ✅ MEMORY LEAK FIX: Clean up old temporary combined windows
     // These are cloned instances created for pseudo-smooth scrolling that need deletion
-    int deletedCount = 0;
-    int reusedCount = 0;
-    int permanentCount = 0;
     for (PictureWindow *window : combinedTempWindows) {
         if (window) {
             // Don't delete if it's in the new incoming windows list (will be reused)
             if (windows.contains(window)) {
-                reusedCount++;
                 continue;
             }
             
             // Check if this window is in the permanent page cache
             bool isPermanent = false;
-            int foundOnPage = -1;
             for (auto it = pageWindows.begin(); it != pageWindows.end(); ++it) {
                 if (it.value().contains(window)) {
                     isPermanent = true;
-                    foundOnPage = it.key();
                     break;
                 }
             }
             
             // Only delete temporary cloned instances, not permanent cached ones
             if (!isPermanent) {
-                qDebug() << "[CACHE]     Window" << window << "is TEMPORARY - will delete";
                 // ✅ CRITICAL MEMORY LEAK FIX: Clear cached rendering before deletion
                 // During inertia scrolling, each clone may have a huge cached pixmap (e.g., 4K image)
                 // This cache must be explicitly released to prevent memory accumulation
-                qDebug() << "[CACHE]   DELETING temp window" << window;
                 window->clearRenderCache();
                 delete window;
-                deletedCount++;
-            } else {
-                qDebug() << "[CACHE]     Window" << window << "is PERMANENT (found in cache for page" << foundOnPage << ") - keeping alive";
-                permanentCount++;
             }
         }
     }
-    qDebug() << "[CACHE]   Cleanup: deleted" << deletedCount << "temp windows, reused" << reusedCount << ", kept" << permanentCount << "permanent";
     combinedTempWindows.clear();
     
     // Set new combined windows as current
@@ -946,8 +913,6 @@ void PictureWindowManager::updatePermanentCacheForWindow(PictureWindow *modified
         if (cachedWindow && cachedWindow->getImagePath() == imagePath) {
             // Update the permanent cached window's position/size
             cachedWindow->setCanvasRect(modifiedWindow->getCanvasRect());
-            qDebug() << "[CACHE] updatePermanentCacheForWindow - Updated cached window" << cachedWindow 
-                     << "for page" << pageNumber << "to match modified window" << modifiedWindow;
             break;
         }
     }

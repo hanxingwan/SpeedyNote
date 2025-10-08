@@ -297,6 +297,7 @@ private:
 
     QCache<int, QPixmap> pdfCache; // Caches 5 pages of the PDF
     mutable QMutex pdfCacheMutex; // Thread safety for pdfCache
+    QList<int> pdfCacheAccessOrder; // Track access order for LRU eviction (most recent at end)
     std::unique_ptr<Poppler::Document> pdfDocument;
     int currentPdfPage;
     bool isPdfLoaded = false;

@@ -178,9 +178,6 @@ void MarkdownWindowManager::saveWindowsForPage(int pageNumber) {
     if (!isCombinedMode) {
         // Only update permanent cache in single-page mode
         pageWindows[pageNumber] = currentWindows;
-        qDebug() << "[CACHE] MD saveWindowsForPage(" << pageNumber << ") - Updated permanent cache with" << currentWindows.size() << "windows";
-    } else {
-        qDebug() << "[CACHE] MD saveWindowsForPage(" << pageNumber << ") - SKIPPING cache update (combined mode with" << combinedTempWindows.size() << "temp windows)";
     }
     
     // Save to file
@@ -797,8 +794,6 @@ void MarkdownWindowManager::updatePermanentCacheForWindow(MarkdownWindow *modifi
         if (cachedWindow && cachedWindow->getMarkdownContent() == content) {
             // Update the permanent cached window's position/size
             cachedWindow->setCanvasRect(modifiedWindow->getCanvasRect());
-            qDebug() << "[CACHE] MD updatePermanentCacheForWindow - Updated cached window" << cachedWindow 
-                     << "for page" << pageNumber << "to match modified window" << modifiedWindow;
             break;
         }
     }

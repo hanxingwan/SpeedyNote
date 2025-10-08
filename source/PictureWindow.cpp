@@ -1350,8 +1350,6 @@ void PictureWindow::clearRenderCache() {
     // ✅ MEMORY LEAK FIX: Explicitly clear and release cached rendering pixmap
     // This is critical for preventing memory accumulation during inertia scrolling
     // where multiple window clones are created and deleted rapidly
-    qDebug() << "[MEMORY] PictureWindow::clearRenderCache() - Releasing cached pixmap for window" << this 
-             << "Size:" << cachedRendering.size() << "IsNull:" << cachedRendering.isNull();
     cachedRendering = QPixmap();
     cachedRect = QRect();
     cachedEditMode = false;

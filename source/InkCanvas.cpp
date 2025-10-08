@@ -139,6 +139,7 @@ InkCanvas::~InkCanvas() {
     {
         QMutexLocker locker(&pdfCacheMutex);
         pdfCache.clear();
+        pdfCacheAccessOrder.clear();
     }
     {
         QMutexLocker locker(&noteCacheMutex);
@@ -230,6 +231,7 @@ void InkCanvas::loadPdf(const QString &pdfPath) {
     {
         QMutexLocker locker(&pdfCacheMutex);
         pdfCache.clear();
+        pdfCacheAccessOrder.clear();
     }
     currentCachedPage = -1;
     
@@ -280,6 +282,7 @@ void InkCanvas::clearPdf() {
     {
         QMutexLocker locker(&pdfCacheMutex);
         pdfCache.clear();
+        pdfCacheAccessOrder.clear();
     }
 
     // ✅ Clear the background image immediately to remove PDF from display
@@ -315,6 +318,7 @@ void InkCanvas::clearPdfNoDelete() {
     {
         QMutexLocker locker(&pdfCacheMutex);
         pdfCache.clear();
+        pdfCacheAccessOrder.clear();
     }
     
     // Reset cache system state
@@ -347,6 +351,10 @@ void InkCanvas::loadPdfPage(int pageNumber) {
             // Display the cached page immediately
             backgroundImage = *pdfCache.object(pageNumber);
             isCached = true;
+            
+            // ✅ LRU: Mark this page as recently accessed by moving to end of access order
+            pdfCacheAccessOrder.removeAll(pageNumber);
+            pdfCacheAccessOrder.append(pageNumber);
         }
     }
     
@@ -3509,17 +3517,24 @@ void InkCanvas::renderPdfPageToCache(int pageNumber) {
     {
         QMutexLocker locker(&pdfCacheMutex);
         if (pdfCache.contains(pageNumber)) {
-            qDebug() << "[PDF-CACHE] Page" << pageNumber << "already in cache";
+            // ✅ LRU: Mark as recently accessed
+            pdfCacheAccessOrder.removeAll(pageNumber);
+            pdfCacheAccessOrder.append(pageNumber);
             return;
         }
         
         // Ensure the cache holds only 6 pages max
         if (pdfCache.count() >= 6) {
-            auto oldestKey = pdfCache.keys().first();
-            qDebug() << "[PDF-CACHE] EVICTING PDF page" << oldestKey << "(cache full, size:" << pdfCache.count() << ")";
-            pdfCache.remove(oldestKey);
+            // ✅ LRU: Evict the LEAST recently used page (front of the list)
+            if (!pdfCacheAccessOrder.isEmpty()) {
+                int pageToEvict = pdfCacheAccessOrder.takeFirst();
+                pdfCache.remove(pageToEvict);
+            } else {
+                // Fallback if access order is somehow empty
+                auto oldestKey = pdfCache.keys().first();
+                pdfCache.remove(oldestKey);
+            }
         }
-        qDebug() << "[PDF-CACHE] Rendering PDF page" << pageNumber << "to cache (current size:" << pdfCache.count() << ")";
     }
     
     // Render current page
@@ -3589,6 +3604,9 @@ void InkCanvas::renderPdfPageToCache(int pageNumber) {
         {
             QMutexLocker locker(&pdfCacheMutex);
             pdfCache.insert(pageNumber, new QPixmap(cachedPixmap));
+            // ✅ LRU: Add newly cached page to end of access order (most recent)
+            pdfCacheAccessOrder.removeAll(pageNumber); // Remove if already present
+            pdfCacheAccessOrder.append(pageNumber);
         }
     }
 }
@@ -3711,10 +3729,8 @@ void InkCanvas::loadNotePageToCache(int pageNumber) {
     {
         QMutexLocker locker(&noteCacheMutex);
         if (noteCache.contains(pageNumber)) {
-            qDebug() << "[NOTE-CACHE] Page" << pageNumber << "already in cache";
             return;
         }
-        qDebug() << "[NOTE-CACHE] Loading note page" << pageNumber << "to cache (current size:" << noteCache.count() << ")";
     }
     
     QString currentFilePath = getNotePageFilePath(pageNumber);
@@ -3729,7 +3745,6 @@ void InkCanvas::loadNotePageToCache(int pageNumber) {
             // QCache will automatically remove least recently used items
             // but we can be explicit about it
             auto keys = noteCache.keys();
-            qDebug() << "[NOTE-CACHE] Cache full, size:" << noteCache.count();
             if (!keys.isEmpty()) {
                 noteCache.remove(keys.first());
             }
@@ -3937,8 +3952,6 @@ QList<PictureWindow*> InkCanvas::loadPictureWindowsForPage(int pageNumber) {
 }
 
 void InkCanvas::loadCombinedWindowsForPage(int pageNumber) {
-    qDebug() << "[COMBINED-LOAD] Loading combined windows for display page" << pageNumber;
-    
     if (!markdownManager && !pictureManager) {
         return;
     }
@@ -3949,7 +3962,6 @@ void InkCanvas::loadCombinedWindowsForPage(int pageNumber) {
     
     if (!backgroundImage.isNull() && buffer.height() >= backgroundImage.height() * 1.8) {
         isCombinedCanvas = true;
-        qDebug() << "[COMBINED-LOAD] Combined canvas detected, singlePageHeight:" << (backgroundImage.height() / 2);
         singlePageHeight = backgroundImage.height() / 2;
     } else if (buffer.height() > 1400) {
         isCombinedCanvas = true;
@@ -4010,15 +4022,11 @@ void InkCanvas::loadCombinedWindowsForPage(int pageNumber) {
         // Combine both sets of windows and set as current
         if (markdownManager) {
             QList<MarkdownWindow*> combinedMarkdownWindows = topHalfMarkdownWindows + bottomHalfMarkdownWindows;
-            qDebug() << "[COMBINED-LOAD] Markdown: top half (page" << pageNumber << "):" << topHalfMarkdownWindows.size() 
-                     << "windows, bottom half (page" << nextPageNumber << "):" << bottomHalfMarkdownWindows.size() << "windows";
             markdownManager->setCombinedWindows(combinedMarkdownWindows);
         }
         
         if (pictureManager) {
             QList<PictureWindow*> combinedPictureWindows = topHalfPictureWindows + bottomHalfPictureWindows;
-            qDebug() << "[COMBINED-LOAD] Picture: top half (page" << pageNumber << "):" << topHalfPictureWindows.size() 
-                     << "windows, bottom half (page" << nextPageNumber << "):" << bottomHalfPictureWindows.size() << "windows";
             pictureManager->setCombinedWindows(combinedPictureWindows);
         }
         

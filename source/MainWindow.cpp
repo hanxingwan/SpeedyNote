@@ -1485,10 +1485,7 @@ void MainWindow::switchPage(int pageNumber) {
     InkCanvas *canvas = currentCanvas();
     if (!canvas) return;
 
-    qDebug() << "\n[PAGE-SWITCH] ====== Switching to page" << pageNumber << "======";
-    
     if (currentCanvas()->isEdited()){
-        qDebug() << "[PAGE-SWITCH] Current page is edited, saving first";
         saveCurrentPageConcurrent(); // Use concurrent saving for smoother page flipping
     }
 
