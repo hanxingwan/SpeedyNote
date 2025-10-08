@@ -86,10 +86,30 @@ void MarkdownWindowManager::removeMarkdownWindow(MarkdownWindow *window) {
     // Remove from current windows
     currentWindows.removeAll(window);
     
-    // Remove from all page windows
+    // ✅ CRASH FIX: Invalidate and clean up the entire permanent cache
+    // After deletion, the cache is stale and needs to be rebuilt from disk
+    // We need to delete the cached clone instances to prevent memory leaks
     for (auto it = pageWindows.begin(); it != pageWindows.end(); ++it) {
-        it.value().removeAll(window);
+        QList<MarkdownWindow*> cachedWindows = it.value();
+        // If this page's cache contains the deleted window, invalidate the entire page cache
+        if (cachedWindows.contains(window)) {
+            // Delete all cached clone instances for this page
+            for (MarkdownWindow* cachedWindow : cachedWindows) {
+                if (cachedWindow && cachedWindow != window) {
+                    delete cachedWindow;
+                }
+            }
+            // Remove this page from cache - it will be reloaded from disk next time
+            it = pageWindows.erase(it);
+            if (it == pageWindows.end()) break;
+        } else {
+            // Just remove the window from this page's list (shouldn't normally happen)
+            it.value().removeAll(window);
+        }
     }
+    
+    // ✅ CRASH FIX: Also remove from combinedTempWindows to prevent accessing deleted windows
+    combinedTempWindows.removeAll(window);
     
     emit windowRemoved(window);
     
