@@ -1630,10 +1630,8 @@ void MainWindow::saveCurrentPage() {
         int currentPageNumber = getCurrentPageForCanvas(canvas);
         canvas->saveToFile(currentPageNumber);
         
-        // ✅ Also save markdown windows for the current page
-        if (canvas->getMarkdownManager()) {
-            canvas->getMarkdownManager()->saveWindowsForPage(currentPageNumber);
-        }
+        // ✅ COMBINED MODE FIX: Use combined-aware save for markdown/picture windows
+        canvas->saveCombinedWindowsForPage(currentPageNumber);
         
         // ✅ THEN: Check if there are any pages to save
         QDir sourceDir(tempFolder);
@@ -2259,10 +2257,8 @@ void MainWindow::addNewTab() {
             int pageNumber = getCurrentPageForCanvas(newCanvas);
             newCanvas->saveToFile(pageNumber);
             
-            // Also save markdown windows for this page
-            if (newCanvas->getMarkdownManager()) {
-                newCanvas->getMarkdownManager()->saveWindowsForPage(pageNumber);
-            }
+            // ✅ COMBINED MODE FIX: Use combined-aware save for markdown/picture windows
+            newCanvas->saveCombinedWindowsForPage(pageNumber);
             
             // ✅ Mark as not edited to prevent double-saving in destructor
             newCanvas->setEdited(false);
@@ -6391,10 +6387,8 @@ void MainWindow::closeEvent(QCloseEvent *event) {
                     int pageNumber = getCurrentPageForCanvas(canvas);
                     canvas->saveToFile(pageNumber);
                     
-                    // Also save markdown windows for this canvas/page
-                    if (canvas->getMarkdownManager()) {
-                        canvas->getMarkdownManager()->saveWindowsForPage(pageNumber);
-                    }
+                    // ✅ COMBINED MODE FIX: Use combined-aware save for markdown/picture windows
+                    canvas->saveCombinedWindowsForPage(pageNumber);
                 }
                 
                 // ✅ Save last accessed page for each canvas

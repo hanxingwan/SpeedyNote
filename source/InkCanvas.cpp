@@ -125,13 +125,8 @@ InkCanvas::~InkCanvas() {
         // Save the current page using existing logic
         saveToFile(lastActivePage);
         
-        // Also save markdown windows if they exist
-        if (markdownManager) {
-            markdownManager->saveWindowsForPage(lastActivePage);
-        }
-        if (pictureManager) {
-            pictureManager->saveWindowsForPage(lastActivePage);
-        }
+        // ✅ COMBINED MODE FIX: Use combined-aware save for markdown/picture windows
+        saveCombinedWindowsForPage(lastActivePage);
     }
     
     // ✅ Cleanup PDF resources
@@ -1451,8 +1446,8 @@ void InkCanvas::mousePressEvent(QMouseEvent *event) {
                     PictureWindow* window = pictureManager->createPictureWindow(initialRect, copiedImagePath);
                     //qDebug() << "  Picture window created:" << (window != nullptr);
                     
-                    // Save pictures for current page
-                    pictureManager->saveWindowsForPage(currentPage);
+                    // ✅ COMBINED MODE FIX: Use combined-aware save to handle Y-coordinate adjustment
+                    saveCombinedWindowsForPage(currentPage);
                     //qDebug() << "  Pictures saved for page";
                     
                     // Mark canvas as edited
@@ -1516,8 +1511,8 @@ void InkCanvas::mousePressEvent(QMouseEvent *event) {
                 PictureWindow* window = pictureManager->createPictureWindow(initialRect, clipboardImagePath);
                 
                 if (window) {
-                    // Save pictures for current page
-                    pictureManager->saveWindowsForPage(currentPage);
+                    // ✅ COMBINED MODE FIX: Use combined-aware save to handle Y-coordinate adjustment
+                    saveCombinedWindowsForPage(currentPage);
                     
                     // Disable picture selection mode after successful paste
                     setPictureSelectionMode(false);
@@ -1628,6 +1623,11 @@ void InkCanvas::mouseReleaseEvent(QMouseEvent *event) {
         QRect selectionRect = QRect(markdownSelectionStart, markdownSelectionEnd).normalized();
         if (selectionRect.width() > 50 && selectionRect.height() > 50 && markdownManager) {
             markdownManager->createMarkdownWindow(selectionRect);
+            
+            // ✅ COMBINED MODE FIX: Save immediately with combined-aware method
+            int currentPage = getLastActivePage();
+            saveCombinedWindowsForPage(currentPage);
+            setEdited(true);
         }
         
         // Exit selection mode

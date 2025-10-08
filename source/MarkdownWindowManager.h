@@ -72,6 +72,9 @@ private:
     // Current page windows (for quick access)
     QList<MarkdownWindow*> currentWindows;
     
+    // Track temporary combined windows for cleanup
+    QList<MarkdownWindow*> combinedTempWindows; // ✅ Track temporary combined windows for cleanup
+    
     // Transparency timer system
     QTimer *transparencyTimer;
     MarkdownWindow *currentlyFocusedWindow = nullptr;

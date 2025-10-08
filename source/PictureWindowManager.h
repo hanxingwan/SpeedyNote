@@ -84,6 +84,7 @@ private:
     InkCanvas *canvas;
     QList<PictureWindow*> currentWindows;
     QMap<int, QList<PictureWindow*>> pageWindows;
+    QList<PictureWindow*> combinedTempWindows; // ✅ Track temporary combined windows for cleanup
     bool selectionMode;
     bool isDestroying; // ✅ Flag to prevent operations during destruction
 };

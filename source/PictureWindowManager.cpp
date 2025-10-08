@@ -177,6 +177,26 @@ void PictureWindowManager::saveWindowsForPage(int pageNumber) {
 void PictureWindowManager::loadWindowsForPage(int pageNumber) {
     if (!canvas) return;
 
+    // ✅ MEMORY LEAK FIX: Clean up temporary combined windows when switching to regular page mode
+    for (PictureWindow *window : combinedTempWindows) {
+        if (window) {
+            // Check if this window is in the permanent page cache
+            bool isPermanent = false;
+            for (const QList<PictureWindow*> &pageList : pageWindows.values()) {
+                if (pageList.contains(window)) {
+                    isPermanent = true;
+                    break;
+                }
+            }
+            
+            // Only delete temporary cloned instances, not permanent cached ones
+            if (!isPermanent) {
+                delete window;
+            }
+        }
+    }
+    combinedTempWindows.clear();
+
     QList<PictureWindow*> newPageWindows;
 
     // Check if we have windows for this page in memory
@@ -289,11 +309,60 @@ QList<PictureWindow*> PictureWindowManager::getCurrentPageWindows() const {
 QList<PictureWindow*> PictureWindowManager::loadWindowsForPageSeparately(int pageNumber) {
     if (!canvas) return QList<PictureWindow*>();
 
-    // Load windows from file without affecting current windows
-    QList<PictureWindow*> pageWindows = loadPictureData(pageNumber);
+    // ✅ PSEUDO-SMOOTH SCROLLING: Always create new window instances for combined views
+    // The same notebook page appears at different Y-offsets in adjacent combined pages
+    // (e.g., page 2 appears at bottom of display-page-1 and top of display-page-2)
+    // We need separate window instances for each position, but reuse the cached data
     
-    // Apply bounds checking and setup connections
-    for (PictureWindow *window : pageWindows) {
+    QList<PictureWindow*> windows;
+    
+    // Check if we have cached windows for this page that we can clone from
+    if (pageWindows.contains(pageNumber) && !pageWindows[pageNumber].isEmpty()) {
+        // Clone the cached windows to create new instances with same data
+        const QList<PictureWindow*> &cachedWindows = pageWindows[pageNumber];
+        for (PictureWindow *cachedWindow : cachedWindows) {
+            // Serialize the cached window and create a new instance from it
+            QVariantMap data = cachedWindow->serialize();
+            QString imagePath = data.value("image_path", "").toString();
+            
+            if (!imagePath.isEmpty() && QFile::exists(imagePath)) {
+                // Create new window instance with same data
+                PictureWindow *window = new PictureWindow(QRect(0, 0, 200, 150), imagePath, canvas);
+                window->deserialize(data);
+                windows.append(window);
+            }
+        }
+    } else {
+        // Load windows from file for the first time
+        QList<PictureWindow*> loadedWindows = loadPictureData(pageNumber);
+        
+        // ✅ CRITICAL FIX: Store CLONES in permanent cache, not the loaded instances
+        // The loaded instances will be returned and potentially Y-adjusted for combined views
+        // We need the cache to always have the original unadjusted coordinates
+        QList<PictureWindow*> permanentCache;
+        for (PictureWindow *loadedWindow : loadedWindows) {
+            // Clone for permanent cache
+            QVariantMap data = loadedWindow->serialize();
+            QString imagePath = data.value("image_path", "").toString();
+            
+            if (!imagePath.isEmpty() && QFile::exists(imagePath)) {
+                PictureWindow *cacheWindow = new PictureWindow(QRect(0, 0, 200, 150), imagePath, canvas);
+                cacheWindow->deserialize(data);
+                permanentCache.append(cacheWindow);
+            }
+        }
+        
+        // Store clones in cache for future use
+        if (!permanentCache.isEmpty()) {
+            pageWindows[pageNumber] = permanentCache;
+        }
+        
+        // Return the originally loaded windows (these will be Y-adjusted if needed)
+        windows = loadedWindows;
+    }
+    
+    // Apply bounds checking and setup connections for all windows
+    for (PictureWindow *window : windows) {
         // Validate that the window is within canvas bounds
         if (!window->isValidForCanvas()) {
             QRect canvasBounds = canvas->getCanvasRect();
@@ -319,17 +388,47 @@ QList<PictureWindow*> PictureWindowManager::loadWindowsForPageSeparately(int pag
         window->updateScreenPositionImmediate();
     }
     
-    return pageWindows;
+    return windows;
 }
 
 void PictureWindowManager::setCombinedWindows(const QList<PictureWindow*> &windows) {
-    // Hide current windows first
+    // ✅ CRASH FIX: Hide current windows BEFORE deleting any windows
+    // Otherwise we might try to hide already-deleted windows
     for (PictureWindow *window : currentWindows) {
         window->hide();
     }
     
+    // ✅ MEMORY LEAK FIX: Clean up old temporary combined windows
+    // These are cloned instances created for pseudo-smooth scrolling that need deletion
+    for (PictureWindow *window : combinedTempWindows) {
+        if (window) {
+            // Don't delete if it's in the new incoming windows list (will be reused)
+            if (windows.contains(window)) {
+                continue;
+            }
+            
+            // Check if this window is in the permanent page cache
+            bool isPermanent = false;
+            for (const QList<PictureWindow*> &pageList : pageWindows.values()) {
+                if (pageList.contains(window)) {
+                    isPermanent = true;
+                    break;
+                }
+            }
+            
+            // Only delete temporary cloned instances, not permanent cached ones
+            if (!isPermanent) {
+                delete window;
+            }
+        }
+    }
+    combinedTempWindows.clear();
+    
     // Set new combined windows as current
     currentWindows = windows;
+    
+    // ✅ Track these combined windows for cleanup on next call
+    combinedTempWindows = windows;
     
     // Update screen positions for all combined windows
     for (PictureWindow *window : currentWindows) {
@@ -345,8 +444,22 @@ void PictureWindowManager::setCombinedWindows(const QList<PictureWindow*> &windo
 void PictureWindowManager::saveWindowsForPageSeparately(int pageNumber, const QList<PictureWindow*> &windows) {
     if (!canvas) return;
     
-    // Update page windows map for this specific page
-    pageWindows[pageNumber] = windows;
+    // ✅ CRITICAL FIX: Do NOT update pageWindows cache here with the passed-in windows!
+    // This method is called from saveCombinedWindowsForPage with temporarily adjusted coordinates.
+    // If we update the cache here, it gets corrupted with wrong coordinates.
+    
+    // ✅ Instead, invalidate the cache for this page so it gets reloaded from disk next time
+    // This ensures the cache always has correct coordinates
+    if (pageWindows.contains(pageNumber)) {
+        // Clean up the old cached windows for this page
+        QList<PictureWindow*> oldWindows = pageWindows[pageNumber];
+        for (PictureWindow* oldWindow : oldWindows) {
+            if (oldWindow && !currentWindows.contains(oldWindow) && !combinedTempWindows.contains(oldWindow)) {
+                delete oldWindow;
+            }
+        }
+        pageWindows.remove(pageNumber);
+    }
     
     // Save to file
     savePictureData(pageNumber, windows);
