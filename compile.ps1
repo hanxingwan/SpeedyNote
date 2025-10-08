@@ -19,7 +19,7 @@ cd .\build
 $cpuArch = "modern"
 if ($old -or $legacy) {
     $cpuArch = "old"
-    Write-Host "Building for older CPUs (SSE4.2 compatible)..." -ForegroundColor Yellow
+    Write-Host "Building for older CPUs (SSE3/SSSE3 compatible - Core 2 Duo era)..." -ForegroundColor Yellow
 } else {
     Write-Host "Building for modern CPUs (AVX2 compatible)..." -ForegroundColor Green
 }

@@ -46,13 +46,13 @@ if (WIN32)
     endif()
 
     if(CPU_ARCH STREQUAL "old")
-        # Optimizations for older CPUs (SSE4.2, compatible with older Pentium/Atom/Core CPUs)
-        message(STATUS "Building for older CPUs (SSE4.2 compatible)")
+        # Optimizations for older CPUs (SSE3, compatible with Core 2 Duo, Atom Z, ARM64 emulation)
+        message(STATUS "Building for older CPUs (SSE3/SSSE3 compatible - Core 2 Duo era)")
         add_compile_options(
-            -march=nehalem          # Enable SSE4.2 and earlier instructions (2008+ CPUs)
+            -march=core2            # Enable SSE3, SSSE3 (2006+ CPUs: Core 2 Duo/Conroe)
             -mtune=generic          # Optimize for broad CPU compatibility
-            -msse4.2                # Explicitly enable SSE4.2
-            -mpopcnt                # Enable POPCNT instruction (comes with SSE4.2)
+            -msse3                  # Explicitly enable SSE3
+            -mssse3                 # Explicitly enable SSSE3 (Supplemental SSE3)
             -O3                     # Maximum optimization level
             -DNDEBUG                # Disable debug assertions for performance
         )
