@@ -358,6 +358,30 @@ bool MarkdownWindow::isTransparent() const {
     return isTransparentState;
 }
 
+void MarkdownWindow::setFrameOnlyMode(bool enabled) {
+    if (frameOnlyMode == enabled) return;
+    
+    frameOnlyMode = enabled;
+    
+    if (enabled) {
+        // Hide all child widgets to show only the frame
+        if (markdownEditor) markdownEditor->hide();
+        if (titleLabel) titleLabel->hide();
+        if (deleteButton) deleteButton->hide();
+    } else {
+        // Restore all child widgets
+        if (markdownEditor) markdownEditor->show();
+        if (titleLabel) titleLabel->show();
+        if (deleteButton) deleteButton->show();
+    }
+    
+    update(); // Trigger repaint to show/hide content
+}
+
+bool MarkdownWindow::isFrameOnlyMode() const {
+    return frameOnlyMode;
+}
+
 bool MarkdownWindow::isValidForCanvas() const {
     if (InkCanvas *inkCanvas = qobject_cast<InkCanvas*>(parentWidget())) {
         QRect canvasBounds = inkCanvas->getCanvasRect();

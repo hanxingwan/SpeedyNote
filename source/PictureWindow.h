@@ -81,6 +81,9 @@ public:
     bool getMaintainAspectRatio() const { return maintainAspectRatio; }
     double getAspectRatio() const { return aspectRatio; }
 
+    void setFrameOnlyMode(bool enabled);
+    bool isFrameOnlyMode() const;
+
 signals:
     void deleteRequested(PictureWindow *window);
     void windowMoved(PictureWindow *window);
@@ -154,6 +157,8 @@ private:
     // Touch interaction
     QPoint touchStartPos;
     QPoint touchStartGlobalPos;
+
+    bool frameOnlyMode;
 };
 
 #endif // PICTUREWINDOW_H

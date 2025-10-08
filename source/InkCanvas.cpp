@@ -2571,6 +2571,7 @@ bool InkCanvas::event(QEvent *event) {
                 
                 isPanning = true;
                 isTouchPanning = true;  // Enable efficient scrolling mode
+                emit touchPanningChanged(true);
                 lastTouchPos = touchPoint.pos();
                 
                 // Store starting pan position
@@ -2642,7 +2643,10 @@ bool InkCanvas::event(QEvent *event) {
         } else if (activeTouchPoints == 2) {
             // Two finger pinch zoom
             isPanning = false;
-            isTouchPanning = false;  // Disable efficient scrolling during pinch-zoom
+            if (isTouchPanning) {
+                isTouchPanning = false;  // Disable efficient scrolling during pinch-zoom
+                emit touchPanningChanged(false);  // Notify that touch panning has ended
+            } // Disable efficient scrolling during pinch-zoom
             
             const QTouchEvent::TouchPoint &touch1 = touchPoints[0];
             const QTouchEvent::TouchPoint &touch2 = touchPoints[1];
@@ -2723,7 +2727,10 @@ bool InkCanvas::event(QEvent *event) {
         } else {
             // More than 2 fingers - ignore
             isPanning = false;
-            isTouchPanning = false;  // Disable efficient scrolling
+            if (isTouchPanning) {
+                isTouchPanning = false;  // Disable efficient scrolling
+                emit touchPanningChanged(false);  // Notify that touch panning has ended
+            }  // Disable efficient scrolling
         }
         
         if (event->type() == QEvent::TouchEnd) {
@@ -2768,6 +2775,7 @@ bool InkCanvas::event(QEvent *event) {
                 } else {
                     // No significant velocity, end immediately
                     isTouchPanning = false;
+                    emit touchPanningChanged(false);  // Notify that touch panning has ended
                     cachedFrame = QPixmap();
                     cachedFrameOffset = QPoint(0, 0);
                     update();
@@ -2776,6 +2784,7 @@ bool InkCanvas::event(QEvent *event) {
                 // No inertia, end immediately
                 if (isTouchPanning) {
                     isTouchPanning = false;
+                    emit touchPanningChanged(false);  // Notify that touch panning has ended
                     cachedFrame = QPixmap();
                     cachedFrameOffset = QPoint(0, 0);
                     update();
@@ -2810,6 +2819,7 @@ void InkCanvas::updateInertiaScroll() {
         // Stop inertia
         inertiaTimer->stop();
         isTouchPanning = false;
+        emit touchPanningChanged(false);  // Notify that touch panning has ended
         pageSwitchInProgress = false; // Reset page switch cooldown
         cachedFrame = QPixmap();
         cachedFrameOffset = QPoint(0, 0);
@@ -4908,6 +4918,7 @@ void InkCanvas::checkAutoscrollThreshold(int oldPanY, int newPanY) {
         if (isTouchPanning && inertiaTimer && inertiaTimer->isActive()) {
             inertiaTimer->stop();
             isTouchPanning = false;
+            emit touchPanningChanged(false);  // Notify that touch panning has ended
             pageSwitchInProgress = true;
             pageSwitchCooldown.start();
             
@@ -4926,6 +4937,7 @@ void InkCanvas::checkAutoscrollThreshold(int oldPanY, int newPanY) {
         if (isTouchPanning && inertiaTimer && inertiaTimer->isActive()) {
             inertiaTimer->stop();
             isTouchPanning = false;
+            emit touchPanningChanged(false);  // Notify that touch panning has ended
             pageSwitchInProgress = true;
             pageSwitchCooldown.start();
             

@@ -56,6 +56,9 @@ public:
     QString getSaveFolder() const;
     QString getNotebookId() const;
 
+    // Frame-only mode (for performance during touch panning)
+    void setWindowsFrameOnlyMode(bool enabled);
+
 signals:
     void windowCreated(PictureWindow *window);
     void windowRemoved(PictureWindow *window);

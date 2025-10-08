@@ -45,6 +45,9 @@ public:
     // Transparency support
     void setTransparent(bool transparent);
     bool isTransparent() const;
+
+    void setFrameOnlyMode(bool enabled);
+    bool isFrameOnlyMode() const;
     
     // Canvas validation
     bool isValidForCanvas() const; // Check if window coordinates are valid for current canvas
@@ -114,6 +117,8 @@ private:
     
     // Transparency state
     bool isTransparentState = false;
+
+    bool frameOnlyMode = false;
     
     // Update prevention flag
     bool isUpdatingPosition = false;
