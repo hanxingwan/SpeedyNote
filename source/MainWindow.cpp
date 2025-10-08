@@ -1673,6 +1673,15 @@ void MainWindow::saveCurrentPage() {
         // Update tab label to reflect the new save location
         updateTabLabel();
         
+        // ✅ Add to recent notebooks after successful save
+        if (recentNotebooksManager) {
+            recentNotebooksManager->addRecentNotebook(selectedSpnPath, canvas);
+            // Refresh shared launcher if it exists and is visible
+            if (sharedLauncher && sharedLauncher->isVisible()) {
+                sharedLauncher->refreshRecentNotebooks();
+            }
+        }
+        
         // Show success message
         QMessageBox::information(this, tr("Saved"), 
             tr("Notebook saved successfully as: %1").arg(QFileInfo(selectedSpnPath).fileName()));
@@ -2544,6 +2553,15 @@ bool MainWindow::ensureTabHasUniqueSaveFolder(InkCanvas* canvas) {
 
         // Update canvas to use the new .spn package
         canvas->setSaveFolder(selectedSpnPath);
+        
+        // ✅ Add to recent notebooks after successful save
+        if (recentNotebooksManager) {
+            recentNotebooksManager->addRecentNotebook(selectedSpnPath, canvas);
+            // Refresh shared launcher if it exists and is visible
+            if (sharedLauncher && sharedLauncher->isVisible()) {
+                sharedLauncher->refreshRecentNotebooks();
+            }
+        }
         
         QMessageBox::information(this, tr("Saved Successfully"), 
             tr("Notebook saved as: %1").arg(QFileInfo(selectedSpnPath).fileName()));
@@ -6480,15 +6498,14 @@ void MainWindow::openSpnPackage(const QString &spnPath)
     updateZoom();
     updatePanRange();
     
-    // 🔍 TEMPORARY: Comment out addRecentNotebook to test if it's the source of memory leak
     // ✅ Add to recent notebooks AFTER page is loaded to ensure proper thumbnail generation
-    // if (recentNotebooksManager) {
-    //     recentNotebooksManager->addRecentNotebook(spnPath, canvas);
-    //     // Refresh shared launcher if it exists and is visible
-    //     if (sharedLauncher && sharedLauncher->isVisible()) {
-    //         sharedLauncher->refreshRecentNotebooks();
-    //     }
-    // }
+    if (recentNotebooksManager) {
+        recentNotebooksManager->addRecentNotebook(spnPath, canvas);
+        // Refresh shared launcher if it exists and is visible
+        if (sharedLauncher && sharedLauncher->isVisible()) {
+            sharedLauncher->refreshRecentNotebooks();
+        }
+    }
 }
 
 void MainWindow::createNewSpnPackage(const QString &spnPath)
