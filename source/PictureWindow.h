@@ -69,6 +69,7 @@ public:
     mutable QPixmap cachedRendering;
     mutable QRect cachedRect;
     mutable bool cachedEditMode;
+    void clearRenderCache(); // ✅ MEMORY LEAK FIX: Explicitly clear cached pixmap
     void invalidateCache() const;
     
     // Methods for handling interactions when rendered to canvas

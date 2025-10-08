@@ -1346,8 +1346,21 @@ void PictureWindow::convertScreenToCanvasRect(const QRect &screenRect) {
     }
 }
 
-void PictureWindow::invalidateCache() const {
+void PictureWindow::clearRenderCache() {
+    // ✅ MEMORY LEAK FIX: Explicitly clear and release cached rendering pixmap
+    // This is critical for preventing memory accumulation during inertia scrolling
+    // where multiple window clones are created and deleted rapidly
     cachedRendering = QPixmap();
+    cachedRect = QRect();
+    cachedEditMode = false;
+}
+
+void PictureWindow::invalidateCache() const {
+    // ✅ MEMORY LEAK FIX: Explicitly release cached pixmap data
+    // During inertia scrolling, large cached pixmaps must be freed immediately
+    if (!cachedRendering.isNull()) {
+        cachedRendering = QPixmap();  // Release the pixmap
+    }
     cachedRect = QRect();
     cachedEditMode = false;
 }

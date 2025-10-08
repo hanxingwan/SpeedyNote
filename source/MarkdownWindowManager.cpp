@@ -148,9 +148,14 @@ void MarkdownWindowManager::clearCurrentPagePermanently(int pageNumber) {
     
     // Clear current windows from memory (they're currently visible)
     for (MarkdownWindow *window : currentWindows) {
+        // ✅ CRASH FIX: Also remove from combined temp windows to prevent dangling pointers
+        combinedTempWindows.removeAll(window);
         window->deleteLater();
     }
     currentWindows.clear();
+    
+    // ✅ CRASH FIX: Clear combinedTempWindows to prevent dangling pointers
+    combinedTempWindows.clear();
     
     // Remove this page from the pageWindows map (no need to delete widgets again)
     pageWindows.remove(pageNumber);
@@ -346,6 +351,33 @@ QList<MarkdownWindow*> MarkdownWindowManager::loadWindowsForPageSeparately(int p
         // Store clones in cache for future use
         if (!permanentCache.isEmpty()) {
             pageWindows[pageNumber] = permanentCache;
+            
+            // ✅ MEMORY LEAK FIX: Limit cache size to prevent unbounded growth
+            // Keep only the most recent 5 pages in cache
+            const int MAX_CACHED_PAGES = 5;
+            if (pageWindows.size() > MAX_CACHED_PAGES) {
+                // Find and remove the oldest cache entry (simple heuristic: lowest page number far from current)
+                int pageToRemove = -1;
+                int maxDistance = 0;
+                for (auto it = pageWindows.begin(); it != pageWindows.end(); ++it) {
+                    int distance = qAbs(it.key() - pageNumber);
+                    if (distance > maxDistance) {
+                        maxDistance = distance;
+                        pageToRemove = it.key();
+                    }
+                }
+                
+                if (pageToRemove >= 0) {
+                    // Delete all cached windows for this page
+                    QList<MarkdownWindow*> oldWindows = pageWindows[pageToRemove];
+                    for (MarkdownWindow* oldWindow : oldWindows) {
+                        if (oldWindow) {
+                            delete oldWindow;
+                        }
+                    }
+                    pageWindows.remove(pageToRemove);
+                }
+            }
         }
         
         // Return the originally loaded windows (these will be Y-adjusted if needed)

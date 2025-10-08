@@ -211,6 +211,10 @@ void PictureWindowManager::loadWindowsForPage(int pageNumber) {
             
             // Only delete temporary cloned instances, not permanent cached ones
             if (!isPermanent) {
+                // ✅ CRITICAL MEMORY LEAK FIX: Clear cached rendering before deletion
+                // During inertia scrolling, each clone may have a huge cached pixmap (e.g., 4K image)
+                // This cache must be explicitly released to prevent memory accumulation
+                window->clearRenderCache();
                 delete window;
             }
         }
@@ -375,6 +379,33 @@ QList<PictureWindow*> PictureWindowManager::loadWindowsForPageSeparately(int pag
         // Store clones in cache for future use
         if (!permanentCache.isEmpty()) {
             pageWindows[pageNumber] = permanentCache;
+            
+            // ✅ MEMORY LEAK FIX: Limit cache size to prevent unbounded growth
+            // Keep only the most recent 5 pages in cache
+            const int MAX_CACHED_PAGES = 5;
+            if (pageWindows.size() > MAX_CACHED_PAGES) {
+                // Find and remove the oldest cache entry (simple heuristic: lowest page number far from current)
+                int pageToRemove = -1;
+                int maxDistance = 0;
+                for (auto it = pageWindows.begin(); it != pageWindows.end(); ++it) {
+                    int distance = qAbs(it.key() - pageNumber);
+                    if (distance > maxDistance) {
+                        maxDistance = distance;
+                        pageToRemove = it.key();
+                    }
+                }
+                
+                if (pageToRemove >= 0) {
+                    // Delete all cached windows for this page
+                    QList<PictureWindow*> oldWindows = pageWindows[pageToRemove];
+                    for (PictureWindow* oldWindow : oldWindows) {
+                        if (oldWindow) {
+                            delete oldWindow;
+                        }
+                    }
+                    pageWindows.remove(pageToRemove);
+                }
+            }
         }
         
         // Return the originally loaded windows (these will be Y-adjusted if needed)
@@ -438,6 +469,10 @@ void PictureWindowManager::setCombinedWindows(const QList<PictureWindow*> &windo
             
             // Only delete temporary cloned instances, not permanent cached ones
             if (!isPermanent) {
+                // ✅ CRITICAL MEMORY LEAK FIX: Clear cached rendering before deletion
+                // During inertia scrolling, each clone may have a huge cached pixmap (e.g., 4K image)
+                // This cache must be explicitly released to prevent memory accumulation
+                window->clearRenderCache();
                 delete window;
             }
         }
@@ -659,11 +694,17 @@ void PictureWindowManager::clearCurrentPageWindows() {
                 it.value().removeAll(window);
             }
             
+            // ✅ CRASH FIX: Also remove from combined temp windows to prevent dangling pointers
+            combinedTempWindows.removeAll(window);
+            
             // Delete immediately to avoid timing issues
             delete window;
         }
     }
     currentWindows.clear();
+    
+    // ✅ CRASH FIX: Clear combinedTempWindows to prevent dangling pointers
+    combinedTempWindows.clear();
     
     // Update the pageWindows map to reflect the cleared state
     pageWindows[currentPage] = QList<PictureWindow*>(); // Explicitly empty list
