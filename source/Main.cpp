@@ -3,6 +3,7 @@
 #endif
 
 #include <QApplication>
+#include <QPalette>
 #include <QTranslator>
 #include <QLocale>
 #include <QFile>
@@ -19,6 +20,94 @@
 #include <windows.h>
 #include <shlobj.h>
 #endif
+
+// Helper function to detect Windows dark mode
+static bool isWindowsDarkMode() {
+#ifdef Q_OS_WIN
+    QSettings settings("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", 
+                       QSettings::NativeFormat);
+    int appsUseLightTheme = settings.value("AppsUseLightTheme", 1).toInt();
+    return (appsUseLightTheme == 0);
+#else
+    return false;
+#endif
+}
+
+// Helper function to apply dark/light palette to Qt application
+static void applySystemPalette(QApplication &app) {
+#ifdef Q_OS_WIN
+    if (isWindowsDarkMode()) {
+        // Switch to Fusion style on Windows for proper dark mode support
+        // The default Windows style doesn't respect custom palettes properly
+        app.setStyle("Fusion");
+        
+        // Create a comprehensive dark palette for Qt widgets
+        QPalette darkPalette;
+        
+        // Base colors
+        QColor darkGray(53, 53, 53);
+        QColor gray(128, 128, 128);
+        QColor black(25, 25, 25);
+        QColor blue(42, 130, 218);
+        QColor lightGray(180, 180, 180);
+        
+        // Window colors (main background)
+        darkPalette.setColor(QPalette::Window, QColor(45, 45, 45));
+        darkPalette.setColor(QPalette::WindowText, Qt::white);
+        
+        // Base (text input background) colors
+        darkPalette.setColor(QPalette::Base, QColor(35, 35, 35));
+        darkPalette.setColor(QPalette::AlternateBase, darkGray);
+        darkPalette.setColor(QPalette::Text, Qt::white);
+        
+        // Tooltip colors
+        darkPalette.setColor(QPalette::ToolTipBase, QColor(60, 60, 60));
+        darkPalette.setColor(QPalette::ToolTipText, Qt::white);
+        
+        // Button colors (critical for dialogs)
+        darkPalette.setColor(QPalette::Button, darkGray);
+        darkPalette.setColor(QPalette::ButtonText, Qt::white);
+        
+        // 3D effects and borders (critical for proper widget rendering)
+        darkPalette.setColor(QPalette::Light, QColor(80, 80, 80));
+        darkPalette.setColor(QPalette::Midlight, QColor(65, 65, 65));
+        darkPalette.setColor(QPalette::Dark, QColor(35, 35, 35));
+        darkPalette.setColor(QPalette::Mid, QColor(50, 50, 50));
+        darkPalette.setColor(QPalette::Shadow, QColor(20, 20, 20));
+        
+        // Bright text
+        darkPalette.setColor(QPalette::BrightText, Qt::red);
+        
+        // Link colors
+        darkPalette.setColor(QPalette::Link, blue);
+        darkPalette.setColor(QPalette::LinkVisited, QColor(blue).lighter());
+        
+        // Highlight colors (selection)
+        darkPalette.setColor(QPalette::Highlight, blue);
+        darkPalette.setColor(QPalette::HighlightedText, Qt::white);
+        
+        // Placeholder text (for line edits, spin boxes, etc.)
+        darkPalette.setColor(QPalette::PlaceholderText, gray);
+        
+        // Disabled colors (all color groups)
+        darkPalette.setColor(QPalette::Disabled, QPalette::WindowText, gray);
+        darkPalette.setColor(QPalette::Disabled, QPalette::Text, gray);
+        darkPalette.setColor(QPalette::Disabled, QPalette::ButtonText, gray);
+        darkPalette.setColor(QPalette::Disabled, QPalette::Base, QColor(50, 50, 50));
+        darkPalette.setColor(QPalette::Disabled, QPalette::Button, QColor(50, 50, 50));
+        darkPalette.setColor(QPalette::Disabled, QPalette::Highlight, QColor(80, 80, 80));
+        
+        app.setPalette(darkPalette);
+    } else {
+        // Use default Windows style and palette for light mode
+        app.setStyle("windowsvista");
+        app.setPalette(QPalette());
+    }
+#else
+    // On Linux, Qt usually handles this correctly via the desktop environment
+    // So we don't override the palette
+#endif
+}
 
 int main(int argc, char *argv[]) {
 #ifdef _WIN32
@@ -63,6 +152,8 @@ int main(int argc, char *argv[]) {
     app.setAttribute(Qt::AA_UseHighDpiPixmaps, true);
     #endif
 
+    // Apply system-appropriate palette (dark/light) on Windows
+    applySystemPalette(app);
     
     QTranslator translator;
     

@@ -21,7 +21,7 @@ PictureWindow::PictureWindow(const QRect &rect, const QString &imagePath, QWidge
     : QWidget(parent), imagePath(imagePath), canvasRect(rect), isUpdatingPosition(false),
       lastScaledSize(QSize()), dragging(false), resizing(false), isUserInteracting(false), currentResizeHandle(None),
       maintainAspectRatio(true), aspectRatio(1.0), editMode(false), longPressTimer(new QTimer(this)),
-      wasLongPress(false), updateThrottleTimer(new QTimer(this)), hasPendingUpdate(false)
+      wasLongPress(false), updateThrottleTimer(new QTimer(this)), hasPendingUpdate(false), frameOnlyMode(false)
 {
     setupUI();
     applyStyle();
@@ -533,8 +533,31 @@ void PictureWindow::forceExitEditMode() {
     }
 }
 
+void PictureWindow::setFrameOnlyMode(bool enabled) {
+    if (frameOnlyMode == enabled) return;
+    
+    frameOnlyMode = enabled;
+    
+    // Invalidate cache when changing frame-only mode
+    invalidateCache();
+}
+
+bool PictureWindow::isFrameOnlyMode() const {
+    return frameOnlyMode;
+}
+
 void PictureWindow::renderToCanvas(QPainter &painter, const QRect &targetRect) const {
     if (originalPixmap.isNull()) return;
+    
+    // ✅ PERFORMANCE: If in frame-only mode (touch panning), draw just the border
+    if (frameOnlyMode) {
+        // Draw simple border frame for performance
+        QPen borderPen(QColor("#888888"), 2); // Gray border
+        painter.setPen(borderPen);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRect(targetRect);
+        return;
+    }
     
     // Check if we can use cached rendering
     bool canUseCache = !cachedRendering.isNull() && 
@@ -1322,8 +1345,20 @@ void PictureWindow::convertScreenToCanvasRect(const QRect &screenRect) {
     }
 }
 
-void PictureWindow::invalidateCache() const {
+void PictureWindow::clearRenderCache() {
+    // ✅ MEMORY LEAK FIX: Explicitly clear and release cached rendering pixmap
+    // This is critical for preventing memory accumulation during inertia scrolling
+    // where multiple window clones are created and deleted rapidly
     cachedRendering = QPixmap();
+    cachedRect = QRect();
+    cachedEditMode = false;
+}
+void PictureWindow::invalidateCache() const {
+    // ✅ MEMORY LEAK FIX: Explicitly release cached pixmap data
+    // During inertia scrolling, large cached pixmaps must be freed immediately
+    if (!cachedRendering.isNull()) {
+        cachedRendering = QPixmap();  // Release the pixmap
+    }
     cachedRect = QRect();
     cachedEditMode = false;
 }

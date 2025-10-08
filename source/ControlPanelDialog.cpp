@@ -86,6 +86,12 @@ void ControlPanelDialog::createBackgroundTab() {
     densitySpin->setRange(10, 200);
     densitySpin->setSuffix(" px");
     densitySpin->setSingleStep(5);
+    
+    // PDF inversion checkbox
+    pdfInversionCheckbox = new QCheckBox(tr("Invert PDF Colors (Dark Mode)"), this);
+    QLabel *pdfInversionNote = new QLabel(tr("Inverts PDF colors for better readability in dark mode. Useful for PDFs with light backgrounds."), this);
+    pdfInversionNote->setWordWrap(true);
+    pdfInversionNote->setStyleSheet("color: gray; font-size: 10px;");
 
     QGridLayout *layout = new QGridLayout(backgroundTab);
     layout->addWidget(styleLabel, 0, 0);
@@ -94,8 +100,10 @@ void ControlPanelDialog::createBackgroundTab() {
     layout->addWidget(colorButton, 1, 1);
     layout->addWidget(densityLabel, 2, 0);
     layout->addWidget(densitySpin, 2, 1);
+    layout->addWidget(pdfInversionCheckbox, 3, 0, 1, 2);
+    layout->addWidget(pdfInversionNote, 4, 0, 1, 2);
     // layout->setColumnStretch(1, 1); // Stretch the second column
-    layout->setRowStretch(3, 1); // Stretch the last row
+    layout->setRowStretch(5, 1); // Stretch the last row
 }
 
 void ControlPanelDialog::chooseColor() {
@@ -116,6 +124,7 @@ void ControlPanelDialog::applyChanges() {
     canvas->setBackgroundStyle(style);
     canvas->setBackgroundColor(selectedColor);
     canvas->setBackgroundDensity(densitySpin->value());
+    canvas->setPdfInversionEnabled(pdfInversionCheckbox->isChecked());
     canvas->update();
     canvas->saveBackgroundMetadata();
 
@@ -170,6 +179,7 @@ void ControlPanelDialog::loadFromCanvas() {
     styleCombo->setCurrentIndex(static_cast<int>(canvas->getBackgroundStyle()));
     densitySpin->setValue(canvas->getBackgroundDensity());
     selectedColor = canvas->getBackgroundColor();
+    pdfInversionCheckbox->setChecked(canvas->isPdfInversionEnabled());
 
     colorButton->setStyleSheet(QString("background-color: %1").arg(selectedColor.name()));
 
@@ -730,7 +740,7 @@ void ControlPanelDialog::createAboutTab() {
     layout->addSpacing(5);
     
     // Version
-    QLabel *versionLabel = new QLabel(tr("Version 0.10.2"), aboutTab);
+    QLabel *versionLabel = new QLabel(tr("Version 0.10.3"), aboutTab);
     versionLabel->setAlignment(Qt::AlignCenter);
     versionLabel->setStyleSheet("font-size: 14px; color: #7f8c8d;");
     layout->addWidget(versionLabel);

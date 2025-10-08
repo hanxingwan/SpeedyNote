@@ -243,6 +243,9 @@ public:
     static bool isInstanceRunning();
     static bool sendToExistingInstance(const QString &filePath);
     void setupSingleInstanceServer();
+    
+    // Theme/palette management
+    static void updateApplicationPalette(); // Update Qt application palette based on dark mode
     void openFileInNewTab(const QString &filePath); // ✅ Open .spn package directly
     bool showLastAccessedPageDialog(InkCanvas *canvas); // ✅ Show dialog for last accessed page
 
@@ -379,6 +382,7 @@ private slots:
     void handleTouchZoomChange(int newZoom);
     void handleTouchPanChange(int panX, int panY);
     void handleTouchGestureEnd(); // Add handler for touch gesture completion
+    void handleTouchPanningChanged(bool active); // Handler for touch panning start/stop (window performance optimization)
     
     // Color button state management
     void updateColorButtonStates();
@@ -677,6 +681,9 @@ protected:
     void resizeEvent(QResizeEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;  // New: Handle keyboard shortcuts
     void tabletEvent(QTabletEvent *event) override; // Handle pen hover for tooltips
+#ifdef Q_OS_WIN
+    bool nativeEvent(const QByteArray &eventType, void *message, qintptr *result) override; // Handle Windows theme changes
+#endif
     void closeEvent(QCloseEvent *event) override; // ✅ Add auto-save on program close
     
     // IME support for multi-language input

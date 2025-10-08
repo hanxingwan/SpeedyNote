@@ -43,6 +43,7 @@ signals:
     void zoomChanged(int newZoom);
     void panChanged(int panX, int panY);
     void touchGestureEnded(); // Signal emitted when touch gestures end
+    void touchPanningChanged(bool active); // Signal emitted when touch panning starts/stops (for window performance optimization)
     void ropeSelectionCompleted(const QPoint &position); // Signal emitted when rope tool selection is completed
     void pdfLinkClicked(int targetPage); // Signal emitted when a PDF link is clicked
     void pdfTextSelected(const QString &text); // Signal emitted when PDF text is selected
@@ -142,6 +143,10 @@ public:
     void setEdited(bool state) { edited = state; }  // ✅ Set the edited state
 
     void setPDFRenderDPI(int dpi) { pdfRenderDPI = dpi; }  // ✅ Set PDF render DPI
+
+    // PDF inversion for dark mode
+    void setPdfInversionEnabled(bool enabled);
+    bool isPdfInversionEnabled() const { return pdfInversionEnabled; }
 
     void clearPdfCache() { 
         QMutexLocker locker(&pdfCacheMutex);
@@ -296,6 +301,7 @@ private:
 
     QCache<int, QPixmap> pdfCache; // Caches 5 pages of the PDF
     mutable QMutex pdfCacheMutex; // Thread safety for pdfCache
+    QList<int> pdfCacheAccessOrder; // Track access order for LRU eviction (most recent at end)
     std::unique_ptr<Poppler::Document> pdfDocument;
     int currentPdfPage;
     bool isPdfLoaded = false;
@@ -368,6 +374,7 @@ private:
     QString pasteImageFromClipboard(); // Returns path to saved clipboard image or empty string on failure
 
     int pdfRenderDPI = 192;  // Default to 288 DPI
+    bool pdfInversionEnabled = false;  // PDF color inversion for dark mode
 
     // Touch gesture support
     bool touchGesturesEnabled = false;
@@ -426,6 +433,7 @@ private:
     // Intelligent note page cache system
     QCache<int, QPixmap> noteCache; // Cache for note pages (PNG files)
     mutable QMutex noteCacheMutex; // Thread safety for noteCache
+    QList<int> noteCacheAccessOrder; // Track access order for LRU eviction (most recent at end)
     QTimer* noteCacheTimer = nullptr; // Timer for delayed adjacent note page caching
     int currentCachedNotePage = -1; // Currently displayed note page for cache management
     int pendingNoteCacheTargetPage = -1; // Target page for pending note cache operation (to validate timer relevance)
@@ -475,7 +483,7 @@ private:
     bool isValidPageNumber(int pageNumber) const; // Check if page number is valid
     
     // Intelligent note cache helper methods
-    void loadNotePageToCache(int pageNumber); // Load a single note page and add to cache
+    void loadSingleNotePageToCache(int pageNumber); // Load a single note page and add to cache
     void checkAndCacheAdjacentNotePages(int targetPage); // Check and cache adjacent note pages if needed
     QString getNotePageFilePath(int pageNumber) const; // Get file path for note page
     

@@ -5,7 +5,10 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QScreen>
-#include <QApplication> 
+#include <QApplication>
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif 
 #include <QGuiApplication>
 #include <QLineEdit>
 #include <QTextEdit>
@@ -85,7 +88,7 @@ void setupLinuxSignalHandlers() {
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false), localServer(nullptr) {
 
-    setWindowTitle(tr("SpeedyNote Beta 0.10.2"));
+    setWindowTitle(tr("SpeedyNote Beta 0.10.3"));
 
 #ifdef Q_OS_LINUX
     // Setup signal handlers for proper cleanup on Linux
@@ -1632,10 +1635,8 @@ void MainWindow::saveCurrentPage() {
         int currentPageNumber = getCurrentPageForCanvas(canvas);
         canvas->saveToFile(currentPageNumber);
         
-        // ✅ Also save markdown windows for the current page
-        if (canvas->getMarkdownManager()) {
-            canvas->getMarkdownManager()->saveWindowsForPage(currentPageNumber);
-        }
+        // ✅ COMBINED MODE FIX: Use combined-aware save for markdown/picture windows
+        canvas->saveCombinedWindowsForPage(currentPageNumber);
         
         // ✅ THEN: Check if there are any pages to save
         QDir sourceDir(tempFolder);
@@ -1676,6 +1677,15 @@ void MainWindow::saveCurrentPage() {
         
         // Update tab label to reflect the new save location
         updateTabLabel();
+
+        // ✅ Add to recent notebooks after successful save
+        if (recentNotebooksManager) {
+            recentNotebooksManager->addRecentNotebook(selectedSpnPath, canvas);
+            // Refresh shared launcher if it exists and is visible
+            if (sharedLauncher && sharedLauncher->isVisible()) {
+                sharedLauncher->refreshRecentNotebooks();
+            }
+        }
         
         // Show success message
         QMessageBox::information(this, tr("Saved"), 
@@ -2261,10 +2271,8 @@ void MainWindow::addNewTab() {
             int pageNumber = getCurrentPageForCanvas(newCanvas);
             newCanvas->saveToFile(pageNumber);
             
-            // Also save markdown windows for this page
-            if (newCanvas->getMarkdownManager()) {
-                newCanvas->getMarkdownManager()->saveWindowsForPage(pageNumber);
-            }
+            // ✅ COMBINED MODE FIX: Use combined-aware save for markdown/picture windows
+            newCanvas->saveCombinedWindowsForPage(pageNumber);
             
             // ✅ Mark as not edited to prevent double-saving in destructor
             newCanvas->setEdited(false);
@@ -2370,6 +2378,7 @@ void MainWindow::addNewTab() {
     connect(newCanvas, &InkCanvas::zoomChanged, this, &MainWindow::handleTouchZoomChange);
     connect(newCanvas, &InkCanvas::panChanged, this, &MainWindow::handleTouchPanChange);
     connect(newCanvas, &InkCanvas::touchGestureEnded, this, &MainWindow::handleTouchGestureEnd);
+    connect(newCanvas, &InkCanvas::touchPanningChanged, this, &MainWindow::handleTouchPanningChanged);
     connect(newCanvas, &InkCanvas::ropeSelectionCompleted, this, &MainWindow::showRopeSelectionMenu);
     connect(newCanvas, &InkCanvas::pdfLinkClicked, this, [this](int targetPage) {
         // Navigate to the target page when a PDF link is clicked
@@ -2549,6 +2558,15 @@ bool MainWindow::ensureTabHasUniqueSaveFolder(InkCanvas* canvas) {
 
         // Update canvas to use the new .spn package
         canvas->setSaveFolder(selectedSpnPath);
+
+        // ✅ Add to recent notebooks after successful save
+        if (recentNotebooksManager) {
+            recentNotebooksManager->addRecentNotebook(selectedSpnPath, canvas);
+            // Refresh shared launcher if it exists and is visible
+            if (sharedLauncher && sharedLauncher->isVisible()) {
+                sharedLauncher->refreshRecentNotebooks();
+            }
+        }
         
         QMessageBox::information(this, tr("Saved Successfully"), 
             tr("Notebook saved as: %1").arg(QFileInfo(selectedSpnPath).fileName()));
@@ -3578,10 +3596,103 @@ void MainWindow::addColorPreset() {
     }
 }
 
+// Static method to update Qt application palette based on Windows dark mode
+void MainWindow::updateApplicationPalette() {
+#ifdef Q_OS_WIN
+    // Detect if Windows is in dark mode
+    QSettings settings("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", 
+                       QSettings::NativeFormat);
+    int appsUseLightTheme = settings.value("AppsUseLightTheme", 1).toInt();
+    bool isDarkMode = (appsUseLightTheme == 0);
+    
+    if (isDarkMode) {
+        // Switch to Fusion style on Windows for proper dark mode support
+        // The default Windows style doesn't respect custom palettes properly
+        QApplication::setStyle("Fusion");
+        
+        // Create a comprehensive dark palette for Qt widgets
+        QPalette darkPalette;
+        
+        // Base colors
+        QColor darkGray(53, 53, 53);
+        QColor gray(128, 128, 128);
+        QColor black(25, 25, 25);
+        QColor blue(42, 130, 218);
+        QColor lightGray(180, 180, 180);
+        
+        // Window colors (main background)
+        darkPalette.setColor(QPalette::Window, QColor(45, 45, 45));
+        darkPalette.setColor(QPalette::WindowText, Qt::white);
+        
+        // Base (text input background) colors
+        darkPalette.setColor(QPalette::Base, QColor(35, 35, 35));
+        darkPalette.setColor(QPalette::AlternateBase, darkGray);
+        darkPalette.setColor(QPalette::Text, Qt::white);
+        
+        // Tooltip colors
+        darkPalette.setColor(QPalette::ToolTipBase, QColor(60, 60, 60));
+        darkPalette.setColor(QPalette::ToolTipText, Qt::white);
+        
+        // Button colors (critical for dialogs)
+        darkPalette.setColor(QPalette::Button, darkGray);
+        darkPalette.setColor(QPalette::ButtonText, Qt::white);
+        
+        // 3D effects and borders (critical for proper widget rendering)
+        darkPalette.setColor(QPalette::Light, QColor(80, 80, 80));
+        darkPalette.setColor(QPalette::Midlight, QColor(65, 65, 65));
+        darkPalette.setColor(QPalette::Dark, QColor(35, 35, 35));
+        darkPalette.setColor(QPalette::Mid, QColor(50, 50, 50));
+        darkPalette.setColor(QPalette::Shadow, QColor(20, 20, 20));
+        
+        // Bright text
+        darkPalette.setColor(QPalette::BrightText, Qt::red);
+        
+        // Link colors
+        darkPalette.setColor(QPalette::Link, blue);
+        darkPalette.setColor(QPalette::LinkVisited, QColor(blue).lighter());
+        
+        // Highlight colors (selection)
+        darkPalette.setColor(QPalette::Highlight, blue);
+        darkPalette.setColor(QPalette::HighlightedText, Qt::white);
+        
+        // Placeholder text (for line edits, spin boxes, etc.)
+        darkPalette.setColor(QPalette::PlaceholderText, gray);
+        
+        // Disabled colors (all color groups)
+        darkPalette.setColor(QPalette::Disabled, QPalette::WindowText, gray);
+        darkPalette.setColor(QPalette::Disabled, QPalette::Text, gray);
+        darkPalette.setColor(QPalette::Disabled, QPalette::ButtonText, gray);
+        darkPalette.setColor(QPalette::Disabled, QPalette::Base, QColor(50, 50, 50));
+        darkPalette.setColor(QPalette::Disabled, QPalette::Button, QColor(50, 50, 50));
+        darkPalette.setColor(QPalette::Disabled, QPalette::Highlight, QColor(80, 80, 80));
+        
+        QApplication::setPalette(darkPalette);
+    } else {
+        // Use default Windows style and palette for light mode
+        QApplication::setStyle("windowsvista");
+        QApplication::setPalette(QPalette());
+    }
+#endif
+    // On Linux, don't override palette - desktop environment handles it
+}
+
 // to support dark mode icon switching.
 bool MainWindow::isDarkMode() {
+#ifdef Q_OS_WIN
+    // On Windows, read the registry to detect dark mode
+    // This works on Windows 10 1809+ and Windows 11
+    QSettings settings("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", 
+                       QSettings::NativeFormat);
+    
+    // AppsUseLightTheme: 0 = dark mode, 1 = light mode
+    // If the key doesn't exist (older Windows), default to light mode
+    int appsUseLightTheme = settings.value("AppsUseLightTheme", 1).toInt();
+    return (appsUseLightTheme == 0);
+#else
+    // On Linux and other platforms, use palette-based detection
     QColor bg = palette().color(QPalette::Window);
     return bg.lightness() < 128;  // Lightness scale: 0 (black) - 255 (white)
+#endif
 }
 
 QColor MainWindow::getDefaultPenColor() {
@@ -4981,6 +5092,33 @@ void MainWindow::handleTouchGestureEnd() {
     scrollbarsVisible = false;
 }
 
+void MainWindow::handleTouchPanningChanged(bool active) {
+    // ✅ PERFORMANCE: Control window frame-only mode for touch panning
+    InkCanvas* canvas = currentCanvas();
+    if (!canvas) return;
+    
+    MarkdownWindowManager* markdownMgr = canvas->getMarkdownManager();
+    PictureWindowManager* pictureMgr = canvas->getPictureManager();
+    
+    if (active) {
+        // Touch panning started - enable frame-only mode for performance
+        if (markdownMgr) {
+            markdownMgr->setWindowsFrameOnlyMode(true);
+        }
+        if (pictureMgr) {
+            pictureMgr->setWindowsFrameOnlyMode(true);
+        }
+    } else {
+        // Touch panning ended - restore full window display
+        if (markdownMgr) {
+            markdownMgr->setWindowsFrameOnlyMode(false);
+        }
+        if (pictureMgr) {
+            pictureMgr->setWindowsFrameOnlyMode(false);
+        }
+    }
+}
+
 void MainWindow::updateColorButtonStates() {
     // Check if there's a current canvas
     if (!currentCanvas()) return;
@@ -6335,6 +6473,33 @@ void MainWindow::reconnectControllerSignals() {
     // qDebug() << "Controller signals reconnected successfully";
 }
 
+#ifdef Q_OS_WIN
+bool MainWindow::nativeEvent(const QByteArray &eventType, void *message, qintptr *result) {
+    // Detect Windows theme changes at runtime
+    if (eventType == "windows_generic_MSG") {
+        MSG *msg = static_cast<MSG *>(message);
+        
+        // WM_SETTINGCHANGE (0x001A) is sent when system settings change
+        if (msg->message == 0x001A) {
+            // Check if this is a theme-related setting change
+            if (msg->lParam != 0) {
+                const wchar_t *lparam = reinterpret_cast<const wchar_t *>(msg->lParam);
+                if (lparam && wcscmp(lparam, L"ImmersiveColorSet") == 0) {
+                    // Windows theme changed - update Qt palette and our UI
+                    // Use a small delay to ensure registry has been updated
+                    QTimer::singleShot(100, this, [this]() {
+                        MainWindow::updateApplicationPalette(); // Update Qt's global palette
+                        updateTheme(); // Update our custom theme
+                    });
+                }
+            }
+        }
+    }
+    
+    return QMainWindow::nativeEvent(eventType, message, result);
+}
+#endif
+
 void MainWindow::closeEvent(QCloseEvent *event) {
     // Auto-save all tabs before closing the program
     if (canvasStack) {
@@ -6346,10 +6511,8 @@ void MainWindow::closeEvent(QCloseEvent *event) {
                     int pageNumber = getCurrentPageForCanvas(canvas);
                     canvas->saveToFile(pageNumber);
                     
-                    // Also save markdown windows for this canvas/page
-                    if (canvas->getMarkdownManager()) {
-                        canvas->getMarkdownManager()->saveWindowsForPage(pageNumber);
-                    }
+                    // ✅ COMBINED MODE FIX: Use combined-aware save for markdown/picture windows
+                    canvas->saveCombinedWindowsForPage(pageNumber);
                 }
                 
                 // ✅ Save last accessed page for each canvas
@@ -6441,15 +6604,13 @@ void MainWindow::openSpnPackage(const QString &spnPath)
     updateZoom();
     updatePanRange();
     
-    // 🔍 TEMPORARY: Comment out addRecentNotebook to test if it's the source of memory leak
-    // ✅ Add to recent notebooks AFTER page is loaded to ensure proper thumbnail generation
-    // if (recentNotebooksManager) {
-    //     recentNotebooksManager->addRecentNotebook(spnPath, canvas);
-    //     // Refresh shared launcher if it exists and is visible
-    //     if (sharedLauncher && sharedLauncher->isVisible()) {
-    //         sharedLauncher->refreshRecentNotebooks();
-    //     }
-    // }
+    if (recentNotebooksManager) {
+        recentNotebooksManager->addRecentNotebook(spnPath, canvas);
+        // Refresh shared launcher if it exists and is visible
+        if (sharedLauncher && sharedLauncher->isVisible()) {
+            sharedLauncher->refreshRecentNotebooks();
+        }
+    }
 }
 
 void MainWindow::createNewSpnPackage(const QString &spnPath)

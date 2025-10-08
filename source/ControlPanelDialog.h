@@ -45,6 +45,7 @@ private:
     QComboBox *styleCombo;
     QPushButton *colorButton;
     QSpinBox *densitySpin;
+    QCheckBox *pdfInversionCheckbox;
 
     QPushButton *applyButton;
     QPushButton *okButton;

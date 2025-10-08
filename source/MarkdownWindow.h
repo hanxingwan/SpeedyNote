@@ -46,6 +46,10 @@ public:
     void setTransparent(bool transparent);
     bool isTransparent() const;
     
+    // Frame-only mode (for performance during touch panning)
+    void setFrameOnlyMode(bool enabled);
+    bool isFrameOnlyMode() const;
+    
     // Canvas validation
     bool isValidForCanvas() const; // Check if window coordinates are valid for current canvas
     
@@ -114,6 +118,9 @@ private:
     
     // Transparency state
     bool isTransparentState = false;
+    
+    // Frame-only mode state (for performance)
+    bool frameOnlyMode = false;
     
     // Update prevention flag
     bool isUpdatingPosition = false;

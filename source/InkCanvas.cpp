@@ -125,13 +125,8 @@ InkCanvas::~InkCanvas() {
         // Save the current page using existing logic
         saveToFile(lastActivePage);
         
-        // Also save markdown windows if they exist
-        if (markdownManager) {
-            markdownManager->saveWindowsForPage(lastActivePage);
-        }
-        if (pictureManager) {
-            pictureManager->saveWindowsForPage(lastActivePage);
-        }
+        // ✅ COMBINED MODE FIX: Use combined-aware save for markdown/picture windows
+        saveCombinedWindowsForPage(lastActivePage);
     }
     
     // ✅ Cleanup PDF resources
@@ -144,10 +139,12 @@ InkCanvas::~InkCanvas() {
     {
         QMutexLocker locker(&pdfCacheMutex);
         pdfCache.clear();
+        pdfCacheAccessOrder.clear();
     }
     {
         QMutexLocker locker(&noteCacheMutex);
         noteCache.clear();
+        noteCacheAccessOrder.clear();
     }
     
     // ✅ Stop and clean up timers
@@ -232,11 +229,37 @@ void InkCanvas::initializeBuffer() {
     setMaximumSize(pixelSize); // 🔥 KEY LINE to make full canvas drawable
 }
 
+// Helper function to invert PDF colors for dark mode
+static QImage invertPdfImage(const QImage &original) {
+    if (original.isNull()) {
+        return original;
+    }
+    
+    QImage inverted = original.copy();
+    inverted.invertPixels(QImage::InvertRgb);  // Invert RGB, keep alpha
+    return inverted;
+}
+
+void InkCanvas::setPdfInversionEnabled(bool enabled) {
+    if (pdfInversionEnabled != enabled) {
+        pdfInversionEnabled = enabled;
+        
+        // Clear PDF cache to force re-rendering with new inversion setting
+        clearPdfCache();
+        
+        // Save to metadata
+        if (!saveFolder.isEmpty()) {
+            saveNotebookMetadata();
+        }
+    }
+}
+
 void InkCanvas::loadPdf(const QString &pdfPath) {
     // ✅ Clear existing PDF cache before loading new PDF to prevent old pages from showing
     {
         QMutexLocker locker(&pdfCacheMutex);
         pdfCache.clear();
+        pdfCacheAccessOrder.clear();
     }
     currentCachedPage = -1;
     
@@ -287,6 +310,7 @@ void InkCanvas::clearPdf() {
     {
         QMutexLocker locker(&pdfCacheMutex);
         pdfCache.clear();
+        pdfCacheAccessOrder.clear();
     }
 
     // ✅ Clear the background image immediately to remove PDF from display
@@ -354,6 +378,10 @@ void InkCanvas::loadPdfPage(int pageNumber) {
             // Display the cached page immediately
             backgroundImage = *pdfCache.object(pageNumber);
             isCached = true;
+
+            // ✅ LRU: Mark this page as recently accessed by moving to end of access order
+            pdfCacheAccessOrder.removeAll(pageNumber);
+            pdfCacheAccessOrder.append(pageNumber);
         }
     }
     
@@ -410,6 +438,11 @@ void InkCanvas::loadPdfPreviewAsync(int pageNumber) {
 
         QImage currentPageImage = currentPage->renderToImage(96, 96);
         if (currentPageImage.isNull()) return QPixmap();
+        
+        // Apply PDF inversion if enabled
+        if (pdfInversionEnabled) {
+            currentPageImage = invertPdfImage(currentPageImage);
+        }
 
         // Try to render next page for combination
         QImage nextPageImage;
@@ -418,6 +451,11 @@ void InkCanvas::loadPdfPreviewAsync(int pageNumber) {
             std::unique_ptr<Poppler::Page> nextPage(pdfDocument->page(nextPageNumber));
             if (nextPage) {
                 nextPageImage = nextPage->renderToImage(96, 96);
+                
+                // Apply PDF inversion if enabled
+                if (pdfInversionEnabled) {
+                    nextPageImage = invertPdfImage(nextPageImage);
+                }
             }
         }
 
@@ -1453,8 +1491,9 @@ void InkCanvas::mousePressEvent(QMouseEvent *event) {
                     PictureWindow* window = pictureManager->createPictureWindow(initialRect, copiedImagePath);
                     //qDebug() << "  Picture window created:" << (window != nullptr);
                     
-                    // Save pictures for current page
-                    pictureManager->saveWindowsForPage(currentPage);
+                    
+                    // ✅ COMBINED MODE FIX: Use combined-aware save to handle Y-coordinate adjustment
+                    saveCombinedWindowsForPage(currentPage);
                     //qDebug() << "  Pictures saved for page";
                     
                     // Mark canvas as edited
@@ -1518,8 +1557,8 @@ void InkCanvas::mousePressEvent(QMouseEvent *event) {
                 PictureWindow* window = pictureManager->createPictureWindow(initialRect, clipboardImagePath);
                 
                 if (window) {
-                    // Save pictures for current page
-                    pictureManager->saveWindowsForPage(currentPage);
+                    // ✅ COMBINED MODE FIX: Use combined-aware save to handle Y-coordinate adjustment
+                    saveCombinedWindowsForPage(currentPage);
                     
                     // Disable picture selection mode after successful paste
                     setPictureSelectionMode(false);
@@ -1630,6 +1669,11 @@ void InkCanvas::mouseReleaseEvent(QMouseEvent *event) {
         QRect selectionRect = QRect(markdownSelectionStart, markdownSelectionEnd).normalized();
         if (selectionRect.width() > 50 && selectionRect.height() > 50 && markdownManager) {
             markdownManager->createMarkdownWindow(selectionRect);
+
+            // ✅ COMBINED MODE FIX: Save immediately with combined-aware method
+            int currentPage = getLastActivePage();
+            saveCombinedWindowsForPage(currentPage);
+            setEdited(true);
         }
         
         // Exit selection mode
@@ -1963,6 +2007,9 @@ void InkCanvas::saveToFile(int pageNumber) {
         {
             QMutexLocker locker(&noteCacheMutex);
             noteCache.insert(nextPageNumber, new QPixmap(QPixmap::fromImage(mergedNextImage)));
+            // ✅ LRU: Update access order
+            noteCacheAccessOrder.removeAll(nextPageNumber);
+            noteCacheAccessOrder.append(nextPageNumber);
         }
             
             // Note: Cache invalidation is now handled during page switching for better timing
@@ -1972,6 +2019,9 @@ void InkCanvas::saveToFile(int pageNumber) {
         {
             QMutexLocker locker(&noteCacheMutex);
             noteCache.insert(pageNumber, new QPixmap(currentPageBuffer));
+            // ✅ LRU: Update access order
+            noteCacheAccessOrder.removeAll(nextPageNumber);
+            noteCacheAccessOrder.append(nextPageNumber);
         }
         
     } else {
@@ -1987,6 +2037,9 @@ void InkCanvas::saveToFile(int pageNumber) {
         {
             QMutexLocker locker(&noteCacheMutex);
             noteCache.insert(pageNumber, new QPixmap(buffer));
+            // ✅ LRU: Update access order
+            noteCacheAccessOrder.removeAll(pageNumber);
+            noteCacheAccessOrder.append(pageNumber);
         }
     }
     
@@ -2090,34 +2143,69 @@ void InkCanvas::loadPage(int pageNumber) {
     // Update current note page tracker
     currentCachedNotePage = pageNumber;
 
-    // CRITICAL FIX: Always invalidate cache for combined pages when switching
-    // This ensures we get fresh content that might have been updated by other views
-    {
-        QMutexLocker locker(&noteCacheMutex);
-        if (pageNumber > 0) {
-            noteCache.remove(pageNumber - 1); // Remove "page (n-1),n" cache
-        }
-    }
-    {
-        QMutexLocker locker(&noteCacheMutex);
-        noteCache.remove(pageNumber);         // Remove "page n,(n+1)" cache
-        noteCache.remove(pageNumber + 1);     // Remove "page (n+1),(n+2)" cache
-    }
+    // ✅ NEW APPROACH: Cache single pages, combine on-the-fly
+    // Load individual pages into cache (will skip if already cached)
+    loadSingleNotePageToCache(pageNumber);
+    loadSingleNotePageToCache(pageNumber + 1);
 
-    // Now load fresh from disk (no cache check since we just invalidated)
-    loadNotePageToCache(pageNumber);
+    // Combine the two pages on-the-fly to create the display buffer
+    QPixmap currentPageCanvas;
+    QPixmap nextPageCanvas;
+    bool currentExists = false;
+    bool nextExists = false;
+    bool loadedFromCache = false; // Track if we loaded anything from cache
     
     // Use the newly cached page or initialize buffer if loading failed
-    bool loadedFromCache = false;
     {
         QMutexLocker locker(&noteCacheMutex);
         if (noteCache.contains(pageNumber)) {
-            buffer = *noteCache.object(pageNumber);
+            currentPageCanvas = *noteCache.object(pageNumber);
+            currentExists = true;
             loadedFromCache = true;
+            // ✅ LRU: Mark as recently accessed
+            noteCacheAccessOrder.removeAll(pageNumber);
+            noteCacheAccessOrder.append(pageNumber);
+        }
+        if (noteCache.contains(pageNumber + 1)) {
+            nextPageCanvas = *noteCache.object(pageNumber + 1);
+            nextExists = true;
+            loadedFromCache = true;
+            // ✅ LRU: Mark as recently accessed
+            noteCacheAccessOrder.removeAll(pageNumber + 1);
+            noteCacheAccessOrder.append(pageNumber + 1);
         }
     }
-    if (!loadedFromCache) {
-        initializeBuffer(); // Clear the canvas if no file exists
+    // Combine the two pages into the display buffer
+    if (currentExists || nextExists) {
+        int combinedWidth = qMax(currentExists ? currentPageCanvas.width() : 0, 
+                                 nextExists ? nextPageCanvas.width() : 0);
+        int combinedHeight = (currentExists ? currentPageCanvas.height() : 0) + 
+                            (nextExists ? nextPageCanvas.height() : 0);
+
+        // If only one page exists, double the height
+        if (currentExists && !nextExists) {
+            combinedHeight = currentPageCanvas.height() * 2;
+            combinedWidth = currentPageCanvas.width();
+        } else if (!currentExists && nextExists) {
+            combinedHeight = nextPageCanvas.height() * 2;
+            combinedWidth = nextPageCanvas.width();
+        }
+
+        buffer = QPixmap(combinedWidth, combinedHeight);
+        buffer.fill(Qt::transparent);
+
+        QPainter painter(&buffer);
+        if (currentExists) {
+            painter.drawPixmap(0, 0, currentPageCanvas);
+        }
+        if (nextExists) {
+            int yOffset = currentExists ? currentPageCanvas.height() : nextPageCanvas.height();
+            painter.drawPixmap(0, yOffset, nextPageCanvas);
+        }
+        painter.end();
+    } else {
+        // No pages exist - initialize empty buffer
+        initializeBuffer();
         loadedFromCache = false;
     }
     
@@ -2261,7 +2349,11 @@ void InkCanvas::deletePage(int pageNumber) {
     QFile::remove(metadataFileName);
 
     // Remove deleted page from note cache
-    noteCache.remove(pageNumber);
+    {
+        QMutexLocker locker(&noteCacheMutex);
+        noteCache.remove(pageNumber);
+        noteCacheAccessOrder.removeAll(pageNumber);
+    }
 
     // Delete markdown windows for this page
     if (markdownManager) {
@@ -2574,6 +2666,7 @@ bool InkCanvas::event(QEvent *event) {
                 
                 isPanning = true;
                 isTouchPanning = true;  // Enable efficient scrolling mode
+                emit touchPanningChanged(true);  // Notify that touch panning has started
                 lastTouchPos = touchPoint.position();
                 
                 // Store starting pan position
@@ -2648,7 +2741,10 @@ bool InkCanvas::event(QEvent *event) {
         } else if (activeTouchPoints == 2) {
             // Two finger pinch zoom
             isPanning = false;
-            isTouchPanning = false;  // Disable efficient scrolling during pinch-zoom
+            if (isTouchPanning) {
+                isTouchPanning = false;  // Disable efficient scrolling during pinch-zoom
+                emit touchPanningChanged(false);  // Notify that touch panning has ended
+            }
             
             const QTouchEvent::TouchPoint &touch1 = touchPoints[0];
             const QTouchEvent::TouchPoint &touch2 = touchPoints[1];
@@ -2732,7 +2828,10 @@ bool InkCanvas::event(QEvent *event) {
         } else {
             // More than 2 fingers - ignore
             isPanning = false;
-            isTouchPanning = false;  // Disable efficient scrolling
+            if (isTouchPanning) {
+                isTouchPanning = false;  // Disable efficient scrolling
+                emit touchPanningChanged(false);  // Notify that touch panning has ended
+            }
         }
         
         if (event->type() == QEvent::TouchEnd) {
@@ -2777,6 +2876,7 @@ bool InkCanvas::event(QEvent *event) {
                 } else {
                     // No significant velocity, end immediately
                     isTouchPanning = false;
+                    emit touchPanningChanged(false);  // Notify that touch panning has ended
                     cachedFrame = QPixmap();
                     cachedFrameOffset = QPoint(0, 0);
                     update();
@@ -2785,6 +2885,7 @@ bool InkCanvas::event(QEvent *event) {
                 // No inertia, end immediately
                 if (isTouchPanning) {
                     isTouchPanning = false;
+                    emit touchPanningChanged(false);  // Notify that touch panning has ended
                     cachedFrame = QPixmap();
                     cachedFrameOffset = QPoint(0, 0);
                     update();
@@ -2819,6 +2920,7 @@ void InkCanvas::updateInertiaScroll() {
         // Stop inertia
         inertiaTimer->stop();
         isTouchPanning = false;
+        emit touchPanningChanged(false);  // Notify that touch panning has ended
         pageSwitchInProgress = false; // Reset page switch cooldown
         cachedFrame = QPixmap();
         cachedFrameOffset = QPoint(0, 0);
@@ -3515,6 +3617,9 @@ void InkCanvas::renderPdfPageToCacheThreadSafe(int pageNumber, Poppler::Document
     {
         QMutexLocker locker(&pdfCacheMutex);
         if (pdfCache.contains(pageNumber)) {
+            // ✅ LRU: Mark as recently accessed
+            pdfCacheAccessOrder.removeAll(pageNumber);
+            pdfCacheAccessOrder.append(pageNumber);
             return;
         }
         
@@ -3522,6 +3627,15 @@ void InkCanvas::renderPdfPageToCacheThreadSafe(int pageNumber, Poppler::Document
         if (pdfCache.count() >= 6) {
             auto oldestKey = pdfCache.keys().first();
             pdfCache.remove(oldestKey);
+            // ✅ LRU: Evict the LEAST recently used page (front of the list)
+            if (!pdfCacheAccessOrder.isEmpty()) {
+                int pageToEvict = pdfCacheAccessOrder.takeFirst();
+                pdfCache.remove(pageToEvict);
+            } else {
+                // Fallback if access order is somehow empty
+                auto oldestKey = pdfCache.keys().first();
+                pdfCache.remove(oldestKey);
+            }
         }
     }
     
@@ -3536,6 +3650,11 @@ void InkCanvas::renderPdfPageToCacheThreadSafe(int pageNumber, Poppler::Document
         return;
     }
     
+    // Apply PDF inversion if enabled
+    if (pdfInversionEnabled) {
+        currentPageImage = invertPdfImage(currentPageImage);
+    }
+    
     // Try to render next page for combination
     QImage nextPageImage;
     int nextPageNumber = pageNumber + 1;
@@ -3543,6 +3662,11 @@ void InkCanvas::renderPdfPageToCacheThreadSafe(int pageNumber, Poppler::Document
         std::unique_ptr<Poppler::Page> nextPage(sharedDocument->page(nextPageNumber));
         if (nextPage) {
             nextPageImage = nextPage->renderToImage(pdfRenderDPI, pdfRenderDPI);
+            
+            // Apply PDF inversion if enabled
+            if (pdfInversionEnabled) {
+                nextPageImage = invertPdfImage(nextPageImage);
+            }
         }
     }
     
@@ -3592,6 +3716,9 @@ void InkCanvas::renderPdfPageToCacheThreadSafe(int pageNumber, Poppler::Document
         {
             QMutexLocker locker(&pdfCacheMutex);
             pdfCache.insert(pageNumber, new QPixmap(cachedPixmap));
+            // ✅ LRU: Add newly cached page to end of access order (most recent)
+            pdfCacheAccessOrder.removeAll(pageNumber); // Remove if already present
+            pdfCacheAccessOrder.append(pageNumber);
         }
     }
 }
@@ -3729,17 +3856,25 @@ QString InkCanvas::getNotePageFilePath(int pageNumber) const {
     return saveFolder + QString("/%1_%2.png").arg(notebookId).arg(pageNumber, 5, 10, QChar('0'));
 }
 
-void InkCanvas::loadNotePageToCache(int pageNumber) {
+void InkCanvas::loadSingleNotePageToCache(int pageNumber) {
     // Check if already cached (thread-safe)
     {
         QMutexLocker locker(&noteCacheMutex);
         if (noteCache.contains(pageNumber)) {
+            // ✅ LRU: Mark as recently accessed
+            noteCacheAccessOrder.removeAll(pageNumber);
+            noteCacheAccessOrder.append(pageNumber);
             return;
         }
     }
     
-    QString currentFilePath = getNotePageFilePath(pageNumber);
-    if (currentFilePath.isEmpty()) {
+    QString filePath = getNotePageFilePath(pageNumber);
+    if (filePath.isEmpty()) {
+        return;
+    }
+
+    // Only cache if the file actually exists
+    if (!QFile::exists(filePath)) {
         return;
     }
     
@@ -3747,84 +3882,30 @@ void InkCanvas::loadNotePageToCache(int pageNumber) {
     {
         QMutexLocker locker(&noteCacheMutex);
         if (noteCache.count() >= 6) {
-            // QCache will automatically remove least recently used items
-            // but we can be explicit about it
-            auto keys = noteCache.keys();
-            if (!keys.isEmpty()) {
-                noteCache.remove(keys.first());
+            // ✅ LRU: Evict the LEAST recently used page (front of the list)
+            if (!noteCacheAccessOrder.isEmpty()) {
+                int pageToEvict = noteCacheAccessOrder.takeFirst();
+                noteCache.remove(pageToEvict);
+            } else {
+                // Fallback if access order is somehow empty
+                auto keys = noteCache.keys();
+                if (!keys.isEmpty()) {
+                    noteCache.remove(keys.first());
+                }
             }
         }
     }
     
-    // Load current page canvas
-    QPixmap currentPageCanvas;
-    bool currentExists = false;
-    if (QFile::exists(currentFilePath)) {
-        if (currentPageCanvas.load(currentFilePath)) {
-            currentExists = true;
-        }
+    // Load single page from disk
+    QPixmap singlePageCanvas;
+    if (singlePageCanvas.load(filePath)) {
+        // Cache the single page (thread-safe)
+        QMutexLocker locker(&noteCacheMutex);
+        noteCache.insert(pageNumber, new QPixmap(singlePageCanvas));
+        // ✅ LRU: Add newly cached page to end of access order (most recent)
+        noteCacheAccessOrder.removeAll(pageNumber); // Remove if already present
+        noteCacheAccessOrder.append(pageNumber);
     }
-    
-    // Load next page canvas for combination
-    QPixmap nextPageCanvas;
-    bool nextExists = false;
-    int nextPageNumber = pageNumber + 1;
-    QString nextFilePath = getNotePageFilePath(nextPageNumber);
-    if (!nextFilePath.isEmpty() && QFile::exists(nextFilePath)) {
-        if (nextPageCanvas.load(nextFilePath)) {
-            nextExists = true;
-        }
-    }
-    
-    // Create combined canvas
-    QPixmap combinedCanvas;
-    if (currentExists || nextExists) {
-        // Determine the size for the combined canvas
-        int combinedWidth = 0;
-        int combinedHeight = 0;
-        
-        if (currentExists && nextExists) {
-            // Both pages exist - combine them vertically
-            combinedWidth = qMax(currentPageCanvas.width(), nextPageCanvas.width());
-            combinedHeight = currentPageCanvas.height() + nextPageCanvas.height();
-        } else if (currentExists) {
-            // Only current page exists - create double height with current page on top
-            combinedWidth = currentPageCanvas.width();
-            combinedHeight = currentPageCanvas.height() * 2;
-        } else {
-            // Only next page exists - create double height with empty space on top
-            combinedWidth = nextPageCanvas.width();
-            combinedHeight = nextPageCanvas.height() * 2;
-        }
-        
-        // Create the combined canvas
-        combinedCanvas = QPixmap(combinedWidth, combinedHeight);
-        combinedCanvas.fill(Qt::transparent);
-        
-        QPainter painter(&combinedCanvas);
-        painter.setRenderHint(QPainter::Antialiasing, true);
-        painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
-        
-        // Draw current page at the top
-        if (currentExists) {
-            painter.drawPixmap(0, 0, currentPageCanvas);
-        }
-        
-        // Draw next page below current page
-        if (nextExists) {
-            int yOffset = currentExists ? currentPageCanvas.height() : nextPageCanvas.height();
-            painter.drawPixmap(0, yOffset, nextPageCanvas);
-        }
-        
-        painter.end();
-        
-        // Cache the combined canvas (thread-safe)
-        {
-            QMutexLocker locker(&noteCacheMutex);
-            noteCache.insert(pageNumber, new QPixmap(combinedCanvas));
-        }
-    }
-    // If neither file exists, we don't cache anything - loadPage will handle initialization
 }
 
 void InkCanvas::checkAndCacheAdjacentNotePages(int targetPage) {
@@ -3924,7 +4005,7 @@ void InkCanvas::cacheAdjacentNotePages() {
         
         // Capture pageNum by value to avoid issues with lambda capture
         QFuture<void> future = QtConcurrent::run([this, pageNum]() {
-            loadNotePageToCache(pageNum);
+            loadSingleNotePageToCache(pageNum);
         });
         
         watcher->setFuture(future);
@@ -3935,6 +4016,7 @@ void InkCanvas::invalidateCurrentPageCache() {
     if (currentCachedNotePage >= 0) {
         QMutexLocker locker(&noteCacheMutex);
         noteCache.remove(currentCachedNotePage);
+        noteCacheAccessOrder.removeAll(currentCachedNotePage);
     }
 }
 
@@ -4309,6 +4391,9 @@ void InkCanvas::loadNotebookMetadata() {
     backgroundColor = QColor(obj["background_color"].toString("#ffffff"));
     backgroundDensity = obj["background_density"].toInt(20);
     
+    // PDF inversion setting (default to false for existing notebooks)
+    pdfInversionEnabled = obj["pdf_inversion_enabled"].toBool(false);
+    
     // Load bookmarks
     bookmarks.clear();
     QJsonArray bookmarkArray = obj["bookmarks"].toArray();
@@ -4345,6 +4430,9 @@ void InkCanvas::saveNotebookMetadata() {
     obj["background_style"] = bgStyleStr;
     obj["background_color"] = backgroundColor.name();
     obj["background_density"] = backgroundDensity;
+    
+    // PDF inversion setting
+    obj["pdf_inversion_enabled"] = pdfInversionEnabled;
     
     // Save bookmarks
     QJsonArray bookmarkArray;
@@ -4944,6 +5032,7 @@ void InkCanvas::checkAutoscrollThreshold(int oldPanY, int newPanY) {
         if (isTouchPanning && inertiaTimer && inertiaTimer->isActive()) {
             inertiaTimer->stop();
             isTouchPanning = false;
+            emit touchPanningChanged(false);  // Notify that touch panning has ended
             pageSwitchInProgress = true;
             pageSwitchCooldown.start();
             
@@ -4962,6 +5051,7 @@ void InkCanvas::checkAutoscrollThreshold(int oldPanY, int newPanY) {
         if (isTouchPanning && inertiaTimer && inertiaTimer->isActive()) {
             inertiaTimer->stop();
             isTouchPanning = false;
+            emit touchPanningChanged(false);  // Notify that touch panning has ended
             pageSwitchInProgress = true;
             pageSwitchCooldown.start();
             

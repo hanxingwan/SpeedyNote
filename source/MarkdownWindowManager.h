@@ -49,6 +49,9 @@ public:
     void resetTransparencyTimer();
     void setWindowsTransparent(bool transparent);
     void hideAllWindows(); // Hide all windows and stop transparency timer
+    
+    // Frame-only mode (for performance during touch panning)
+    void setWindowsFrameOnlyMode(bool enabled);
 
 signals:
     void windowCreated(MarkdownWindow *window);
@@ -69,6 +72,10 @@ private:
     
     // Current page windows (for quick access)
     QList<MarkdownWindow*> currentWindows;
+
+    // Track temporary combined windows for cleanup
+    QList<MarkdownWindow*> combinedTempWindows; // ✅ Track temporary combined windows for cleanup
+    QList<MarkdownWindow*> orphanedCacheWindows; // ✅ Track orphaned cache windows awaiting cleanup
     
     // Transparency timer system
     QTimer *transparencyTimer;
@@ -83,6 +90,7 @@ private:
     QString getNotebookId() const;
     QRect convertScreenToCanvasRect(const QRect &screenRect) const;
     void connectWindowSignals(MarkdownWindow *window);
+    void updatePermanentCacheForWindow(MarkdownWindow *modifiedWindow, int pageNumber);
     
 public slots:
     void updateAllWindowPositions(); // Update all window positions when canvas pan/zoom changes
