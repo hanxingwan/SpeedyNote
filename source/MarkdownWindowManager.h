@@ -74,6 +74,7 @@ private:
     
     // Track temporary combined windows for cleanup
     QList<MarkdownWindow*> combinedTempWindows; // ✅ Track temporary combined windows for cleanup
+    QList<MarkdownWindow*> orphanedCacheWindows; // ✅ Track orphaned cache windows awaiting cleanup
     
     // Transparency timer system
     QTimer *transparencyTimer;
