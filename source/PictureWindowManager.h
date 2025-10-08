@@ -72,6 +72,7 @@ private:
     QString getPictureDataFilePath(int pageNumber) const;
     void savePictureData(int pageNumber, const QList<PictureWindow*> &windows);
     QList<PictureWindow*> loadPictureData(int pageNumber);
+    void updatePermanentCacheForWindow(PictureWindow *modifiedWindow, int pageNumber);
     
     
     
@@ -84,6 +85,8 @@ private:
     InkCanvas *canvas;
     QList<PictureWindow*> currentWindows;
     QMap<int, QList<PictureWindow*>> pageWindows;
+    QList<PictureWindow*> combinedTempWindows; // ✅ Track temporary combined windows for cleanup
+    QList<PictureWindow*> orphanedCacheWindows; // ✅ Track orphaned cache windows awaiting cleanup
     bool selectionMode;
     bool isDestroying; // ✅ Flag to prevent operations during destruction
 };

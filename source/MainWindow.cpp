@@ -1635,10 +1635,8 @@ void MainWindow::saveCurrentPage() {
         int currentPageNumber = getCurrentPageForCanvas(canvas);
         canvas->saveToFile(currentPageNumber);
         
-        // ✅ Also save markdown windows for the current page
-        if (canvas->getMarkdownManager()) {
-            canvas->getMarkdownManager()->saveWindowsForPage(currentPageNumber);
-        }
+        // ✅ COMBINED MODE FIX: Use combined-aware save for markdown/picture windows
+        canvas->saveCombinedWindowsForPage(currentPageNumber);
         
         // ✅ THEN: Check if there are any pages to save
         QDir sourceDir(tempFolder);
@@ -1679,6 +1677,15 @@ void MainWindow::saveCurrentPage() {
         
         // Update tab label to reflect the new save location
         updateTabLabel();
+
+        // ✅ Add to recent notebooks after successful save
+        if (recentNotebooksManager) {
+            recentNotebooksManager->addRecentNotebook(selectedSpnPath, canvas);
+            // Refresh shared launcher if it exists and is visible
+            if (sharedLauncher && sharedLauncher->isVisible()) {
+                sharedLauncher->refreshRecentNotebooks();
+            }
+        }
         
         // Show success message
         QMessageBox::information(this, tr("Saved"), 
@@ -2264,10 +2271,8 @@ void MainWindow::addNewTab() {
             int pageNumber = getCurrentPageForCanvas(newCanvas);
             newCanvas->saveToFile(pageNumber);
             
-            // Also save markdown windows for this page
-            if (newCanvas->getMarkdownManager()) {
-                newCanvas->getMarkdownManager()->saveWindowsForPage(pageNumber);
-            }
+            // ✅ COMBINED MODE FIX: Use combined-aware save for markdown/picture windows
+            newCanvas->saveCombinedWindowsForPage(pageNumber);
             
             // ✅ Mark as not edited to prevent double-saving in destructor
             newCanvas->setEdited(false);
@@ -2553,6 +2558,15 @@ bool MainWindow::ensureTabHasUniqueSaveFolder(InkCanvas* canvas) {
 
         // Update canvas to use the new .spn package
         canvas->setSaveFolder(selectedSpnPath);
+
+        // ✅ Add to recent notebooks after successful save
+        if (recentNotebooksManager) {
+            recentNotebooksManager->addRecentNotebook(selectedSpnPath, canvas);
+            // Refresh shared launcher if it exists and is visible
+            if (sharedLauncher && sharedLauncher->isVisible()) {
+                sharedLauncher->refreshRecentNotebooks();
+            }
+        }
         
         QMessageBox::information(this, tr("Saved Successfully"), 
             tr("Notebook saved as: %1").arg(QFileInfo(selectedSpnPath).fileName()));
@@ -6497,10 +6511,8 @@ void MainWindow::closeEvent(QCloseEvent *event) {
                     int pageNumber = getCurrentPageForCanvas(canvas);
                     canvas->saveToFile(pageNumber);
                     
-                    // Also save markdown windows for this canvas/page
-                    if (canvas->getMarkdownManager()) {
-                        canvas->getMarkdownManager()->saveWindowsForPage(pageNumber);
-                    }
+                    // ✅ COMBINED MODE FIX: Use combined-aware save for markdown/picture windows
+                    canvas->saveCombinedWindowsForPage(pageNumber);
                 }
                 
                 // ✅ Save last accessed page for each canvas
@@ -6592,15 +6604,13 @@ void MainWindow::openSpnPackage(const QString &spnPath)
     updateZoom();
     updatePanRange();
     
-    // 🔍 TEMPORARY: Comment out addRecentNotebook to test if it's the source of memory leak
-    // ✅ Add to recent notebooks AFTER page is loaded to ensure proper thumbnail generation
-    // if (recentNotebooksManager) {
-    //     recentNotebooksManager->addRecentNotebook(spnPath, canvas);
-    //     // Refresh shared launcher if it exists and is visible
-    //     if (sharedLauncher && sharedLauncher->isVisible()) {
-    //         sharedLauncher->refreshRecentNotebooks();
-    //     }
-    // }
+    if (recentNotebooksManager) {
+        recentNotebooksManager->addRecentNotebook(spnPath, canvas);
+        // Refresh shared launcher if it exists and is visible
+        if (sharedLauncher && sharedLauncher->isVisible()) {
+            sharedLauncher->refreshRecentNotebooks();
+        }
+    }
 }
 
 void MainWindow::createNewSpnPackage(const QString &spnPath)

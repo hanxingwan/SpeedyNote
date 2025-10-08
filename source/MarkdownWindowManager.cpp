@@ -86,10 +86,29 @@ void MarkdownWindowManager::removeMarkdownWindow(MarkdownWindow *window) {
     // Remove from current windows
     currentWindows.removeAll(window);
     
-    // Remove from all page windows
+    // ✅ CRASH FIX: Invalidate and clean up the entire permanent cache
+    // After deletion, the cache is stale and needs to be rebuilt from disk
+    // We need to delete the cached clone instances to prevent memory leaks
     for (auto it = pageWindows.begin(); it != pageWindows.end(); ++it) {
-        it.value().removeAll(window);
+        QList<MarkdownWindow*> cachedWindows = it.value();
+        // If this page's cache contains the deleted window, invalidate the entire page cache
+        if (cachedWindows.contains(window)) {
+            // Delete all cached clone instances for this page
+            for (MarkdownWindow* cachedWindow : cachedWindows) {
+                if (cachedWindow && cachedWindow != window) {
+                    delete cachedWindow;
+                }
+            }
+            // Remove this page from cache - it will be reloaded from disk next time
+            it = pageWindows.erase(it);
+            if (it == pageWindows.end()) break;
+        } else {
+            // Just remove the window from this page's list (shouldn't normally happen)
+            it.value().removeAll(window);
+        }
     }
+    // ✅ CRASH FIX: Also remove from combinedTempWindows to prevent accessing deleted windows
+    combinedTempWindows.removeAll(window);
     
     emit windowRemoved(window);
     
@@ -128,9 +147,13 @@ void MarkdownWindowManager::clearCurrentPagePermanently(int pageNumber) {
     
     // Clear current windows from memory (they're currently visible)
     for (MarkdownWindow *window : currentWindows) {
+        // ✅ CRASH FIX: Also remove from combined temp windows to prevent dangling pointers
+        combinedTempWindows.removeAll(window);
         window->deleteLater();
     }
     currentWindows.clear();
+    // ✅ CRASH FIX: Clear combinedTempWindows to prevent dangling pointers
+    combinedTempWindows.clear();
     
     // Remove this page from the pageWindows map (no need to delete widgets again)
     pageWindows.remove(pageNumber);
@@ -145,8 +168,15 @@ void MarkdownWindowManager::clearCurrentPagePermanently(int pageNumber) {
 void MarkdownWindowManager::saveWindowsForPage(int pageNumber) {
     if (!canvas || currentWindows.isEmpty()) return;
     
-    // Update page windows map
-    pageWindows[pageNumber] = currentWindows;
+    // ✅ CRITICAL FIX: Don't update pageWindows cache during combined view mode
+    // In combined mode, currentWindows contains temporary clones that will be deleted
+    // Updating the cache with these clones causes memory leaks (clones of clones)
+    // Only update cache in single-page mode where currentWindows are the actual permanent instances
+    bool isCombinedMode = !combinedTempWindows.isEmpty();
+    if (!isCombinedMode) {
+        // Only update permanent cache in single-page mode
+        pageWindows[pageNumber] = currentWindows;
+    }
     
     // Save to file
     saveWindowData(pageNumber, currentWindows);
@@ -159,6 +189,27 @@ void MarkdownWindowManager::loadWindowsForPage(int pageNumber) {
 
     // This method is now only responsible for loading and showing the
     // windows for the specified page. Hiding of old windows is handled before this.
+
+    // ✅ MEMORY LEAK FIX: Clean up temporary combined windows when switching to regular page mode
+    for (MarkdownWindow *window : combinedTempWindows) {
+        if (window) {
+            // Check if this window is in the permanent page cache
+            bool isPermanent = false;
+            for (const QList<MarkdownWindow*> &pageList : pageWindows.values()) {
+                if (pageList.contains(window)) {
+                    isPermanent = true;
+                    break;
+                }
+            }
+
+            // Only delete temporary cloned instances, not permanent cached ones
+            if (!isPermanent) {
+                delete window;
+            }
+        }
+    }
+    combinedTempWindows.clear();
+
 
     QList<MarkdownWindow*> newPageWindows;
 
@@ -266,11 +317,81 @@ QList<MarkdownWindow*> MarkdownWindowManager::getCurrentPageWindows() const {
 QList<MarkdownWindow*> MarkdownWindowManager::loadWindowsForPageSeparately(int pageNumber) {
     if (!canvas) return QList<MarkdownWindow*>();
 
-    // Load windows from file without affecting current windows
-    QList<MarkdownWindow*> pageWindows = loadWindowData(pageNumber);
+    // ✅ PSEUDO-SMOOTH SCROLLING: Always create new window instances for combined views
+    // The same notebook page appears at different Y-offsets in adjacent combined pages
+    // (e.g., page 2 appears at bottom of display-page-1 and top of display-page-2)
+    // We need separate window instances for each position, but reuse the cached data
     
-    // Apply bounds checking and setup connections
-    for (MarkdownWindow *window : pageWindows) {
+    QList<MarkdownWindow*> windows;
+
+    // Check if we have cached windows for this page that we can clone from
+    if (pageWindows.contains(pageNumber) && !pageWindows[pageNumber].isEmpty()) {
+        // Clone the cached windows to create new instances with same data
+        const QList<MarkdownWindow*> &cachedWindows = pageWindows[pageNumber];
+        for (MarkdownWindow *cachedWindow : cachedWindows) {
+            // Serialize the cached window and create a new instance from it
+            QVariantMap data = cachedWindow->serialize();
+
+            // Create new window instance with same data
+            MarkdownWindow *window = new MarkdownWindow(QRect(0, 0, 400, 300), canvas);
+            window->deserialize(data);
+            windows.append(window);
+        }
+    } else {
+        // Load windows from file for the first time
+        QList<MarkdownWindow*> loadedWindows = loadWindowData(pageNumber);
+
+        // ✅ CRITICAL FIX: Store CLONES in permanent cache, not the loaded instances
+        // The loaded instances will be returned and potentially Y-adjusted for combined views
+        // We need the cache to always have the original unadjusted coordinates
+        QList<MarkdownWindow*> permanentCache;
+        for (MarkdownWindow *loadedWindow : loadedWindows) {
+            // Clone for permanent cache
+            QVariantMap data = loadedWindow->serialize();
+
+            MarkdownWindow *cacheWindow = new MarkdownWindow(QRect(0, 0, 400, 300), canvas);
+            cacheWindow->deserialize(data);
+            permanentCache.append(cacheWindow);
+        }
+
+        // Store clones in cache for future use
+        if (!permanentCache.isEmpty()) {
+            pageWindows[pageNumber] = permanentCache;
+
+            // ✅ MEMORY LEAK FIX: Limit cache size to prevent unbounded growth
+            // Keep only the most recent 5 pages in cache
+            const int MAX_CACHED_PAGES = 5;
+            if (pageWindows.size() > MAX_CACHED_PAGES) {
+                // Find and remove the oldest cache entry (simple heuristic: lowest page number far from current)
+                int pageToRemove = -1;
+                int maxDistance = 0;
+                for (auto it = pageWindows.begin(); it != pageWindows.end(); ++it) {
+                    int distance = qAbs(it.key() - pageNumber);
+                    if (distance > maxDistance) {
+                        maxDistance = distance;
+                        pageToRemove = it.key();
+                    }
+                }
+
+                if (pageToRemove >= 0) {
+                    // Delete all cached windows for this page
+                    QList<MarkdownWindow*> oldWindows = pageWindows[pageToRemove];
+                    for (MarkdownWindow* oldWindow : oldWindows) {
+                        if (oldWindow) {
+                            delete oldWindow;
+                        }
+                    }
+                    pageWindows.remove(pageToRemove);
+                }
+            }
+        }
+
+        // Return the originally loaded windows (these will be Y-adjusted if needed)
+        windows = loadedWindows;
+    }
+
+    // Apply bounds checking and setup connections for all windows
+    for (MarkdownWindow *window : windows) {
         // Validate that the window is within canvas bounds
         if (!window->isValidForCanvas()) {
             QRect canvasBounds = canvas->getCanvasRect();
@@ -298,14 +419,42 @@ QList<MarkdownWindow*> MarkdownWindowManager::loadWindowsForPageSeparately(int p
         window->setTransparent(true);
     }
     
-    return pageWindows;
+    return windows;
 }
 
 void MarkdownWindowManager::setCombinedWindows(const QList<MarkdownWindow*> &windows) {
-    // Hide current windows first
+    // ✅ CRASH FIX: Hide current windows BEFORE deleting any windows
+    // Otherwise we might try to hide already-deleted windows
     for (MarkdownWindow *window : currentWindows) {
         window->hide();
     }
+
+    // ✅ MEMORY LEAK FIX: Clean up old temporary combined windows
+    // These are cloned instances created for pseudo-smooth scrolling that need deletion
+    for (MarkdownWindow *window : combinedTempWindows) {
+        if (window) {
+            // Don't delete if it's in the new incoming windows list (will be reused)
+            if (windows.contains(window)) {
+                continue;
+            }
+
+            // Check if this window is in the permanent page cache
+            bool isPermanent = false;
+            for (const QList<MarkdownWindow*> &pageList : pageWindows.values()) {
+                if (pageList.contains(window)) {
+                    isPermanent = true;
+                    break;
+                }
+            }
+
+            // Only delete temporary cloned instances, not permanent cached ones
+            if (!isPermanent) {
+                delete window;
+            }
+        }
+    }
+    combinedTempWindows.clear();
+
     
     // Clear the currently focused window since we're switching to combined view
     currentlyFocusedWindow = nullptr;
@@ -313,6 +462,9 @@ void MarkdownWindowManager::setCombinedWindows(const QList<MarkdownWindow*> &win
     
     // Set new combined windows as current
     currentWindows = windows;
+
+    // ✅ Track these combined windows for cleanup on next call
+    combinedTempWindows = windows;
     
     // Show all combined windows
     for (MarkdownWindow *window : currentWindows) {
@@ -337,9 +489,15 @@ void MarkdownWindowManager::saveWindowsForPageSeparately(int pageNumber, const Q
     if (!canvas) return;
     
     // Update page windows map for this specific page
-    pageWindows[pageNumber] = windows;
+    // ✅ CRITICAL FIX: Do NOT update pageWindows cache here with the passed-in windows!
+    // This method is called from saveCombinedWindowsForPage with temporarily adjusted coordinates.
+    // If we update the cache here, it gets corrupted with wrong coordinates.
     
-    // Save to file
+    // ✅ SIMPLEST FIX: Don't touch the cache at all - just save to disk!
+    // The cache will naturally get rebuilt when loading from a page that doesn't have cached windows yet.
+    // Trying to invalidate/orphan windows here causes dangling pointer issues.
+
+    // Just save to file - leave cache alone
     saveWindowData(pageNumber, windows);
 }
 
@@ -621,6 +779,27 @@ void MarkdownWindowManager::onTransparencyTimerTimeout() {
     setWindowsTransparent(true);
 }
 
+void MarkdownWindowManager::updatePermanentCacheForWindow(MarkdownWindow *modifiedWindow, int pageNumber) {
+    // ✅ USER MODIFICATION FIX: Update permanent cache when user moves/resizes a window
+    // This ensures changes persist even during combined mode
+    if (!pageWindows.contains(pageNumber)) {
+        return; // No cache for this page yet
+    }
+
+    // Find the permanent cached window that corresponds to this modified window
+    // Match by content since that's the closest thing to a unique identifier
+    QString content = modifiedWindow->getMarkdownContent();
+    QList<MarkdownWindow*> &cachedWindows = pageWindows[pageNumber];
+
+    for (MarkdownWindow *cachedWindow : cachedWindows) {
+        if (cachedWindow && cachedWindow->getMarkdownContent() == content) {
+            // Update the permanent cached window's position/size
+            cachedWindow->setCanvasRect(modifiedWindow->getCanvasRect());
+            break;
+        }
+    }
+}
+
 void MarkdownWindowManager::connectWindowSignals(MarkdownWindow *window) {
     // qDebug() << "MarkdownWindowManager::connectWindowSignals() - Connecting signals for window" << window;
     
@@ -659,6 +838,9 @@ void MarkdownWindowManager::connectWindowSignals(MarkdownWindow *window) {
         // Mark canvas as edited since window was moved
         if (canvas) {
             canvas->setEdited(true);
+            // ✅ USER MODIFICATION FIX: Update permanent cache even during combined mode
+            int currentPage = canvas->getLastActivePage();
+            updatePermanentCacheForWindow(window, currentPage);
         }
     });
     connect(window, &MarkdownWindow::windowResized, this, [this, window](MarkdownWindow*) {
@@ -679,6 +861,10 @@ void MarkdownWindowManager::connectWindowSignals(MarkdownWindow *window) {
         // Mark canvas as edited since window was resized
         if (canvas) {
             canvas->setEdited(true);
+
+            // ✅ USER MODIFICATION FIX: Update permanent cache even during combined mode
+            int currentPage = canvas->getLastActivePage();
+            updatePermanentCacheForWindow(window, currentPage);
         }
     });
     
