@@ -68,13 +68,6 @@ int main(int argc, char *argv[]) {
     
     QApplication app(argc, argv);
     
-    // Ensure IME is properly enabled for Windows
-    #ifdef _WIN32
-    app.setAttribute(Qt::AA_EnableHighDpiScaling, true);
-    app.setAttribute(Qt::AA_UseHighDpiPixmaps, true);
-    #endif
-
-    
     QTranslator translator;
     
     // Check for manual language override
