@@ -411,6 +411,13 @@ QList<PictureWindow*> PictureWindowManager::loadWindowsForPageSeparately(int pag
             QVariantMap data = cachedWindow->serialize();
             QString imagePath = data.value("image_path", "").toString();
 
+            // ✅ CRITICAL FIX: Resolve relative paths to absolute paths
+            QFileInfo fileInfo(imagePath);
+            if (fileInfo.isRelative()) {
+                imagePath = getSaveFolder() + "/" + imagePath;
+                data["image_path"] = imagePath; // Update data with absolute path
+            }
+
             if (!imagePath.isEmpty() && QFile::exists(imagePath)) {
                 // Create new window instance with same data
                 PictureWindow *window = new PictureWindow(QRect(0, 0, 200, 150), imagePath, canvas);
@@ -430,6 +437,13 @@ QList<PictureWindow*> PictureWindowManager::loadWindowsForPageSeparately(int pag
             // Clone for permanent cache
             QVariantMap data = loadedWindow->serialize();
             QString imagePath = data.value("image_path", "").toString();
+
+            // ✅ CRITICAL FIX: Resolve relative paths to absolute paths
+            QFileInfo fileInfo(imagePath);
+            if (fileInfo.isRelative()) {
+                imagePath = getSaveFolder() + "/" + imagePath;
+                data["image_path"] = imagePath; // Update data with absolute path
+            }
 
             if (!imagePath.isEmpty() && QFile::exists(imagePath)) {
                 PictureWindow *cacheWindow = new PictureWindow(QRect(0, 0, 200, 150), imagePath, canvas);
@@ -850,6 +864,18 @@ QList<PictureWindow*> PictureWindowManager::loadPictureData(int pageNumber) {
         
         // Get image path from data
         QString imagePath = windowData.value("image_path", "").toString();
+
+        // ✅ CRITICAL FIX: If path is relative (filename only), resolve it to absolute path
+        // This handles .spn packages extracted to different temp folders
+        QFileInfo fileInfo(imagePath);
+        if (fileInfo.isRelative()) {
+            // Resolve relative to save folder
+            QString resolvedPath = getSaveFolder() + "/" + imagePath;
+            imagePath = resolvedPath;
+            // Also update the windowData so it's passed correctly to the window
+            windowData["image_path"] = imagePath;
+        }
+
         if (imagePath.isEmpty() || !QFile::exists(imagePath)) {
             continue; // Skip windows with missing images
         }
@@ -1051,17 +1077,19 @@ void PictureWindowManager::evictOldCachedPages(int currentPage) {
         }
 
         // ✅ Don't evict if this page's windows are in combinedTempWindows
-        bool isInCombinedTemp = false;
+        // ✅ Don't evict if this page's windows are currently displayed
+        // Check BOTH combinedTempWindows (for combined mode) AND currentWindows (for single-page mode)
+        bool isCurrentlyDisplayed = false;
         if (pageWindows.contains(pageToEvict)) {
             for (PictureWindow* window : pageWindows[pageToEvict]) {
-                if (combinedTempWindows.contains(window)) {
-                    isInCombinedTemp = true;
+                if (combinedTempWindows.contains(window) || currentWindows.contains(window)) {
+                    isCurrentlyDisplayed = true;
                     break;
                 }
             }
         }
 
-        if (isInCombinedTemp) {
+        if (isCurrentlyDisplayed) {
             continue; // Skip evicting pages that are currently displayed
         }
 

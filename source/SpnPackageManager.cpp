@@ -407,8 +407,8 @@ void SpnPackageManager::cleanupOrphanedTempDirs()
     }
 
     if (cleanedCount > 0) {
-        qDebug() << "Cleaned up" << cleanedCount << "orphaned temp directories, freed" 
-                 << (freedSpace / 1024.0 / 1024.0) << "MB";
+        // qDebug() << "Cleaned up" << cleanedCount << "orphaned temp directories, freed" 
+                 // << (freedSpace / 1024.0 / 1024.0) << "MB";
     }
 }
 
