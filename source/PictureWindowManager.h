@@ -53,6 +53,7 @@ public:
     QString copyImageToNotebook(const QString &sourcePath, int pageNumber);
     void cleanupUnusedImages();
     void clearCurrentPageWindows(); // Clear all pictures from current page
+    void clearAllCachedWindows(); // Clear all cached windows (for destructor cleanup)
     QString getSaveFolder() const;
     QString getNotebookId() const;
     
@@ -73,7 +74,7 @@ private:
     void savePictureData(int pageNumber, const QList<PictureWindow*> &windows);
     QList<PictureWindow*> loadPictureData(int pageNumber);
     void updatePermanentCacheForWindow(PictureWindow *modifiedWindow, int pageNumber);
-    
+    void evictOldCachedPages(int currentPage); // ✅ LRU cache eviction
     
     
     QString generateImageFileName(const QString &originalPath, int pageNumber);
@@ -85,6 +86,7 @@ private:
     InkCanvas *canvas;
     QList<PictureWindow*> currentWindows;
     QMap<int, QList<PictureWindow*>> pageWindows;
+    QList<int> pageAccessOrder; // ✅ LRU tracking: most recently accessed pages at the end
     QList<PictureWindow*> combinedTempWindows; // ✅ Track temporary combined windows for cleanup
     QList<PictureWindow*> orphanedCacheWindows; // ✅ Track orphaned cache windows awaiting cleanup
     bool selectionMode;

@@ -107,12 +107,14 @@ private:
     QWidget *languageTab;
     QComboBox *languageCombo;
     QCheckBox *useSystemLanguageCheckbox;
+    QWidget *cacheTab;
     
     void createThemeTab();
     void chooseAccentColor();
     void createAboutTab();            // New: create about tab
     void createCompatibilityTab();    // New: create compatibility tab
-    void createLanguageTab();         // New: create language tab
+    void createLanguageTab();   // New: create language tab
+    void createCacheTab();        
     void updateControllerStatus();    // Update controller connection status display
 };
 

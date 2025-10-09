@@ -2,6 +2,7 @@
 #include "MainWindow.h"
 #include "ButtonMappingTypes.h"
 #include "SDLControllerManager.h"
+#include "SpnPackageManager.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -16,6 +17,7 @@
 #include <QApplication>
 #include <QMetaObject>
 #include <QIcon>
+#include <QStandardPaths>
 
 ControlPanelDialog::ControlPanelDialog(MainWindow *mainWindow, InkCanvas *targetCanvas, QWidget *parent)
     : QDialog(parent), canvas(targetCanvas), selectedColor(canvas->getBackgroundColor()), mainWindowRef(mainWindow) {
@@ -40,6 +42,7 @@ ControlPanelDialog::ControlPanelDialog(MainWindow *mainWindow, InkCanvas *target
     createThemeTab();
     createLanguageTab();
     createCompatibilityTab();
+    createCacheTab();
     createAboutTab();
     // === Buttons ===
     applyButton = new QPushButton(tr("Apply"));
@@ -783,6 +786,111 @@ void ControlPanelDialog::createAboutTab() {
     
     tabWidget->addTab(aboutTab, tr("About"));
 }
+
+void ControlPanelDialog::createCacheTab() {
+    cacheTab = new QWidget(this);
+    QVBoxLayout *layout = new QVBoxLayout(cacheTab);
+
+    // Add some spacing at the top
+    layout->addSpacing(20);
+
+    // Title
+    QLabel *titleLabel = new QLabel(tr("Cache Management"), cacheTab);
+    titleLabel->setAlignment(Qt::AlignCenter);
+    titleLabel->setStyleSheet("font-size: 18px; font-weight: bold;");
+    layout->addWidget(titleLabel);
+
+    layout->addSpacing(10);
+
+    // Description
+    QLabel *descriptionLabel = new QLabel(
+        tr("SpeedyNote uses temporary folders to work with notebook files.\n"
+           "These folders are normally cleaned up when you close a notebook,\n"
+           "but crashes or force-close can leave orphaned files behind."),
+        cacheTab
+    );
+    descriptionLabel->setAlignment(Qt::AlignCenter);
+    descriptionLabel->setWordWrap(true);
+    descriptionLabel->setStyleSheet("font-size: 11px; color: #7f8c8d; padding: 0 20px;");
+    layout->addWidget(descriptionLabel);
+
+    layout->addSpacing(20);
+
+    // Show cache size
+    qint64 cacheSize = SpnPackageManager::getTempDirsTotalSize();
+    QString cacheSizeText = QString::number(cacheSize / 1024.0 / 1024.0, 'f', 2) + " MB";
+    QLabel *cacheSizeLabel = new QLabel(tr("Current cache size: %1").arg(cacheSizeText), cacheTab);
+    cacheSizeLabel->setAlignment(Qt::AlignCenter);
+    cacheSizeLabel->setStyleSheet("font-size: 16px; font-weight: bold;");
+    layout->addWidget(cacheSizeLabel);
+
+    layout->addSpacing(5);
+
+    // Location info
+    QString tempPath = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+    QLabel *locationLabel = new QLabel(tr("Location: %1").arg(tempPath), cacheTab);
+    locationLabel->setAlignment(Qt::AlignCenter);
+    locationLabel->setStyleSheet("font-size: 9px; color: #95a5a6; font-style: italic;");
+    locationLabel->setWordWrap(true);
+    layout->addWidget(locationLabel);
+
+    layout->addSpacing(30);
+
+    // Clear cache button
+    QPushButton *clearCacheButton = new QPushButton(tr("Clear Cache Now"), cacheTab);
+    clearCacheButton->setFixedSize(180, 40);
+    clearCacheButton->setStyleSheet("font-size: 13px; font-weight: bold; padding: 8px;");
+
+    connect(clearCacheButton, &QPushButton::clicked, [this, cacheSizeLabel]() {
+        // ✅ DISK CLEANUP: Warn user to close notebooks first
+        QMessageBox::StandardButton reply = QMessageBox::question(
+            this,
+            tr("Clear Cache?"),
+            tr("This will delete all temporary cache files.\n\n"
+               "⚠️ WARNING: Make sure all notebooks are closed before clearing cache, "
+               "otherwise you may lose unsaved changes!\n\n"
+               "Continue?"),
+            QMessageBox::Yes | QMessageBox::No
+        );
+
+        if (reply == QMessageBox::Yes) {
+            // Clean up orphaned temp directories
+            SpnPackageManager::cleanupOrphanedTempDirs();
+
+            // Update cache size display
+            qint64 newCacheSize = SpnPackageManager::getTempDirsTotalSize();
+            QString newCacheSizeText = QString::number(newCacheSize / 1024.0 / 1024.0, 'f', 2) + " MB";
+            cacheSizeLabel->setText(tr("Current cache size: %1").arg(newCacheSizeText));
+
+            // Show feedback message
+            QMessageBox::information(this, tr("Cache Cleared"), 
+                tr("Temporary cache files have been cleared successfully."));
+        }
+    });
+
+    QHBoxLayout *buttonLayout = new QHBoxLayout();
+    buttonLayout->addStretch();
+    buttonLayout->addWidget(clearCacheButton);
+    buttonLayout->addStretch();
+    layout->addLayout(buttonLayout);
+
+    layout->addSpacing(20);
+
+    // Warning note at bottom
+    QLabel *warningLabel = new QLabel(
+        tr("⚠️ Only clear cache when all notebooks are closed"),
+        cacheTab
+    );
+    warningLabel->setAlignment(Qt::AlignCenter);
+    warningLabel->setStyleSheet("font-size: 11px; color: #e74c3c; font-weight: bold;");
+    layout->addWidget(warningLabel);
+
+    // Add stretch to push everything to the top
+    layout->addStretch();
+
+    tabWidget->addTab(cacheTab, tr("Cache"));
+}
+
 
 void ControlPanelDialog::createLanguageTab() {
     languageTab = new QWidget(this);

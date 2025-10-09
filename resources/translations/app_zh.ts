@@ -299,135 +299,135 @@
     <name>ControlPanelDialog</name>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="18"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="23"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="25"/>
         <source>Canvas Control Panel</source>
         <translation type="unfinished">控制面板</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="28"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="30"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="32"/>
         <source>Background</source>
         <translation type="unfinished">背景条格</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="31"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="33"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="35"/>
         <source>Performance</source>
         <translation type="unfinished">性能</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="38"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="45"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="48"/>
         <source>Apply</source>
         <translation type="unfinished">应用</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="39"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="46"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="49"/>
         <source>OK</source>
         <translation type="unfinished">确认</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="40"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="47"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="50"/>
         <source>Cancel</source>
         <translation type="unfinished">取消</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="67"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="74"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="77"/>
         <source>Background Style:</source>
         <translation type="unfinished">网格线类型：</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="69"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="76"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="79"/>
         <source>None</source>
         <translation type="unfinished">无</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="70"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="77"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="80"/>
         <source>Grid</source>
         <translation type="unfinished">网格</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="71"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="78"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="81"/>
         <source>Lines</source>
         <translation type="unfinished">横线</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="73"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="80"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="83"/>
         <source>Background Color:</source>
         <translation type="unfinished">背景颜色：</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="77"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="84"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="87"/>
         <source>Density:</source>
         <translation type="unfinished">条格线间距：</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="95"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="110"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="113"/>
         <source>Select Background Color</source>
         <translation type="unfinished">选择背景颜色</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="215"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="246"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="249"/>
         <source>Adjust how the PDF is rendered. Higher DPI means better quality but slower performance. DO NOT CHANGE THIS OPTION WHEN MULTIPLE TABS ARE OPEN. THIS MAY LEAD TO UNDEFINED BEHAVIOR!</source>
         <translation type="unfinished">调节PDF渲染的精度。更高的DPI意味着更精细的字体和图像，但是性能可能会受到影响。警告：不要尝试在打开多个标签页的时候修改此选项，否则可能会导致异常！</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="245"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="276"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="279"/>
         <source>Show Zoom Buttons</source>
         <translation type="unfinished">显示缩放预设按钮</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="248"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="279"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="282"/>
         <source>This will show/hide the 0.5x, 1x, and 2x zoom buttons on the toolbar</source>
         <translation type="unfinished">开启此选项会显示/隐藏0.5倍 1倍和2倍缩放的预设按钮</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="324"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="337"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="340"/>
         <source>Configure custom keyboard shortcuts for application actions:</source>
         <translation type="unfinished">配置自定义快捷键映射：</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="330"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="343"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="346"/>
         <source>Key Sequence</source>
         <translation type="unfinished">组合键</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="330"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="343"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="346"/>
         <source>Action</source>
         <translation type="unfinished">动作</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="338"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="351"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="354"/>
         <source>Add Mapping</source>
         <translation type="unfinished">添加映射</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="339"/>
         <location filename="../../old/ControlPanelDialog.cpp" line="487"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="352"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="566"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="355"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="569"/>
         <source>Remove Mapping</source>
         <translation type="unfinished">删除映射</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="364"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="377"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="380"/>
         <source>Keyboard Shortcuts</source>
         <translation type="unfinished">键盘快捷键</translation>
     </message>
@@ -457,52 +457,52 @@
         <translation type="unfinished">选择如何决定程序外观。“自动”选项会自动检测系统设置，但是有可能无法在稍老的Windows 版本正常工作。</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="385"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="388"/>
         <source>Configure mouse button combinations for dial control:</source>
         <translation type="unfinished">把鼠标按键组合映射到MagicDial上：</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="389"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="392"/>
         <source>Hold mouse button combination for 0.5+ seconds, then use mouse wheel to control the dial.</source>
         <translation type="unfinished">长按一个鼠标按键组合0.5秒以上，然后使用鼠标滚轮来控制MagicDial。</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="396"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="399"/>
         <source>Right Button</source>
         <translation type="unfinished">右键</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="397"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="400"/>
         <source>Side Button 1</source>
         <translation type="unfinished">下侧键</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="398"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="401"/>
         <source>Side Button 2</source>
         <translation type="unfinished">上侧键</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="399"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="402"/>
         <source>Right + Side 1</source>
         <translation type="unfinished">右键+下侧键</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="400"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="403"/>
         <source>Right + Side 2</source>
         <translation type="unfinished">右键+上侧键</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="401"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="404"/>
         <source>Side 1 + Side 2</source>
         <translation type="unfinished">上侧键+下侧键</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="438"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="441"/>
         <source>Mouse wheel step sizes per dial mode:</source>
         <translation type="unfinished">各个MagicDial模式下，滚轮滚动一格旋转MagicDial的角度：</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="443"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="446"/>
         <source>• Page Switching: 45° per wheel step (8 pages per rotation)
 • Color Presets: 60° per wheel step (6 presets per rotation)
 • Zoom Control: 30° per wheel step (12 steps per rotation)
@@ -512,255 +512,323 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="455"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="458"/>
         <source>Mouse Dial Control</source>
         <translation type="unfinished">鼠标控制旋钮</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="393"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="463"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="466"/>
         <source>Use Custom Accent Color</source>
         <translation type="unfinished">使用自定义主题色</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="396"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="466"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="469"/>
         <source>Accent Color:</source>
         <translation type="unfinished">主题色：</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="407"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="477"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="480"/>
         <source>When enabled, use a custom accent color instead of the system accent color for the toolbar, dial, and tab selection.</source>
         <translation type="unfinished">启用此选项后，你可以使用一个不同于系统强调色的颜色当工具栏/旋钮/标签页的主题色。</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="487"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="490"/>
         <source>Use Brighter Color Palette</source>
         <translation type="unfinished">使用更明亮的颜色预设</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="490"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="493"/>
         <source>When enabled, use brighter colors (good for dark PDF backgrounds). When disabled, use darker colors (good for light PDF backgrounds). This setting is independent of the UI theme.</source>
         <translation type="unfinished">启用这个选项后，工具栏上的颜色预设会换成更亮的颜色，从而在暗色的背景上提升对比度。关闭此选项则更适合亮色的背景。这一选项和上面的暗黑模式开关互相独立。</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="418"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="497"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="500"/>
         <source>Theme</source>
         <translation type="unfinished">主题</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="422"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="501"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="504"/>
         <source>Select Accent Color</source>
         <translation type="unfinished">选择主题色</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="443"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="522"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="525"/>
         <source>Key Already Mapped</source>
         <translation type="unfinished">这一组合键已经映射过了</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="444"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="523"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="526"/>
         <source>The key sequence &apos;%1&apos; is already mapped. Please choose a different key combination.</source>
         <translation type="unfinished">组合键“%1”已经映射过了。请选择另一个按键组合。</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="451"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="530"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="533"/>
         <source>Select Action</source>
         <translation type="unfinished">选择动作</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="452"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="531"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="534"/>
         <source>Choose the action to perform when &apos;%1&apos; is pressed:</source>
         <translation type="unfinished">选择当“%1”按下时执行的动作：</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="477"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="556"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="559"/>
         <source>No Selection</source>
         <translation type="unfinished">没有选中</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="477"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="556"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="559"/>
         <source>Please select a mapping to remove.</source>
         <translation type="unfinished">请选中一个快捷键映射再移除。</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="488"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="567"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="570"/>
         <source>Are you sure you want to remove the keyboard shortcut &apos;%1&apos;?</source>
         <translation type="unfinished">你确定你要一处键盘快捷键“%1”？</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="91"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="94"/>
         <source>Invert PDF Colors (Dark Mode)</source>
         <translation type="unfinished">（黑暗模式下）PDF反色</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="92"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="95"/>
         <source>Inverts PDF colors for better readability in dark mode. Useful for PDFs with light backgrounds.</source>
         <translation type="unfinished">为在黑暗模式下提升可读性，给PDF做反色处理。通常适用于白底黑字的PDF。</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="586"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="589"/>
         <source>Configure physical controller button mappings for your Joy-Con or other controller:</source>
         <translation type="unfinished">配置实体手柄按键来对应Joy-Con上的每一个按键：</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="590"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="593"/>
         <source>Note: This maps your physical controller buttons to the logical Joy-Con functions used by the application. After setting up the physical mapping, you can configure what actions each logical button performs in the &apos;Button Mapping&apos; tab.</source>
         <translation type="unfinished">提示：因为实体手柄的按键在每个系统上的默认映射不同，你需要在这里让程序了解你手柄上的哪个按键对应Joy-Con上的哪个按键。执行完这一步以后你再去把Joy-Con上的每一个按键映射到诸功能上。</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="597"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="600"/>
         <source>Configure Controller Mapping</source>
         <translation type="unfinished">配置手柄映射</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="603"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="606"/>
         <source>Reconnect Controller</source>
         <translation type="unfinished">重新连接手柄</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="610"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="613"/>
         <source>Current controller status:</source>
         <translation type="unfinished">当前手柄链接状态：</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="656"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="659"/>
         <source>Controller manager is not available.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="661"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="664"/>
         <source>🔄 Reconnecting...</source>
         <translation type="unfinished">🔄 重新连接中...</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="678"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="681"/>
         <source>Reconnection Successful</source>
         <translation type="unfinished">重新连接成功</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="679"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="682"/>
         <source>Controller has been successfully reconnected!</source>
         <translation type="unfinished">手柄重连成功！</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="681"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="684"/>
         <source>Reconnection Failed</source>
         <translation type="unfinished">重连失败</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="682"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="685"/>
         <source>Failed to reconnect controller. Please ensure your controller is powered on and in pairing mode, then try again.</source>
         <translation type="unfinished">重新连接手柄失败。请确保您的手柄已经开启而且处于搜寻模式，然后再试一次。</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="691"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="694"/>
         <source>✗ Controller manager not available</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="697"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="700"/>
         <source>✓ Controller connected</source>
         <translation type="unfinished">✓ 手柄已连接</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="700"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="703"/>
         <source>✗ No controller detected</source>
         <translation type="unfinished">✗ 手柄未连接</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="735"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="738"/>
         <source>SpeedyNote</source>
         <translation type="unfinished">极疾记</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="743"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="746"/>
         <source>Version 0.10.3</source>
         <translation type="unfinished">0.10.3 公测版</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="795"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="798"/>
+        <source>Cache Management</source>
+        <translation type="unfinished">缓存管理</translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="807"/>
+        <source>SpeedyNote uses temporary folders to work with notebook files.
+These folders are normally cleaned up when you close a notebook,
+but crashes or force-close can leave orphaned files behind.</source>
+        <translation type="unfinished">极疾记使用临时文件夹来处理笔记本文件。
+这些文件夹正常情况下会在你关闭笔记本的时候清理掉，
+但是崩溃或者强制关闭可能会把这些缓存撂在那。</translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="822"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="863"/>
+        <source>Current cache size: %1</source>
+        <translation type="unfinished">当前缓存占 %1 的磁盘空间</translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="831"/>
+        <source>Location: %1</source>
+        <translation type="unfinished">位置：%1</translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="840"/>
+        <source>Clear Cache Now</source>
+        <translation type="unfinished">立即清除缓存</translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="848"/>
+        <source>Clear Cache?</source>
+        <translation type="unfinished">清除缓存吗？</translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="849"/>
+        <source>This will delete all temporary cache files.
+
+⚠️ WARNING: Make sure all notebooks are closed before clearing cache, otherwise you may lose unsaved changes!
+
+Continue?</source>
+        <translation type="unfinished">这会清除所有的临时缓存文件。
+
+⚠️ 警告：确保在清除缓存之前关闭所有的笔记本，否则未保存的内容会丢失！
+
+继续吗？</translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="866"/>
+        <source>Cache Cleared</source>
+        <translation type="unfinished">缓存已清除</translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="867"/>
+        <source>Temporary cache files have been cleared successfully.</source>
+        <translation type="unfinished">缓存文件成功清除。</translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="881"/>
+        <source>⚠️ Only clear cache when all notebooks are closed</source>
+        <translation type="unfinished">⚠️仅当所有笔记本关闭的时候清除缓存</translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="891"/>
+        <source>Cache</source>
+        <translation type="unfinished">缓存</translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="903"/>
         <source>Language Settings</source>
         <translation type="unfinished">语言设置</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="802"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="910"/>
         <source>Use System Language (Auto-detect)</source>
         <translation type="unfinished">使用系统语言（自动检测）</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="805"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="913"/>
         <source>When enabled, SpeedyNote will automatically detect and use your system&apos;s language setting.</source>
         <translation type="unfinished">启用该选项后，SpeedyNote会自动使用系统默认语言。</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="811"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="919"/>
         <source>Manual Language Override:</source>
         <translation type="unfinished">手动语言覆盖：</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="816"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="839"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="924"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="947"/>
         <source>English</source>
         <translation type="unfinished">English (英语)</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="817"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="925"/>
         <source>Español (Spanish)</source>
         <translation type="unfinished">Español (西班牙语)</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="818"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="926"/>
         <source>Français (French)</source>
         <translation type="unfinished">Français (法语)</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="819"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="927"/>
         <source>中文 (Chinese Simplified)</source>
         <translation type="unfinished">中文</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="822"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="930"/>
         <source>Select a specific language to override the system setting. Changes take effect after restarting the application.</source>
         <translation type="unfinished">选择一个语言来代替系统默认语言。重启SpeedyNote后生效。</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="828"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="936"/>
         <source>Current Language Status:</source>
         <translation type="unfinished">当前语言：</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="836"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="944"/>
         <source>Spanish</source>
         <translation type="unfinished">西班牙语</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="837"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="945"/>
         <source>French</source>
         <translation type="unfinished">法语</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="838"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="946"/>
         <source>Chinese Simplified</source>
         <translation type="unfinished">简体中文</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="841"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="949"/>
         <source>System Language: %1 (%2)</source>
         <translation type="unfinished">系统语言： %1 (%2)</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="871"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="979"/>
         <source>Language</source>
         <translation type="unfinished">语言</translation>
     </message>
@@ -781,52 +849,52 @@
         <translation type="obsolete">0.8.2 公测版</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="882"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="990"/>
         <source>Compatibility Features</source>
         <translation type="unfinished">兼容性功能</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="889"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="997"/>
         <source>Manual Folder Selection</source>
         <translation type="unfinished">选择文件夹</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="893"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1001"/>
         <source>This feature allows you to manually select a save folder for your notes. This is only for converting old folder-based notebooks to the new .spn format.</source>
         <translation type="unfinished">这个功能仅用于将老式的基于文件夹的笔记本转换成新的.spn格式。</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="900"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1008"/>
         <source>Select Save Folder</source>
         <translation type="unfinished">选择笔记本工作文件夹</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="924"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1032"/>
         <source>⚠️ Note: Make sure to select a folder that is empty or an old folder-based notebook. Otherwise, data may be lost.</source>
         <translation type="unfinished">⚠️ 警告：务必要选择一个空的文件夹或者是老版本SpeedyNote使用的笔记本文件夹。否则文件可能会丢失。</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="933"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1041"/>
         <source>Compatibility</source>
         <translation type="unfinished">兼容性</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="947"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1055"/>
         <source>Folder Selection</source>
         <translation type="unfinished">选择文件夹</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="948"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1056"/>
         <source>Folder selection completed successfully. You can now start taking notes in the selected folder.</source>
         <translation type="unfinished">成功选中文件夹。</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="951"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1059"/>
         <source>Folder Selection Cancelled</source>
         <translation type="unfinished">未选中文件夹</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="952"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1060"/>
         <source>Folder selection was cancelled. No changes were made.</source>
         <translation type="unfinished">已打断选中文件夹的操作。没有做出修改。</translation>
     </message>
@@ -839,27 +907,27 @@
         <translation type="obsolete">0.7.2 公测版</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="751"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="754"/>
         <source>A fast and intuitive note-taking application with PDF annotation support</source>
         <translation type="unfinished">一款超级快超级高效超级便捷的笔记App，还附带PDF注释的功能</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="760"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="763"/>
         <source>Developed by GitHub @alpha-liu-01 and various contributors</source>
         <translation type="unfinished">由GitHub 用户 @alpha-liu-01 和诸贡献者合力开发</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="768"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="771"/>
         <source>© 2025 SpeedyNote. All rights reserved.</source>
         <translation type="unfinished">© 2025 SpeedyNote.</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="777"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="780"/>
         <source>Built with Qt %1</source>
         <translation type="unfinished">使用 Qt %1 开发</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="784"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="787"/>
         <source>About</source>
         <translation type="unfinished">关于</translation>
     </message>
@@ -868,42 +936,42 @@
         <translation type="obsolete">请连接你的手柄然后重启应用。</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="621"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="624"/>
         <source>Controller Mapping</source>
         <translation type="unfinished">手柄映射</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="626"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="649"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="938"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="629"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="652"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1046"/>
         <source>Error</source>
         <translation type="unfinished">错误</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="626"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="649"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="938"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="629"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="652"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1046"/>
         <source>MainWindow reference not available.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="632"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="655"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="635"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="658"/>
         <source>Controller Not Available</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="633"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="636"/>
         <source>Controller manager is not available. Please ensure a controller is connected and restart the application.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="638"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="641"/>
         <source>No Controller Detected</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="639"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="642"/>
         <source>No controller is currently connected. Please connect your controller and restart the application.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -913,19 +981,19 @@
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="197"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="228"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="231"/>
         <source>Enable Low-Resolution PDF Previews</source>
         <translation type="unfinished">随翻页随加载页面预览</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="202"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="233"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="236"/>
         <source>Disabling this may improve dial smoothness on low-end devices.</source>
         <translation type="unfinished">关闭此选项可能会提升低配置设备的翻页速度。</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="206"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="237"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="240"/>
         <source>PDF Rendering DPI:</source>
         <translation type="unfinished">PDF 渲染 DPI：</translation>
     </message>
@@ -935,13 +1003,13 @@
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="236"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="267"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="270"/>
         <source>Show Benchmark Controls</source>
         <translation type="unfinished">显示检测采样率功能</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="239"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="270"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="273"/>
         <source>This will show/hide the benchmark controls on the toolbar. Press the clock button to start/stop the benchmark.</source>
         <translation type="unfinished">开启此选项会在工具栏上显示测试每秒处理的采样点数。点击钟表图标来开始/停止测试。你需要不抬笔一直画，同时读取每秒采样率数。这个数据与你的数位板/数位屏和CPU性能相关，但是CPU大概率不会是瓶颈。</translation>
     </message>
@@ -975,25 +1043,25 @@
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="272"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="287"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="290"/>
         <source>Features</source>
         <translation type="unfinished">功能</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="302"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="315"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="318"/>
         <source>Hold:</source>
         <translation type="unfinished">按住该键时摇杆功能：</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="308"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="321"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="324"/>
         <source>Press:</source>
         <translation type="unfinished">单次按压该键功能：</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="316"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="329"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="332"/>
         <source>Button Mapping</source>
         <translation type="unfinished">Joy-Con 映射</translation>
     </message>
@@ -1274,53 +1342,53 @@ This will overwrite your current configuration.</source>
         <translation type="unfinished">导入</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="1459"/>
+        <location filename="../../source/InkCanvas.cpp" line="1473"/>
         <source>Select Image</source>
         <translation type="unfinished">选择图片</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="1460"/>
+        <location filename="../../source/InkCanvas.cpp" line="1474"/>
         <source>Image Files (*.png *.jpg *.jpeg *.bmp *.gif *.tiff *.webp)</source>
         <translation type="unfinished">图片 (*.png *.jpg *.jpeg *.bmp *.gif *.tiff *.webp)</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="1585"/>
+        <location filename="../../source/InkCanvas.cpp" line="1599"/>
         <source>Image Pasted</source>
         <translation type="unfinished">图片已粘贴</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="1586"/>
+        <location filename="../../source/InkCanvas.cpp" line="1600"/>
         <source>Image from clipboard pasted successfully.</source>
         <translation type="unfinished">从剪贴板来的图片已成功粘贴.</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="3570"/>
+        <location filename="../../source/InkCanvas.cpp" line="3584"/>
         <source>Copy</source>
         <translation type="unfinished">复制</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="3581"/>
+        <location filename="../../source/InkCanvas.cpp" line="3595"/>
         <source>Cancel</source>
         <translation type="unfinished">取消</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="3145"/>
-        <location filename="../../source/InkCanvas.cpp" line="4820"/>
+        <location filename="../../source/InkCanvas.cpp" line="3159"/>
+        <location filename="../../source/InkCanvas.cpp" line="4834"/>
         <source>Clipboard Error</source>
         <translation type="unfinished">剪贴板错误</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="3146"/>
+        <location filename="../../source/InkCanvas.cpp" line="3160"/>
         <source>Failed to access clipboard for copying rope selection.</source>
         <translation type="unfinished">无法访问剪贴板。</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="3154"/>
+        <location filename="../../source/InkCanvas.cpp" line="3168"/>
         <source>Copied to Clipboard</source>
         <translation type="unfinished">已复制到剪贴板</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="3155"/>
+        <location filename="../../source/InkCanvas.cpp" line="3169"/>
         <source>Selected area has been copied to clipboard.
 
 You can now paste it on other pages or tabs using the picture paste feature.</source>
@@ -1329,27 +1397,27 @@ You can now paste it on other pages or tabs using the picture paste feature.</so
 你可以通过插入图片的功能把它粘贴到其他页面。</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="4821"/>
+        <location filename="../../source/InkCanvas.cpp" line="4835"/>
         <source>Failed to access system clipboard.</source>
         <translation type="unfinished">无法访问剪贴板。</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="4828"/>
+        <location filename="../../source/InkCanvas.cpp" line="4842"/>
         <source>No Clipboard Data</source>
         <translation type="unfinished">剪贴板没有数据</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="4829"/>
+        <location filename="../../source/InkCanvas.cpp" line="4843"/>
         <source>No data found in clipboard.</source>
         <translation type="unfinished">无法从剪贴板找到数据。</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="4865"/>
+        <location filename="../../source/InkCanvas.cpp" line="4879"/>
         <source>No Image in Clipboard</source>
         <translation type="unfinished">剪贴板上没有图片</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="4866"/>
+        <location filename="../../source/InkCanvas.cpp" line="4880"/>
         <source>No image data found in clipboard.
 
 Please copy an image to the clipboard first.</source>
@@ -1358,12 +1426,12 @@ Please copy an image to the clipboard first.</source>
 请先复制图片到剪贴板上。</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="4872"/>
+        <location filename="../../source/InkCanvas.cpp" line="4886"/>
         <source>Image Too Large</source>
         <translation type="unfinished">图片太大</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="4873"/>
+        <location filename="../../source/InkCanvas.cpp" line="4887"/>
         <source>The clipboard image is too large (max 8192x8192 pixels).
 
 Please use a smaller image.</source>
@@ -1372,22 +1440,22 @@ Please use a smaller image.</source>
 请换一张小点儿的图片。</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="4885"/>
+        <location filename="../../source/InkCanvas.cpp" line="4899"/>
         <source>No Notebook Open</source>
         <translation type="unfinished">未打开笔记本</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="4886"/>
+        <location filename="../../source/InkCanvas.cpp" line="4900"/>
         <source>Please save your notebook as a SpeedyNote Package (.spn) file before pasting images.</source>
         <translation type="unfinished">请把你的笔记本保存成spn格式之后再去粘贴图片上去。</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="4919"/>
+        <location filename="../../source/InkCanvas.cpp" line="4933"/>
         <source>Save Error</source>
         <translation type="unfinished">保存失败</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="4920"/>
+        <location filename="../../source/InkCanvas.cpp" line="4934"/>
         <source>Failed to save clipboard image to notebook.
 
 Path: %1</source>

@@ -154,6 +154,11 @@ int main(int argc, char *argv[]) {
 
     // Apply system-appropriate palette (dark/light) on Windows
     applySystemPalette(app);
+
+    // ✅ DISK CLEANUP: Clean up orphaned temp directories from previous sessions on startup
+    // Since .spn files are extracted to temp folders with hash-based names, orphaned folders
+    // from crashes/force-close can accumulate. This cleanup runs on startup to free disk space.
+    SpnPackageManager::cleanupOrphanedTempDirs();
     
     QTranslator translator;
     
