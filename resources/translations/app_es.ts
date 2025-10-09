@@ -295,115 +295,115 @@
     <name>ControlPanelDialog</name>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="18"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="23"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="25"/>
         <source>Canvas Control Panel</source>
         <translation type="unfinished">Panel de control</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="28"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="30"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="32"/>
         <source>Background</source>
         <translation type="unfinished">Fondo</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="31"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="33"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="35"/>
         <source>Performance</source>
         <translation type="unfinished">Actuación</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="38"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="45"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="48"/>
         <source>Apply</source>
         <translation type="unfinished">Aplicar</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="39"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="46"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="49"/>
         <source>OK</source>
         <translation type="unfinished">DE ACUERDO</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="40"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="47"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="50"/>
         <source>Cancel</source>
         <translation type="unfinished">Cancelar</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="67"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="74"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="77"/>
         <source>Background Style:</source>
         <translation type="unfinished">Estilo de fondo:</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="69"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="76"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="79"/>
         <source>None</source>
         <translation type="unfinished">Ninguno</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="70"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="77"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="80"/>
         <source>Grid</source>
         <translation type="unfinished">Red</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="71"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="78"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="81"/>
         <source>Lines</source>
         <translation type="unfinished">Pauta</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="73"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="80"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="83"/>
         <source>Background Color:</source>
         <translation type="unfinished">Color de fondo:</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="77"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="84"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="87"/>
         <source>Density:</source>
         <translation type="unfinished">Densidad:</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="95"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="110"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="113"/>
         <source>Select Background Color</source>
         <translation type="unfinished">Seleccionar color de fondo</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="197"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="228"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="231"/>
         <source>Enable Low-Resolution PDF Previews</source>
         <translation type="unfinished">Habilitar vistas previas de PDF de baja resolución</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="202"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="233"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="236"/>
         <source>Disabling this may improve dial smoothness on low-end devices.</source>
         <translation type="unfinished">Deshabilitar esta opción puede mejorar la suavidad del marcado en dispositivos de gama baja.</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="206"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="237"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="240"/>
         <source>PDF Rendering DPI:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="215"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="246"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="249"/>
         <source>Adjust how the PDF is rendered. Higher DPI means better quality but slower performance. DO NOT CHANGE THIS OPTION WHEN MULTIPLE TABS ARE OPEN. THIS MAY LEAD TO UNDEFINED BEHAVIOR!</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="236"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="267"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="270"/>
         <source>Show Benchmark Controls</source>
         <translation type="unfinished">Mostrar controles de referencia</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="239"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="270"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="273"/>
         <source>This will show/hide the benchmark controls on the toolbar. Press the clock button to start/stop the benchmark.</source>
         <translation type="unfinished">Esto mostrará u ocultará los controles de la prueba de rendimiento en la barra de herramientas. Pulse el botón del reloj para iniciar o detener la prueba de rendimiento.</translation>
     </message>
@@ -442,13 +442,13 @@
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="245"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="276"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="279"/>
         <source>Show Zoom Buttons</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="248"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="279"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="282"/>
         <source>This will show/hide the 0.5x, 1x, and 2x zoom buttons on the toolbar</source>
         <translation type="unfinished"></translation>
     </message>
@@ -474,446 +474,508 @@
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="272"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="287"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="290"/>
         <source>Features</source>
         <translation type="unfinished">Características</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="302"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="315"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="318"/>
         <source>Hold:</source>
         <translation type="unfinished">Sostener:</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="308"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="321"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="324"/>
         <source>Press:</source>
         <translation type="unfinished">Prensa:</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="316"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="329"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="332"/>
         <source>Button Mapping</source>
         <translation type="unfinished">Asignación de botones</translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="324"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="337"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="340"/>
         <source>Configure custom keyboard shortcuts for application actions:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="330"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="343"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="346"/>
         <source>Key Sequence</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="330"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="343"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="346"/>
         <source>Action</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="338"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="351"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="354"/>
         <source>Add Mapping</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="339"/>
         <location filename="../../old/ControlPanelDialog.cpp" line="487"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="352"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="566"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="355"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="569"/>
         <source>Remove Mapping</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="364"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="377"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="380"/>
         <source>Keyboard Shortcuts</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="385"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="388"/>
         <source>Configure mouse button combinations for dial control:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="389"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="392"/>
         <source>Hold mouse button combination for 0.5+ seconds, then use mouse wheel to control the dial.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="396"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="399"/>
         <source>Right Button</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="397"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="400"/>
         <source>Side Button 1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="398"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="401"/>
         <source>Side Button 2</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="399"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="402"/>
         <source>Right + Side 1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="400"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="403"/>
         <source>Right + Side 2</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="401"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="404"/>
         <source>Side 1 + Side 2</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="438"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="441"/>
         <source>Mouse wheel step sizes per dial mode:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="455"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="458"/>
         <source>Mouse Dial Control</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="393"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="463"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="466"/>
         <source>Use Custom Accent Color</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="396"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="466"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="469"/>
         <source>Accent Color:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="407"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="477"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="480"/>
         <source>When enabled, use a custom accent color instead of the system accent color for the toolbar, dial, and tab selection.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="487"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="490"/>
         <source>Use Brighter Color Palette</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="490"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="493"/>
         <source>When enabled, use brighter colors (good for dark PDF backgrounds). When disabled, use darker colors (good for light PDF backgrounds). This setting is independent of the UI theme.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="418"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="497"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="500"/>
         <source>Theme</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="422"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="501"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="504"/>
         <source>Select Accent Color</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="443"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="522"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="525"/>
         <source>Key Already Mapped</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="444"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="523"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="526"/>
         <source>The key sequence &apos;%1&apos; is already mapped. Please choose a different key combination.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="451"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="530"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="533"/>
         <source>Select Action</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="452"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="531"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="534"/>
         <source>Choose the action to perform when &apos;%1&apos; is pressed:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="477"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="556"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="559"/>
         <source>No Selection</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="477"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="556"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="559"/>
         <source>Please select a mapping to remove.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../old/ControlPanelDialog.cpp" line="488"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="567"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="570"/>
         <source>Are you sure you want to remove the keyboard shortcut &apos;%1&apos;?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="586"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="589"/>
         <source>Configure physical controller button mappings for your Joy-Con or other controller:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="590"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="593"/>
         <source>Note: This maps your physical controller buttons to the logical Joy-Con functions used by the application. After setting up the physical mapping, you can configure what actions each logical button performs in the &apos;Button Mapping&apos; tab.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="597"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="600"/>
         <source>Configure Controller Mapping</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="603"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="606"/>
         <source>Reconnect Controller</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="610"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="613"/>
         <source>Current controller status:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="656"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="659"/>
         <source>Controller manager is not available.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="661"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="664"/>
         <source>🔄 Reconnecting...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="678"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="681"/>
         <source>Reconnection Successful</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="679"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="682"/>
         <source>Controller has been successfully reconnected!</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="681"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="684"/>
         <source>Reconnection Failed</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="682"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="685"/>
         <source>Failed to reconnect controller. Please ensure your controller is powered on and in pairing mode, then try again.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="691"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="694"/>
         <source>✗ Controller manager not available</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="697"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="700"/>
         <source>✓ Controller connected</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="700"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="703"/>
         <source>✗ No controller detected</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="735"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="738"/>
         <source>SpeedyNote</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="743"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="746"/>
         <source>Version 0.10.3</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="795"/>
-        <source>Language Settings</source>
+        <location filename="../../source/ControlPanelDialog.cpp" line="798"/>
+        <source>Cache Management</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="802"/>
-        <source>Use System Language (Auto-detect)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="805"/>
-        <source>When enabled, SpeedyNote will automatically detect and use your system&apos;s language setting.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="811"/>
-        <source>Manual Language Override:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="816"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="839"/>
-        <source>English</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="817"/>
-        <source>Español (Spanish)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="818"/>
-        <source>Français (French)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="819"/>
-        <source>中文 (Chinese Simplified)</source>
+        <location filename="../../source/ControlPanelDialog.cpp" line="807"/>
+        <source>SpeedyNote uses temporary folders to work with notebook files.
+These folders are normally cleaned up when you close a notebook,
+but crashes or force-close can leave orphaned files behind.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../source/ControlPanelDialog.cpp" line="822"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="863"/>
+        <source>Current cache size: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="831"/>
+        <source>Location: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="840"/>
+        <source>Clear Cache Now</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="848"/>
+        <source>Clear Cache?</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="849"/>
+        <source>This will delete all temporary cache files.
+
+⚠️ WARNING: Make sure all notebooks are closed before clearing cache, otherwise you may lose unsaved changes!
+
+Continue?</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="866"/>
+        <source>Cache Cleared</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="867"/>
+        <source>Temporary cache files have been cleared successfully.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="881"/>
+        <source>⚠️ Only clear cache when all notebooks are closed</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="891"/>
+        <source>Cache</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="903"/>
+        <source>Language Settings</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="910"/>
+        <source>Use System Language (Auto-detect)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="913"/>
+        <source>When enabled, SpeedyNote will automatically detect and use your system&apos;s language setting.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="919"/>
+        <source>Manual Language Override:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="924"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="947"/>
+        <source>English</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="925"/>
+        <source>Español (Spanish)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="926"/>
+        <source>Français (French)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="927"/>
+        <source>中文 (Chinese Simplified)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="930"/>
         <source>Select a specific language to override the system setting. Changes take effect after restarting the application.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="828"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="936"/>
         <source>Current Language Status:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="836"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="944"/>
         <source>Spanish</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="837"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="945"/>
         <source>French</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="838"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="946"/>
         <source>Chinese Simplified</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="841"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="949"/>
         <source>System Language: %1 (%2)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="871"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="979"/>
         <source>Language</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="882"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="990"/>
         <source>Compatibility Features</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="889"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="997"/>
         <source>Manual Folder Selection</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="893"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1001"/>
         <source>This feature allows you to manually select a save folder for your notes. This is only for converting old folder-based notebooks to the new .spn format.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="900"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1008"/>
         <source>Select Save Folder</source>
         <translation type="unfinished">Seleccionar carpeta para guardar</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="924"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1032"/>
         <source>⚠️ Note: Make sure to select a folder that is empty or an old folder-based notebook. Otherwise, data may be lost.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="933"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1041"/>
         <source>Compatibility</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="947"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1055"/>
         <source>Folder Selection</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="948"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1056"/>
         <source>Folder selection completed successfully. You can now start taking notes in the selected folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="951"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1059"/>
         <source>Folder Selection Cancelled</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="952"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1060"/>
         <source>Folder selection was cancelled. No changes were made.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="751"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="754"/>
         <source>A fast and intuitive note-taking application with PDF annotation support</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="760"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="763"/>
         <source>Developed by GitHub @alpha-liu-01 and various contributors</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="768"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="771"/>
         <source>© 2025 SpeedyNote. All rights reserved.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="777"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="780"/>
         <source>Built with Qt %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="784"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="787"/>
         <source>About</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="621"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="624"/>
         <source>Controller Mapping</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="91"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="94"/>
         <source>Invert PDF Colors (Dark Mode)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="92"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="95"/>
         <source>Inverts PDF colors for better readability in dark mode. Useful for PDFs with light backgrounds.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="443"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="446"/>
         <source>• Page Switching: 45° per wheel step (8 pages per rotation)
 • Color Presets: 60° per wheel step (6 presets per rotation)
 • Zoom Control: 30° per wheel step (12 steps per rotation)
@@ -923,37 +985,37 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="626"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="649"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="938"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="629"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="652"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1046"/>
         <source>Error</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="626"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="649"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="938"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="629"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="652"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1046"/>
         <source>MainWindow reference not available.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="632"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="655"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="635"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="658"/>
         <source>Controller Not Available</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="633"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="636"/>
         <source>Controller manager is not available. Please ensure a controller is connected and restart the application.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="638"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="641"/>
         <source>No Controller Detected</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="639"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="642"/>
         <source>No controller is currently connected. Please connect your controller and restart the application.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1132,114 +1194,114 @@ This will overwrite your current configuration.</source>
 <context>
     <name>InkCanvas</name>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="1459"/>
+        <location filename="../../source/InkCanvas.cpp" line="1473"/>
         <source>Select Image</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="1460"/>
+        <location filename="../../source/InkCanvas.cpp" line="1474"/>
         <source>Image Files (*.png *.jpg *.jpeg *.bmp *.gif *.tiff *.webp)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="1585"/>
+        <location filename="../../source/InkCanvas.cpp" line="1599"/>
         <source>Image Pasted</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="1586"/>
+        <location filename="../../source/InkCanvas.cpp" line="1600"/>
         <source>Image from clipboard pasted successfully.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="3570"/>
+        <location filename="../../source/InkCanvas.cpp" line="3584"/>
         <source>Copy</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="3581"/>
+        <location filename="../../source/InkCanvas.cpp" line="3595"/>
         <source>Cancel</source>
         <translation type="unfinished">Cancelar</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="3145"/>
-        <location filename="../../source/InkCanvas.cpp" line="4820"/>
+        <location filename="../../source/InkCanvas.cpp" line="3159"/>
+        <location filename="../../source/InkCanvas.cpp" line="4834"/>
         <source>Clipboard Error</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="3146"/>
+        <location filename="../../source/InkCanvas.cpp" line="3160"/>
         <source>Failed to access clipboard for copying rope selection.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="3154"/>
+        <location filename="../../source/InkCanvas.cpp" line="3168"/>
         <source>Copied to Clipboard</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="3155"/>
+        <location filename="../../source/InkCanvas.cpp" line="3169"/>
         <source>Selected area has been copied to clipboard.
 
 You can now paste it on other pages or tabs using the picture paste feature.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="4821"/>
+        <location filename="../../source/InkCanvas.cpp" line="4835"/>
         <source>Failed to access system clipboard.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="4828"/>
+        <location filename="../../source/InkCanvas.cpp" line="4842"/>
         <source>No Clipboard Data</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="4829"/>
+        <location filename="../../source/InkCanvas.cpp" line="4843"/>
         <source>No data found in clipboard.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="4865"/>
+        <location filename="../../source/InkCanvas.cpp" line="4879"/>
         <source>No Image in Clipboard</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="4866"/>
+        <location filename="../../source/InkCanvas.cpp" line="4880"/>
         <source>No image data found in clipboard.
 
 Please copy an image to the clipboard first.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="4872"/>
+        <location filename="../../source/InkCanvas.cpp" line="4886"/>
         <source>Image Too Large</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="4873"/>
+        <location filename="../../source/InkCanvas.cpp" line="4887"/>
         <source>The clipboard image is too large (max 8192x8192 pixels).
 
 Please use a smaller image.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="4885"/>
+        <location filename="../../source/InkCanvas.cpp" line="4899"/>
         <source>No Notebook Open</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="4886"/>
+        <location filename="../../source/InkCanvas.cpp" line="4900"/>
         <source>Please save your notebook as a SpeedyNote Package (.spn) file before pasting images.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="4919"/>
+        <location filename="../../source/InkCanvas.cpp" line="4933"/>
         <source>Save Error</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="4920"/>
+        <location filename="../../source/InkCanvas.cpp" line="4934"/>
         <source>Failed to save clipboard image to notebook.
 
 Path: %1</source>
