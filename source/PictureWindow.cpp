@@ -356,7 +356,11 @@ QVariantMap PictureWindow::serialize() const {
     data["canvas_y"] = canvasRect.y();
     data["canvas_width"] = canvasRect.width();
     data["canvas_height"] = canvasRect.height();
-    data["image_path"] = imagePath;
+    
+    // ✅ CRITICAL FIX: Store relative path (filename only) instead of absolute path
+    // This ensures the image can be found when the .spn is extracted to different temp folders
+    QFileInfo fileInfo(imagePath);
+    data["image_path"] = fileInfo.fileName(); // Just the filename, not the full path
     data["maintain_aspect_ratio"] = maintainAspectRatio;
     data["aspect_ratio"] = aspectRatio;
     

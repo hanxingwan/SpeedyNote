@@ -68,6 +68,11 @@ int main(int argc, char *argv[]) {
     
     QApplication app(argc, argv);
     
+    // ✅ DISK CLEANUP: Clean up orphaned temp directories from previous sessions on startup
+    // Since .spn files are extracted to temp folders with hash-based names, orphaned folders
+    // from crashes/force-close can accumulate. This cleanup runs on startup to free disk space.
+    SpnPackageManager::cleanupOrphanedTempDirs();
+    
     QTranslator translator;
     
     // Check for manual language override
