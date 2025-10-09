@@ -53,6 +53,7 @@ public:
     QString copyImageToNotebook(const QString &sourcePath, int pageNumber);
     void cleanupUnusedImages();
     void clearCurrentPageWindows(); // Clear all pictures from current page
+    void clearAllCachedWindows(); // Clear all cached windows (for destructor cleanup)
     QString getSaveFolder() const;
     QString getNotebookId() const;
 

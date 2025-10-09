@@ -138,6 +138,44 @@ void MarkdownWindowManager::clearAllWindows() {
     pageWindows.clear();
 }
 
+void MarkdownWindowManager::clearAllCachedWindows() {
+    // ✅ MEMORY LEAK FIX: Clean up all cached windows
+    // This is used during canvas destruction to prevent memory leaks
+    
+    // Stop transparency timer
+    if (transparencyTimer) {
+        transparencyTimer->stop();
+    }
+    currentlyFocusedWindow = nullptr;
+    windowsAreTransparent = false;
+    
+    // Clear combined temp windows (temporary clones used for pseudo-smooth scrolling)
+    for (MarkdownWindow *window : combinedTempWindows) {
+        if (window) {
+            window->deleteLater();
+        }
+    }
+    combinedTempWindows.clear();
+    
+    // Clear permanent page cache (windows loaded from disk and cached for reuse)
+    for (auto it = pageWindows.begin(); it != pageWindows.end(); ++it) {
+        for (MarkdownWindow *window : it.value()) {
+            if (window) {
+                window->deleteLater();
+            }
+        }
+    }
+    pageWindows.clear();
+    
+    // Clear current windows (the visible windows on screen)
+    for (MarkdownWindow *window : currentWindows) {
+        if (window) {
+            window->deleteLater();
+        }
+    }
+    currentWindows.clear();
+}
+
 void MarkdownWindowManager::clearCurrentPagePermanently(int pageNumber) {
     // ✅ This method safely clears current page windows and permanently deletes their data
     

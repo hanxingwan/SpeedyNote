@@ -184,6 +184,43 @@ void PictureWindowManager::clearAllWindows() {
     pageWindows.clear();
 }
 
+void PictureWindowManager::clearAllCachedWindows() {
+    // ✅ MEMORY LEAK FIX: Clean up all cached windows WITHOUT deleting image files
+    // This is used during canvas destruction to prevent memory leaks
+    
+    // Clear combined temp windows (temporary clones used for pseudo-smooth scrolling)
+    for (PictureWindow *window : combinedTempWindows) {
+        if (window) {
+            // Clear render cache to release large pixmap memory
+            window->clearRenderCache();
+            window->deleteLater();
+        }
+    }
+    combinedTempWindows.clear();
+    
+    // Clear permanent page cache (windows loaded from disk and cached for reuse)
+    for (auto it = pageWindows.begin(); it != pageWindows.end(); ++it) {
+        for (PictureWindow *window : it.value()) {
+            if (window) {
+                // Clear render cache to release large pixmap memory
+                window->clearRenderCache();
+                window->deleteLater();
+            }
+        }
+    }
+    pageWindows.clear();
+    
+    // Clear current windows (the visible windows on screen)
+    for (PictureWindow *window : currentWindows) {
+        if (window) {
+            // Clear render cache to release large pixmap memory
+            window->clearRenderCache();
+            window->deleteLater();
+        }
+    }
+    currentWindows.clear();
+}
+
 void PictureWindowManager::saveWindowsForPage(int pageNumber) {
     if (!canvas) return;
     
