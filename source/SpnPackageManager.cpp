@@ -369,3 +369,74 @@ QString SpnPackageManager::backgroundStyleToString(BackgroundStyle style)
         default: return "None";
     }
 }
+
+void SpnPackageManager::cleanupOrphanedTempDirs()
+{
+    // ✅ DISK CLEANUP: Remove all orphaned temp directories from previous sessions
+    // This is called on app startup to clean up temp folders that weren't cleaned up
+    // due to crashes, force-close, or other errors
+
+    QString tempBasePath = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+    QDir tempDir(tempBasePath);
+
+    // Find all directories starting with our temp prefix
+    QStringList filters;
+    filters << TEMP_PREFIX + "*";
+    QFileInfoList tempDirs = tempDir.entryInfoList(filters, QDir::Dirs | QDir::NoDotAndDotDot);
+
+    int cleanedCount = 0;
+    qint64 freedSpace = 0;
+
+    for (const QFileInfo &dirInfo : tempDirs) {
+        QString dirPath = dirInfo.absoluteFilePath();
+
+        // Calculate size before deletion (for logging)
+        qint64 dirSize = 0;
+        QDirIterator it(dirPath, QDir::Files | QDir::Hidden | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
+        while (it.hasNext()) {
+            it.next();
+            dirSize += QFileInfo(it.filePath()).size();
+        }
+
+        // Try to remove the directory
+        QDir dir(dirPath);
+        if (dir.removeRecursively()) {
+            cleanedCount++;
+            freedSpace += dirSize;
+        }
+    }
+
+    if (cleanedCount > 0) {
+        qDebug() << "Cleaned up" << cleanedCount << "orphaned temp directories, freed" 
+                 << (freedSpace / 1024.0 / 1024.0) << "MB";
+    }
+}
+
+qint64 SpnPackageManager::getTempDirsTotalSize()
+{
+    // ✅ Calculate total size of all SpeedyNote temp directories
+    // This can be used to show the user how much space is being used by cache
+
+    QString tempBasePath = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+    QDir tempDir(tempBasePath);
+
+    // Find all directories starting with our temp prefix
+    QStringList filters;
+    filters << TEMP_PREFIX + "*";
+    QFileInfoList tempDirs = tempDir.entryInfoList(filters, QDir::Dirs | QDir::NoDotAndDotDot);
+
+    qint64 totalSize = 0;
+
+    for (const QFileInfo &dirInfo : tempDirs) {
+        QString dirPath = dirInfo.absoluteFilePath();
+
+        // Calculate size of this directory
+        QDirIterator it(dirPath, QDir::Files | QDir::Hidden | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
+        while (it.hasNext()) {
+            it.next();
+            totalSize += QFileInfo(it.filePath()).size();
+        }
+    }
+
+    return totalSize;
+}

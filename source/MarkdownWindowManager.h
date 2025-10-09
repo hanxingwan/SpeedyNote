@@ -24,6 +24,7 @@ public:
     void removeMarkdownWindow(MarkdownWindow *window);
     void clearAllWindows();
     void clearCurrentPagePermanently(int pageNumber); // ✅ Safely clear and permanently delete current page windows
+    void clearAllCachedWindows(); // Clear all cached windows (for destructor cleanup)
     
     // Page lifecycle
     void saveWindowsForPage(int pageNumber);

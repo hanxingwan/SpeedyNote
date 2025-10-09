@@ -184,6 +184,45 @@ void PictureWindowManager::clearAllWindows() {
     pageWindows.clear();
 }
 
+void PictureWindowManager::clearAllCachedWindows() {
+    // ✅ MEMORY LEAK FIX: Clean up all cached windows WITHOUT deleting image files
+    // This is used during canvas destruction to prevent memory leaks
+
+    // Clear combined temp windows (temporary clones used for pseudo-smooth scrolling)
+    for (PictureWindow *window : combinedTempWindows) {
+        if (window) {
+            // Clear render cache to release large pixmap memory
+            window->clearRenderCache();
+            window->deleteLater();
+        }
+    }
+    combinedTempWindows.clear();
+
+    // Clear permanent page cache (windows loaded from disk and cached for reuse)
+    for (auto it = pageWindows.begin(); it != pageWindows.end(); ++it) {
+        for (PictureWindow *window : it.value()) {
+            if (window) {
+                // Clear render cache to release large pixmap memory
+                window->clearRenderCache();
+                window->deleteLater();
+            }
+        }
+    }
+    pageWindows.clear();
+    pageAccessOrder.clear(); // ✅ Clear LRU tracking
+
+    // Clear current windows (the visible windows on screen)
+    for (PictureWindow *window : currentWindows) {
+        if (window) {
+            // Clear render cache to release large pixmap memory
+            window->clearRenderCache();
+            window->deleteLater();
+        }
+    }
+    currentWindows.clear();
+}
+
+
 void PictureWindowManager::saveWindowsForPage(int pageNumber) {
     if (!canvas) return;
     
@@ -232,6 +271,11 @@ void PictureWindowManager::loadWindowsForPage(int pageNumber) {
 
     // Check if we have windows for this page in memory
     if (pageWindows.contains(pageNumber)) {
+
+        // ✅ LRU: Mark this page as recently accessed
+        pageAccessOrder.removeAll(pageNumber);
+        pageAccessOrder.append(pageNumber);
+
         newPageWindows = pageWindows[pageNumber];
     } else {
         // Load from file
@@ -240,6 +284,13 @@ void PictureWindowManager::loadWindowsForPage(int pageNumber) {
         // Update page windows map
         if (!newPageWindows.isEmpty()) {
             pageWindows[pageNumber] = newPageWindows;
+
+            // ✅ LRU: Mark this newly loaded page as recently accessed
+            pageAccessOrder.removeAll(pageNumber);
+            pageAccessOrder.append(pageNumber);
+
+            // ✅ MEMORY LEAK FIX: Evict old cached pages using LRU strategy
+            evictOldCachedPages(pageNumber);
         }
     }
 
@@ -350,6 +401,10 @@ QList<PictureWindow*> PictureWindowManager::loadWindowsForPageSeparately(int pag
     // Check if we have cached windows for this page that we can clone from
     if (pageWindows.contains(pageNumber) && !pageWindows[pageNumber].isEmpty()) {
         // Clone the cached windows to create new instances with same data
+        // ✅ LRU: Mark this page as recently accessed
+        pageAccessOrder.removeAll(pageNumber);
+        pageAccessOrder.append(pageNumber);
+
         const QList<PictureWindow*> &cachedWindows = pageWindows[pageNumber];
         for (PictureWindow *cachedWindow : cachedWindows) {
             // Serialize the cached window and create a new instance from it
@@ -387,32 +442,12 @@ QList<PictureWindow*> PictureWindowManager::loadWindowsForPageSeparately(int pag
         if (!permanentCache.isEmpty()) {
             pageWindows[pageNumber] = permanentCache;
 
-            // ✅ MEMORY LEAK FIX: Limit cache size to prevent unbounded growth
-            // Keep only the most recent 5 pages in cache
-            const int MAX_CACHED_PAGES = 5;
-            if (pageWindows.size() > MAX_CACHED_PAGES) {
-                // Find and remove the oldest cache entry (simple heuristic: lowest page number far from current)
-                int pageToRemove = -1;
-                int maxDistance = 0;
-                for (auto it = pageWindows.begin(); it != pageWindows.end(); ++it) {
-                    int distance = qAbs(it.key() - pageNumber);
-                    if (distance > maxDistance) {
-                        maxDistance = distance;
-                        pageToRemove = it.key();
-                    }
-                }
+            // ✅ LRU: Mark this newly loaded page as recently accessed
+            pageAccessOrder.removeAll(pageNumber);
+            pageAccessOrder.append(pageNumber);
 
-                if (pageToRemove >= 0) {
-                    // Delete all cached windows for this page
-                    QList<PictureWindow*> oldWindows = pageWindows[pageToRemove];
-                    for (PictureWindow* oldWindow : oldWindows) {
-                        if (oldWindow) {
-                            delete oldWindow;
-                        }
-                    }
-                    pageWindows.remove(pageToRemove);
-                }
-            }
+            // ✅ MEMORY LEAK FIX: Evict old cached pages using LRU strategy
+            evictOldCachedPages(pageNumber);
         }
 
         // ✅ CRITICAL FIX: Return the LOADED windows for immediate use, NOT clones
@@ -993,4 +1028,56 @@ QRect PictureWindowManager::convertScreenToCanvasRect(const QRect &screenRect) c
     return canvasRect;
 }
 
+void PictureWindowManager::evictOldCachedPages(int currentPage) {
+    // ✅ MEMORY LEAK FIX: Implement LRU cache eviction for picture windows
+    // Keep only the most recent 5 pages in cache to prevent memory buildup
+    const int MAX_CACHED_PAGES = 5;
+
+    if (pageWindows.size() <= MAX_CACHED_PAGES) {
+        return; // Cache size is acceptable
+    }
+
+    // Evict least recently used pages (first entries in pageAccessOrder)
+    int pagesToEvict = pageWindows.size() - MAX_CACHED_PAGES;
+
+    for (int i = 0; i < pagesToEvict && i < pageAccessOrder.size(); ++i) {
+        int pageToEvict = pageAccessOrder[i];
+
+        // ✅ PSEUDO-INFINITE SCROLLING FIX: Don't evict current page or next page
+        // In combined mode, we show pages N and N+1 together
+        if (pageToEvict == currentPage || pageToEvict == currentPage + 1 || 
+            pageToEvict == currentPage - 1) {
+            continue; // Skip evicting nearby pages that might be visible
+        }
+
+        // ✅ Don't evict if this page's windows are in combinedTempWindows
+        bool isInCombinedTemp = false;
+        if (pageWindows.contains(pageToEvict)) {
+            for (PictureWindow* window : pageWindows[pageToEvict]) {
+                if (combinedTempWindows.contains(window)) {
+                    isInCombinedTemp = true;
+                    break;
+                }
+            }
+        }
+
+        if (isInCombinedTemp) {
+            continue; // Skip evicting pages that are currently displayed
+        }
+
+        // Safe to evict this page
+        if (pageWindows.contains(pageToEvict)) {
+            QList<PictureWindow*> oldWindows = pageWindows[pageToEvict];
+            for (PictureWindow* window : oldWindows) {
+                if (window) {
+                    // Clear render cache to release pixmap memory
+                    window->clearRenderCache();
+                    delete window;
+                }
+            }
+            pageWindows.remove(pageToEvict);
+            pageAccessOrder.removeAll(pageToEvict);
+        }
+    }
+}
 

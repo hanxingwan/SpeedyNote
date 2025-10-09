@@ -168,6 +168,18 @@ InkCanvas::~InkCanvas() {
     // ✅ Clear inertia scrolling resources
     cachedFrame = QPixmap(); // Release cached frame memory
     recentVelocities.clear(); // Clear velocity history
+
+    // ✅ MEMORY LEAK FIX: Clear rope selection buffer to release memory
+    selectionBuffer = QPixmap();
+    selectionRect = QRect();
+    exactSelectionRectF = QRectF();
+    lassoPathPoints.clear();
+    selectionMaskPath = QPainterPath();
+
+    // ✅ MEMORY LEAK FIX: Clear main canvas buffer to release memory
+    buffer = QPixmap();
+    backgroundImage = QPixmap();
+    picturePreviewRect = QRect();
     
     // ✅ Cancel and clean up any active PDF watchers
     for (QFutureWatcher<void>* watcher : activePdfWatchers) {
@@ -194,10 +206,12 @@ InkCanvas::~InkCanvas() {
     
     // ✅ Explicitly clean up window managers to prevent memory leaks
     if (markdownManager) {
+        markdownManager->clearAllCachedWindows();
         markdownManager->deleteLater();
         markdownManager = nullptr;
     }
     if (pictureManager) {
+        pictureManager->clearAllCachedWindows();
         pictureManager->deleteLater();
         pictureManager = nullptr;
     }
