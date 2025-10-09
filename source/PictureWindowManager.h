@@ -74,6 +74,7 @@ private:
     void savePictureData(int pageNumber, const QList<PictureWindow*> &windows);
     QList<PictureWindow*> loadPictureData(int pageNumber);
     void updatePermanentCacheForWindow(PictureWindow *modifiedWindow, int pageNumber);
+    void evictOldCachedPages(int currentPage); // ✅ LRU cache eviction
     
     
     
@@ -86,6 +87,7 @@ private:
     InkCanvas *canvas;
     QList<PictureWindow*> currentWindows;
     QMap<int, QList<PictureWindow*>> pageWindows;
+    QList<int> pageAccessOrder; // ✅ LRU tracking: most recently accessed pages at the end
     QList<PictureWindow*> combinedTempWindows; // ✅ Track temporary combined windows for cleanup
     QList<PictureWindow*> orphanedCacheWindows; // ✅ Track orphaned cache windows awaiting cleanup
     bool selectionMode;
