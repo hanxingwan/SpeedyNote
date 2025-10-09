@@ -49,6 +49,12 @@ public:
     
     // Clean up temporary directory
     static void cleanupTempDir(const QString &tempDir);
+    
+    // Clean up all orphaned temp directories (call on app startup)
+    static void cleanupOrphanedTempDirs();
+    
+    // Get total size of all temp directories in bytes
+    static qint64 getTempDirsTotalSize();
 
 private:
     static const QString SPN_EXTENSION;
