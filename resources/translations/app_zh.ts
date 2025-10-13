@@ -864,27 +864,93 @@ Continue?</source>
         <translation type="unfinished">⚠️ 警告：务必要选择一个空的文件夹或者是老版本SpeedyNote使用的笔记本文件夹。否则文件可能会丢失。</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="1030"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1031"/>
+        <source>Tablet Input API (Windows 7 Support)</source>
+        <translation type="unfinished">数位板输入API (向下兼容)</translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1036"/>
+        <source>Choose the tablet input API for stylus/pen support. Required for Windows 7 compatibility.
+
+• Auto (Recommended): Let Qt choose the best API for your system
+• WinTab API: Better for Wacom and professional tablets
+• TabletPC API: Microsoft&apos;s standard tablet API (Windows 7 default)
+
+⚠️ Restart SpeedyNote after changing this setting.</source>
+        <translation type="unfinished">选择为笔触提供支持的数位板输入API。对向下兼容Windows 7至关重要。
+
+• 自动（推荐）：让Qt给你的系统选择最适合的API
+• Wacom WinTab API （更适合专业WACOM数位板）
+• TabletPC API ：微软提供的旧标准API（Windows 7上默认）
+
+⚠️ 重启SpeedyNote来应用这一设置。</translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1049"/>
+        <source>Auto (Recommended)</source>
+        <translation type="unfinished">自动（推荐）</translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1050"/>
+        <source>WinTab API (Wacom/Professional)</source>
+        <translation type="unfinished">WinTab API（WACOM/专业）</translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1051"/>
+        <source>TabletPC API (Windows 7)</source>
+        <translation type="unfinished">TabletPC API（Windows 7）</translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1073"/>
+        <source>Restart Required</source>
+        <translation type="unfinished">需要重启APP</translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1074"/>
+        <source>Please restart SpeedyNote for the tablet API change to take effect.
+
+Selected API: %1</source>
+        <translation type="unfinished">请重启SpeedyNote来让数位板API更改生效。
+
+选择的API：%1</translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1086"/>
+        <source>💻 Current Windows Version: %1
+
+If you&apos;re experiencing tablet/stylus issues:
+• On Windows 7: Try &apos;WinTab API&apos; or &apos;TabletPC API&apos;
+• On Windows 10+: &apos;Auto&apos; should work fine (uses Windows Ink)
+• For Wacom tablets: Try &apos;WinTab API&apos; for best results</source>
+        <translation type="unfinished">当前Windows版本：%1
+
+如果你遇到了数位板无法输入的问题：
+• 在Windows 7下：尝试使用&apos;WinTab API&apos; 或 &apos;TabletPC API&apos;
+• 在Windows 10或更高: &apos;自动&apos; 应该能用 (使用 Windows Ink)
+• 给 专业Wacom 数位板（屏）: 尝试 &apos;WinTab API&apos; 来获得最好的效果</translation>
+    </message>
+    <message>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1102"/>
         <source>Compatibility</source>
         <translation type="unfinished">兼容性</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="1044"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1116"/>
         <source>Folder Selection</source>
         <translation type="unfinished">选择文件夹</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="1045"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1117"/>
         <source>Folder selection completed successfully. You can now start taking notes in the selected folder.</source>
         <translation type="unfinished">成功选中文件夹。</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="1048"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1120"/>
         <source>Folder Selection Cancelled</source>
         <translation type="unfinished">未选中文件夹</translation>
     </message>
     <message>
-        <location filename="../../source/ControlPanelDialog.cpp" line="1049"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1121"/>
         <source>Folder selection was cancelled. No changes were made.</source>
         <translation type="unfinished">已打断选中文件夹的操作。没有做出修改。</translation>
     </message>
@@ -933,14 +999,14 @@ Continue?</source>
     <message>
         <location filename="../../source/ControlPanelDialog.cpp" line="619"/>
         <location filename="../../source/ControlPanelDialog.cpp" line="642"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="1035"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1107"/>
         <source>Error</source>
         <translation type="unfinished">错误</translation>
     </message>
     <message>
         <location filename="../../source/ControlPanelDialog.cpp" line="619"/>
         <location filename="../../source/ControlPanelDialog.cpp" line="642"/>
-        <location filename="../../source/ControlPanelDialog.cpp" line="1035"/>
+        <location filename="../../source/ControlPanelDialog.cpp" line="1107"/>
         <source>MainWindow reference not available.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1332,53 +1398,53 @@ This will overwrite your current configuration.</source>
         <translation type="unfinished">导入</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="1439"/>
+        <location filename="../../source/InkCanvas.cpp" line="1452"/>
         <source>Select Image</source>
         <translation type="unfinished">选择图片</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="1440"/>
+        <location filename="../../source/InkCanvas.cpp" line="1453"/>
         <source>Image Files (*.png *.jpg *.jpeg *.bmp *.gif *.tiff *.webp)</source>
         <translation type="unfinished">图片 (*.png *.jpg *.jpeg *.bmp *.gif *.tiff *.webp)</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="1564"/>
+        <location filename="../../source/InkCanvas.cpp" line="1577"/>
         <source>Image Pasted</source>
         <translation type="unfinished">图片已粘贴</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="1565"/>
+        <location filename="../../source/InkCanvas.cpp" line="1578"/>
         <source>Image from clipboard pasted successfully.</source>
         <translation type="unfinished">从剪贴板来的图片已成功粘贴.</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="3539"/>
+        <location filename="../../source/InkCanvas.cpp" line="3552"/>
         <source>Copy</source>
         <translation type="unfinished">复制</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="3550"/>
+        <location filename="../../source/InkCanvas.cpp" line="3563"/>
         <source>Cancel</source>
         <translation type="unfinished">取消</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="3114"/>
-        <location filename="../../source/InkCanvas.cpp" line="4747"/>
+        <location filename="../../source/InkCanvas.cpp" line="3127"/>
+        <location filename="../../source/InkCanvas.cpp" line="4760"/>
         <source>Clipboard Error</source>
         <translation type="unfinished">剪贴板错误</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="3115"/>
+        <location filename="../../source/InkCanvas.cpp" line="3128"/>
         <source>Failed to access clipboard for copying rope selection.</source>
         <translation type="unfinished">无法访问剪贴板。</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="3123"/>
+        <location filename="../../source/InkCanvas.cpp" line="3136"/>
         <source>Copied to Clipboard</source>
         <translation type="unfinished">已复制到剪贴板</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="3124"/>
+        <location filename="../../source/InkCanvas.cpp" line="3137"/>
         <source>Selected area has been copied to clipboard.
 
 You can now paste it on other pages or tabs using the picture paste feature.</source>
@@ -1387,27 +1453,27 @@ You can now paste it on other pages or tabs using the picture paste feature.</so
 你可以通过插入图片的功能把它粘贴到其他页面。</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="4748"/>
+        <location filename="../../source/InkCanvas.cpp" line="4761"/>
         <source>Failed to access system clipboard.</source>
         <translation type="unfinished">无法访问剪贴板。</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="4755"/>
+        <location filename="../../source/InkCanvas.cpp" line="4768"/>
         <source>No Clipboard Data</source>
         <translation type="unfinished">剪贴板没有数据</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="4756"/>
+        <location filename="../../source/InkCanvas.cpp" line="4769"/>
         <source>No data found in clipboard.</source>
         <translation type="unfinished">无法从剪贴板找到数据。</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="4792"/>
+        <location filename="../../source/InkCanvas.cpp" line="4805"/>
         <source>No Image in Clipboard</source>
         <translation type="unfinished">剪贴板上没有图片</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="4793"/>
+        <location filename="../../source/InkCanvas.cpp" line="4806"/>
         <source>No image data found in clipboard.
 
 Please copy an image to the clipboard first.</source>
@@ -1416,12 +1482,12 @@ Please copy an image to the clipboard first.</source>
 请先复制图片到剪贴板上。</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="4799"/>
+        <location filename="../../source/InkCanvas.cpp" line="4812"/>
         <source>Image Too Large</source>
         <translation type="unfinished">图片太大</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="4800"/>
+        <location filename="../../source/InkCanvas.cpp" line="4813"/>
         <source>The clipboard image is too large (max 8192x8192 pixels).
 
 Please use a smaller image.</source>
@@ -1430,22 +1496,22 @@ Please use a smaller image.</source>
 请换一张小点儿的图片。</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="4812"/>
+        <location filename="../../source/InkCanvas.cpp" line="4825"/>
         <source>No Notebook Open</source>
         <translation type="unfinished">未打开笔记本</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="4813"/>
+        <location filename="../../source/InkCanvas.cpp" line="4826"/>
         <source>Please save your notebook as a SpeedyNote Package (.spn) file before pasting images.</source>
         <translation type="unfinished">请把你的笔记本保存成spn格式之后再去粘贴图片上去。</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="4846"/>
+        <location filename="../../source/InkCanvas.cpp" line="4859"/>
         <source>Save Error</source>
         <translation type="unfinished">保存失败</translation>
     </message>
     <message>
-        <location filename="../../source/InkCanvas.cpp" line="4847"/>
+        <location filename="../../source/InkCanvas.cpp" line="4860"/>
         <source>Failed to save clipboard image to notebook.
 
 Path: %1</source>
