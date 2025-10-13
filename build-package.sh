@@ -148,7 +148,7 @@ get_dependencies() {
     local format=$1
     case $format in
         deb)
-            echo "libqt6core6t64, libqt6gui6t64, libqt6widgets6t64, libpoppler-qt6-3t64, libsdl2-2.0-0, libasound2"
+            echo "libqt6core6t64 | libqt6core6, libqt6gui6t64 | libqt6gui6, libqt6widgets6t64 | libqt6widgets6, libpoppler-qt6-3t64 | libpoppler-qt6-3, libsdl2-2.0-0, libasound2"
             ;;
         rpm)
             echo "qt6-qtbase, poppler-qt6, SDL2, alsa-lib"
@@ -167,7 +167,7 @@ get_build_dependencies() {
     local format=$1
     case $format in
         deb)
-            echo "cmake, make, pkg-config, qt6-base-dev, libqt6gui6t64, libqt6widgets6t64, qt6-tools-dev, libpoppler-qt6-dev, libsdl2-dev, libasound2-dev"
+            echo "cmake, make, pkg-config, qt6-base-dev, libqt6gui6t64 | libqt6gui6, libqt6widgets6t64 | libqt6widgets6, qt6-tools-dev, libpoppler-qt6-dev, libsdl2-dev, libasound2-dev"
             ;;
         rpm)
             echo "cmake, make, pkgconf, qt6-qtbase-devel, qt6-qttools-devel, poppler-qt6-devel, SDL2-devel, alsa-lib-devel"
