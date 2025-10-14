@@ -754,59 +754,7 @@ void MainWindow::setupUi() {
     tabList->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     tabList->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     tabList->setSelectionMode(QAbstractItemView::SingleSelection);
-    // Style the tab bar like a modern browser with transparent scrollbar
-    tabList->setStyleSheet(R"(
-        QListWidget {
-            background-color: rgba(240, 240, 240, 255);
-            border: none;
-            border-bottom: 1px solid rgba(200, 200, 200, 255);
-            outline: none;
-        }
-        QListWidget::item {
-            background-color: rgba(220, 220, 220, 255);
-            border: 1px solid rgba(180, 180, 180, 255);
-            border-bottom: none;
-            margin-right: 1px;
-            margin-top: 2px;
-            padding: 0px;
-            min-width: 80px;
-            max-width: 120px;
-        }
-        QListWidget::item:selected {
-            background-color: white;
-            border: 1px solid rgba(180, 180, 180, 255);
-            border-bottom: 1px solid white;
-            margin-top: 1px;
-        }
-        QListWidget::item:hover:!selected {
-            background-color: rgba(230, 230, 230, 255);
-        }
-        QScrollBar:horizontal {
-            background: rgba(240, 240, 240, 255);
-            height: 8px;
-            border: none;
-            margin: 0px;
-            border-top: 1px solid rgba(200, 200, 200, 255);
-        }
-        QScrollBar::handle:horizontal {
-            background: rgba(150, 150, 150, 120);
-            border-radius: 4px;
-            min-width: 20px;
-            margin: 1px;
-        }
-        QScrollBar::handle:horizontal:hover {
-            background: rgba(120, 120, 120, 200);
-        }
-        QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
-            width: 0px;
-            height: 0px;
-            background: none;
-            border: none;
-        }
-        QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
-            background: transparent;
-        }
-    )");
+    // Stylesheet will be applied in updateTheme() to match dark/light mode
 
     if (!canvasStack) {
         canvasStack = new QStackedWidget(this);
@@ -823,7 +771,16 @@ void MainWindow::setupUi() {
     tabBarLayout->setContentsMargins(5, 5, 5, 5);
     tabBarLayout->setSpacing(5);
     tabBarLayout->addWidget(tabList, 1);  // Tab list takes most space
-    // Add button is now positioned manually next to last tab (not in layout)
+    // Add button and recent button are now positioned manually (not in layout)
+    
+    // Create "Return to Launcher" button (positioned manually like add tab button)
+    openRecentNotebooksButton = new QPushButton(tabBarContainer); // Parent to tab bar container
+    openRecentNotebooksButton->setIcon(loadThemedIcon("recent"));
+    openRecentNotebooksButton->setStyleSheet(buttonStyle);
+    openRecentNotebooksButton->setToolTip(tr("Return to Launcher"));
+    openRecentNotebooksButton->setFixedSize(30, 30);
+    openRecentNotebooksButton->raise(); // Keep it above other widgets
+    connect(openRecentNotebooksButton, &QPushButton::clicked, this, &MainWindow::returnToLauncher);
     
     // 🌟 Add Button for New Tab (styled like browser + button) - created AFTER tabBarContainer
     addTabButton = new QPushButton(tabBarContainer);  // Parent to tab bar container
@@ -1030,12 +987,7 @@ void MainWindow::setupUi() {
         }
     });
 
-    openRecentNotebooksButton = new QPushButton(this); // Create button
-    openRecentNotebooksButton->setIcon(loadThemedIcon("recent")); // Replace with actual icon if available
-    openRecentNotebooksButton->setStyleSheet(buttonStyle);
-    openRecentNotebooksButton->setToolTip(tr("Return to Launcher"));
-    openRecentNotebooksButton->setFixedSize(26, 30);
-    connect(openRecentNotebooksButton, &QPushButton::clicked, this, &MainWindow::returnToLauncher);
+    // openRecentNotebooksButton created earlier and added to tab bar layout
 
     customColorButton = new QPushButton(this);
     customColorButton->setFixedSize(62, 30);
@@ -3332,7 +3284,7 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
     if (obj == dialContainer) {
         if (event->type() == QEvent::MouseButtonPress) {
             QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
-            lastMousePos = mouseEvent->globalPos();
+            lastMousePos = mouseEvent->globalPosition().toPoint();
             dragging = false;
 
             if (!longPressTimer) {
@@ -3348,9 +3300,9 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
 
         if (event->type() == QEvent::MouseMove && dragging) {
             QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
-            QPoint delta = mouseEvent->globalPos() - lastMousePos;
+            QPoint delta = mouseEvent->globalPosition().toPoint() - lastMousePos;
             dialContainer->move(dialContainer->pos() + delta);
-            lastMousePos = mouseEvent->globalPos();
+            lastMousePos = mouseEvent->globalPosition().toPoint();
             return true;
         }
 
@@ -4057,6 +4009,7 @@ void MainWindow::updateTheme() {
             border: none;
             border-bottom: 2px solid %1;
             outline: none;
+            padding-left: 45px;
         }
         QListWidget::item {
             background-color: %2;
@@ -4142,7 +4095,12 @@ void MainWindow::updateTheme() {
     if (btnPannScroll) btnPannScroll->setIcon(loadThemedIcon("scroll"));
     if (addPresetButton) addPresetButton->setIcon(loadThemedIcon("savepreset"));
     if (openControlPanelButton) openControlPanelButton->setIcon(loadThemedIcon("settings"));
-    if (openRecentNotebooksButton) openRecentNotebooksButton->setIcon(loadThemedIcon("recent"));
+    if (openRecentNotebooksButton) {
+        openRecentNotebooksButton->setIcon(loadThemedIcon("recent"));
+        // Update button style for theme
+        QString buttonStyle = createButtonStyle(darkMode);
+        openRecentNotebooksButton->setStyleSheet(buttonStyle);
+    }
     updateButtonIcon(penToolButton, "pen");
     updateButtonIcon(markerToolButton, "marker");
     updateButtonIcon(eraserToolButton, "eraser");
@@ -4325,8 +4283,19 @@ void MainWindow::updateTabSizes() {
         lastTabRight = qMax(lastTabRight, visualRect.right());
     }
     
+    // Position the recent button to the left of all tabs
+    if (openRecentNotebooksButton && tabBarContainer && tabList) {
+        int buttonX = 10; // Fixed position at left margin
+        int buttonY = 9; // Align with tabs (tabs have margin-top: 2px)
+        openRecentNotebooksButton->move(buttonX, buttonY);
+        openRecentNotebooksButton->setVisible(true);
+    }
+    
     // Position the add tab button next to the last tab
     if (addTabButton && tabBarContainer && tabList) {
+        // Account for the left padding added to tab list (45px for recent button space)
+        int tabListLeftPadding = 45;
+        
         // Get the scroll offset
         int scrollOffset = tabList->horizontalScrollBar()->value();
         
@@ -4334,13 +4303,14 @@ void MainWindow::updateTabSizes() {
         int maxButtonX = tabList->width() - addTabButton->width() - 10;
         
         // Calculate where the button would be if next to last tab
-        int buttonXNextToTab = lastTabRight - scrollOffset + 10; // 10px spacing from last tab
+        // Add the padding offset to account for tab list's left padding
+        int buttonXNextToTab = lastTabRight - scrollOffset + tabListLeftPadding + 10; // 10px spacing from last tab
         
         // Button position: next to last tab, but don't go beyond the max position
         int buttonX = qMin(buttonXNextToTab, maxButtonX);
         
-        // Ensure button stays visible (at least some margin from left)
-        buttonX = qMax(buttonX, 10);
+        // Ensure button stays visible (at least past the recent button)
+        buttonX = qMax(buttonX, tabListLeftPadding + 10);
         
         int buttonY = 9; // Slightly lower to align with tabs (tabs have margin-top: 2px)
         
@@ -5637,7 +5607,7 @@ void MainWindow::createSingleRowLayout() {
     newLayout->addWidget(saveButton);
     newLayout->addWidget(saveAnnotatedButton);
     newLayout->addWidget(openControlPanelButton);
-    newLayout->addWidget(openRecentNotebooksButton);
+    // openRecentNotebooksButton is now in tab bar layout, not toolbar
     newLayout->addWidget(redButton);
     newLayout->addWidget(blueButton);
     newLayout->addWidget(yellowButton);
@@ -5730,7 +5700,7 @@ void MainWindow::createTwoRowLayout() {
     newFirstRowLayout->addWidget(saveButton);
     newFirstRowLayout->addWidget(saveAnnotatedButton);
     newFirstRowLayout->addWidget(openControlPanelButton);
-    newFirstRowLayout->addWidget(openRecentNotebooksButton);
+    // openRecentNotebooksButton is now in tab bar layout, not toolbar
     newFirstRowLayout->addWidget(redButton);
     newFirstRowLayout->addWidget(blueButton);
     newFirstRowLayout->addWidget(yellowButton);

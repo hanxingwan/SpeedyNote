@@ -33,13 +33,26 @@ static bool isWindowsDarkMode() {
 #endif
 }
 
+// Helper function to detect Windows 11
+static bool isWindows11() {
+#ifdef Q_OS_WIN
+    // Windows 11 is build 22000 or higher
+    // Use QSysInfo to check Windows version
+    return QSysInfo::kernelVersion().split('.')[2].toInt() >= 22000;
+#else
+    return false;
+#endif
+}
+
 // Helper function to apply dark/light palette to Qt application
 static void applySystemPalette(QApplication &app) {
 #ifdef Q_OS_WIN
     if (isWindowsDarkMode()) {
-        // Switch to Fusion style on Windows for proper dark mode support
-        // The default Windows style doesn't respect custom palettes properly
-        app.setStyle("Fusion");
+        // Windows 11 has native dark mode support with WinUI 3, so use default style
+        // For older Windows versions, use Fusion style for proper dark mode support
+        if (!isWindows11()) {
+            app.setStyle("Fusion");
+        }
         
         // Create a comprehensive dark palette for Qt widgets
         QPalette darkPalette;
@@ -146,11 +159,8 @@ int main(int argc, char *argv[]) {
     // Enable Windows IME support for multi-language input
     QApplication app(argc, argv);
     
-    // Ensure IME is properly enabled for Windows
-    #ifdef _WIN32
-    app.setAttribute(Qt::AA_EnableHighDpiScaling, true);
-    app.setAttribute(Qt::AA_UseHighDpiPixmaps, true);
-    #endif
+    // High DPI scaling is automatically enabled in Qt 6+
+    // No need to set AA_EnableHighDpiScaling or AA_UseHighDpiPixmaps
 
     // Apply system-appropriate palette (dark/light) on Windows
     applySystemPalette(app);
