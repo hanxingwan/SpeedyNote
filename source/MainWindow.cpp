@@ -4312,7 +4312,7 @@ void MainWindow::updateTabSizes() {
         // Calculate desired width based on text content
         QFontMetrics fm(label->font());
         int textWidth = fm.horizontalAdvance(label->text());
-        int desiredWidth = textWidth + 35; // Add padding for close button and margins
+        int desiredWidth = textWidth + 42; // Add padding for close button and margins (increased to fit one more character)
         
         // Clamp between min and max
         int finalWidth = qBound(minTabWidth, desiredWidth, maxTabWidth);
@@ -4849,7 +4849,7 @@ void MainWindow::openPdfFile(const QString &pdfPath) {
         saveCurrentPage();
     }
     
-    if (result == PdfOpenDialog::CreateNewFolder) {
+    if (result == PdfOpenDialog::CreateNewFolder || result == PdfOpenDialog::CreateNewFolderCustomLocation) {
         // Set the new folder as save folder
         canvas->setSaveFolder(selectedFolder);
         

@@ -24,14 +24,14 @@ PdfOpenDialog::PdfOpenDialog(const QString &pdfPath, QWidget *parent)
     
     // Set minimum and maximum sizes instead of fixed size
     int baseWidth = 500;
-    int baseHeight = 200;
+    int baseHeight = 250; // Increased to accommodate third button
     
     // Scale sizes appropriately for DPI
     int scaledWidth = static_cast<int>(baseWidth * qMax(1.0, dpr * 0.8));
     int scaledHeight = static_cast<int>(baseHeight * qMax(1.0, dpr * 0.8));
     
     setMinimumSize(scaledWidth, scaledHeight);
-    setMaximumSize(scaledWidth + 100, scaledHeight + 50); // Allow some flexibility
+    setMaximumSize(scaledWidth + 100, scaledHeight + 80); // Allow some flexibility
     
     // Set size policy to prevent unwanted resizing
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
@@ -94,8 +94,8 @@ void PdfOpenDialog::setupUI()
     QVBoxLayout *buttonLayout = new QVBoxLayout();
     buttonLayout->setSpacing(10);
     
-    // Create new .spn package button
-    QPushButton *createFolderBtn = new QPushButton(tr("Create New SpeedyNote Package (\"%1.spn\")").arg(folderName));
+    // Create new .spn package button (in same folder as PDF)
+    QPushButton *createFolderBtn = new QPushButton(tr("Create New Package Here (\"%1.spn\")").arg(folderName));
     createFolderBtn->setIcon(QIcon(":/resources/icons/mainicon.png"));
     createFolderBtn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     createFolderBtn->setMinimumHeight(40);
@@ -116,6 +116,29 @@ void PdfOpenDialog::setupUI()
         }
     )");
     connect(createFolderBtn, &QPushButton::clicked, this, &PdfOpenDialog::onCreateNewFolder);
+    
+    // Create new .spn package button (custom location)
+    QPushButton *createCustomLocationBtn = new QPushButton(tr("Create New Package Elsewhere..."));
+    createCustomLocationBtn->setIcon(QApplication::style()->standardIcon(QStyle::SP_DialogSaveButton));
+    createCustomLocationBtn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    createCustomLocationBtn->setMinimumHeight(40);
+    createCustomLocationBtn->setStyleSheet(R"(
+        QPushButton {
+            text-align: left;
+            padding: 10px;
+            border: 1px solid palette(mid);
+            border-radius: 5px;
+            background: palette(button);
+        }
+        QPushButton:hover {
+            background: palette(light);
+            border-color: palette(dark);
+        }
+        QPushButton:pressed {
+            background: palette(midlight);
+        }
+    )");
+    connect(createCustomLocationBtn, &QPushButton::clicked, this, &PdfOpenDialog::onCreateNewFolderCustomLocation);
     
     // Use existing notebook button (folder or .spn)
     QPushButton *existingFolderBtn = new QPushButton(tr("Use Existing Notebook..."));
@@ -141,6 +164,7 @@ void PdfOpenDialog::setupUI()
     connect(existingFolderBtn, &QPushButton::clicked, this, &PdfOpenDialog::onUseExistingFolder);
     
     buttonLayout->addWidget(createFolderBtn);
+    buttonLayout->addWidget(createCustomLocationBtn);
     buttonLayout->addWidget(existingFolderBtn);
     
     mainLayout->addLayout(buttonLayout);
@@ -243,6 +267,57 @@ void PdfOpenDialog::onCreateNewFolder()
     if (SpnPackageManager::createSpnPackage(newSpnPath)) {
         selectedFolder = newSpnPath;
         result = CreateNewFolder;
+        accept();
+    } else {
+        QMessageBox::warning(this, tr("Error"), tr("Failed to create SpeedyNote package: %1").arg(newSpnPath));
+    }
+}
+
+void PdfOpenDialog::onCreateNewFolderCustomLocation()
+{
+    QFileInfo fileInfo(pdfPath);
+    QString suggestedName = fileInfo.baseName();
+    
+    // Let user choose where to save the .spn file
+    QString newSpnPath = QFileDialog::getSaveFileName(
+        this,
+        tr("Choose Location for New SpeedyNote Package"),
+        QFileInfo(pdfPath).absolutePath() + "/" + suggestedName + ".spn",
+        tr("SpeedyNote Packages (*.spn)")
+    );
+    
+    if (newSpnPath.isEmpty()) {
+        return; // User cancelled
+    }
+    
+    // Ensure .spn extension
+    if (!newSpnPath.toLower().endsWith(".spn")) {
+        newSpnPath += ".spn";
+    }
+    
+    // Check if .spn package already exists
+    if (QDir(newSpnPath).exists()) {
+        QMessageBox::StandardButton reply = QMessageBox::question(
+            this, 
+            tr("Package Exists"), 
+            tr("A SpeedyNote package already exists at this location.\n\nDo you want to use this existing package?"),
+            QMessageBox::Yes | QMessageBox::No
+        );
+        
+        if (reply == QMessageBox::Yes) {
+            selectedFolder = newSpnPath;
+            result = CreateNewFolderCustomLocation;
+            accept();
+            return;
+        } else {
+            return; // Stay in dialog
+        }
+    }
+    
+    // Create the new .spn package at the custom location
+    if (SpnPackageManager::createSpnPackage(newSpnPath)) {
+        selectedFolder = newSpnPath;
+        result = CreateNewFolderCustomLocation;
         accept();
     } else {
         QMessageBox::warning(this, tr("Error"), tr("Failed to create SpeedyNote package: %1").arg(newSpnPath));
