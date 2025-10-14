@@ -18,6 +18,7 @@ public:
     enum Result {
         Cancel,
         CreateNewFolder,
+        CreateNewFolderCustomLocation,
         UseExistingFolder
     };
 
@@ -34,6 +35,7 @@ protected:
 
 private slots:
     void onCreateNewFolder();
+    void onCreateNewFolderCustomLocation();
     void onUseExistingFolder();
     void onCancel();
 

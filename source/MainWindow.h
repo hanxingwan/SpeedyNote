@@ -263,6 +263,7 @@ public:
     void saveThemeSettings();
     void loadThemeSettings();
     void updateTheme(); // Apply current theme settings
+    void updateTabSizes(); // Update tab widths adaptively
     
     void migrateOldButtonMappings();
     QString migrateOldDialModeString(const QString &oldString);
@@ -373,6 +374,8 @@ private slots:
 
     bool isDarkMode();
     QIcon loadThemedIcon(const QString& baseName);
+    QIcon loadThemedIconReversed(const QString& baseName);
+    void updateButtonIcon(QPushButton* button, const QString& iconName);
     QString createButtonStyle(bool darkMode);
 
     void handleDialPanScroll(int angle);  // Add missing function declaration
@@ -523,21 +526,6 @@ private:
 
     int grossTotalClicks = 0;
 
-    /*
-    enum DialMode {
-        PageSwitching,
-        ZoomControl,
-        PenThickness,
-        ColorAdjustment
-    };
-
-    DialMode currentDialMode = PageSwitching; ✅ Default mode
-
-    QComboBox *dialModeSelector; ✅ Mode selector
-
-    */
-    
-    DialMode currentDialMode = PanAndPageScroll; // ✅ Default mode
     DialMode temporaryDialMode = None;
     
     // ✅ Mouse dial control system
@@ -549,7 +537,9 @@ private:
 
     QComboBox *dialModeSelector; // ✅ Mode selector
 
-    QPushButton *colorPreview; // ✅ Color preview
+    DialMode currentDialMode = PanAndPageScroll; // ✅ Default mode
+
+    // Removed unused colorPreview widget
 
     QLabel *dialDisplay = nullptr; // ✅ Display for dial mode
 

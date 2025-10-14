@@ -200,7 +200,7 @@ if (LRELEASE_EXECUTABLE)
 endif ()
 
 # Disable Qt deprecated warnings
-add_compile_definitions(QT_NO_DEPRECATED_WARNINGS)
+# add_compile_definitions(QT_NO_DEPRECATED_WARNINGS)
 
 # ✅ Link libraries - platform specific
 if (WIN32)

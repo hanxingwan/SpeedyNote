@@ -993,7 +993,7 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
 
     if (event->type() == QEvent::TabletPress) {
         drawing = true;
-        lastPoint = event->posF(); // Logical widget coordinates
+        lastPoint = event->position(); // Logical widget coordinates
         if (straightLineMode) {
             straightLineStartPoint = lastPoint;
         }
@@ -1056,13 +1056,13 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
         if (ropeToolMode) {
             if (selectingWithRope) {
                 QRectF oldPreviewBoundingRect = lassoPathPoints.boundingRect();
-                lassoPathPoints << event->posF();
-                lastPoint = event->posF();
+                lassoPathPoints << event->position();
+                lastPoint = event->position();
                 QRectF newPreviewBoundingRect = lassoPathPoints.boundingRect();
                 // Update the area of the selection rectangle preview (logical widget coordinates)
                 update(oldPreviewBoundingRect.united(newPreviewBoundingRect).toRect().adjusted(-5,-5,5,5));
             } else if (movingSelection) {
-                QPointF delta = event->posF() - lastMovePoint; // Delta in logical widget coordinates
+                QPointF delta = event->position() - lastMovePoint; // Delta in logical widget coordinates
                 QRect oldWidgetSelectionRect = selectionRect;
                 
                 // Update the exact floating-point rectangle first
@@ -1080,7 +1080,7 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
                     update(selectionRect.adjusted(-2,-2,2,2));
                 }
                 
-                lastMovePoint = event->posF();
+                lastMovePoint = event->position();
                 if (!edited){
                     edited = true;
                     // Invalidate cache for current page since it's been modified
@@ -1108,7 +1108,7 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
             
             if (shouldUpdate) {
                 QPointF oldLastPoint = lastPoint;
-                lastPoint = event->posF();
+                lastPoint = event->position();
                 
                 // Calculate affected rectangle that needs updating
                 QRectF updateRect = calculatePreviewRect(straightLineStartPoint, oldLastPoint, lastPoint);
@@ -1118,14 +1118,14 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
                 updateTimer.restart();
             } else {
                 // Just update the last point without redrawing
-                lastPoint = event->posF();
+                lastPoint = event->position();
             }
         } else if (straightLineMode && isErasing) {
             // For eraser in straight line mode, continuously erase from start to current point
             // This gives immediate visual feedback and smoother erasing experience
             
             // Store current point
-            QPointF currentPoint = event->posF();
+            QPointF currentPoint = event->position();
             
             // Clear previous stroke by redrawing with transparency
             QRectF updateRect = QRectF(straightLineStartPoint, lastPoint).normalized().adjusted(-20, -20, 20, 20);
@@ -1144,11 +1144,11 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
         } else {
             // Normal drawing mode OR eraser regardless of straight line mode
             if (isErasing) {
-            eraseStroke(lastPoint, event->posF(), event->pressure());
+            eraseStroke(lastPoint, event->position(), event->pressure());
         } else {
-            drawStroke(lastPoint, event->posF(), event->pressure());
+            drawStroke(lastPoint, event->position(), event->pressure());
         }
-        lastPoint = event->posF();
+        lastPoint = event->position();
             
             // Only track benchmarking when enabled
             if (benchmarking) {
@@ -1163,7 +1163,7 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
             // Always use at least a minimum pressure
             pressure = qMax(pressure, 0.5);
             
-            drawStroke(straightLineStartPoint, event->posF(), pressure);
+            drawStroke(straightLineStartPoint, event->position(), pressure);
             
             // Only track benchmarking when enabled
             if (benchmarking) {
@@ -1183,7 +1183,7 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
             qreal pressure = qMax(event->pressure(), 0.5);
             
             // Final pass to ensure the entire line is erased
-            eraseStroke(straightLineStartPoint, event->posF(), pressure);
+            eraseStroke(straightLineStartPoint, event->position(), pressure);
             
             // Force update to clear any remaining artifacts
             update();
@@ -1223,7 +1223,7 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
                     if (!lassoPathPoints.boundingRect().isEmpty()) {
                         // 1. Create a QPolygonF in buffer coordinates using proper transformation
                         QPolygonF bufferLassoPath;
-                        for (const QPointF& p_widget_logical : qAsConst(lassoPathPoints)) {
+                        for (const QPointF& p_widget_logical : std::as_const(lassoPathPoints)) {
                             bufferLassoPath << mapLogicalWidgetToPhysicalBuffer(p_widget_logical);
                         }
 

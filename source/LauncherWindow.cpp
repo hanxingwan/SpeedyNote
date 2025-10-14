@@ -109,7 +109,7 @@ void LauncherWindow::setupUi()
     QListWidgetItem *newItem = new QListWidgetItem(loadThemedIcon("addtab"), tr("New"));
     QListWidgetItem *openPdfItem = new QListWidgetItem(loadThemedIcon("pdf"), tr("Open PDF"));
     QListWidgetItem *openNotebookItem = new QListWidgetItem(loadThemedIcon("folder"), tr("Open Notes"));
-    QListWidgetItem *recentItem = new QListWidgetItem(loadThemedIcon("recent"), tr("Recent"));
+    QListWidgetItem *recentItem = new QListWidgetItem(loadThemedIcon("benchmark"), tr("Recent"));
     QListWidgetItem *starredItem = new QListWidgetItem(loadThemedIcon("star"), tr("Starred"));
     
     // Set explicit size hints for touch-friendly interface

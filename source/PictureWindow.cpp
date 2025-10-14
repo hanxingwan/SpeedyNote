@@ -1067,7 +1067,7 @@ bool PictureWindow::event(QEvent *event) {
 }
 
 void PictureWindow::handleTouchEvent(QTouchEvent *event) {
-    const QList<QTouchEvent::TouchPoint> &touchPoints = event->touchPoints();
+    const QList<QEventPoint> &touchPoints = event->points();
     
     if (touchPoints.isEmpty()) return;
     
