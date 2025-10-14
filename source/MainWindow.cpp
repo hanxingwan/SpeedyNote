@@ -227,10 +227,10 @@ void MainWindow::setupUi() {
 
     pdfTextSelectButton = new QPushButton(this);
     pdfTextSelectButton->setFixedSize(14, 30);
-    QIcon pdfTextIcon(loadThemedIcon("ibeam"));
-    pdfTextSelectButton->setIcon(pdfTextIcon);
     pdfTextSelectButton->setStyleSheet(buttonStyle);
     pdfTextSelectButton->setToolTip(tr("Toggle PDF Text Selection"));
+    pdfTextSelectButton->setProperty("selected", false); // Initially disabled
+    updateButtonIcon(pdfTextSelectButton, "ibeam");
     connect(pdfTextSelectButton, &QPushButton::clicked, this, [this]() {
         if (!currentCanvas()) return;
         
@@ -248,16 +248,16 @@ void MainWindow::setupUi() {
 
 
     benchmarkButton = new QPushButton(this);
-    QIcon benchmarkIcon(loadThemedIcon("benchmark"));  // Path to your icon in resources
-    benchmarkButton->setIcon(benchmarkIcon);
+    // QIcon benchmarkIcon(loadThemedIcon("benchmark"));  // Path to your icon in resources
+    // benchmarkButton->setIcon(benchmarkIcon);
     benchmarkButton->setFixedSize(26, 30); // Make the benchmark button smaller
     benchmarkButton->setStyleSheet(buttonStyle);
     benchmarkButton->setToolTip(tr("Toggle Benchmark"));
     benchmarkLabel = new QLabel("PR:N/A", this);
     benchmarkLabel->setFixedHeight(30);  // Make the benchmark bar smaller
+    updateButtonIcon(benchmarkButton, "benchmark");
 
     toggleTabBarButton = new QPushButton(this);
-    toggleTabBarButton->setIcon(loadThemedIcon("tabs"));  // You can design separate icons for "show" and "hide"
     toggleTabBarButton->setToolTip(tr("Show/Hide Tab Bar"));
     toggleTabBarButton->setFixedSize(26, 30);
     toggleTabBarButton->setStyleSheet(buttonStyle);
@@ -265,38 +265,38 @@ void MainWindow::setupUi() {
     
     // PDF Outline Toggle Button
     toggleOutlineButton = new QPushButton(this);
-    toggleOutlineButton->setIcon(loadThemedIcon("outline"));  // Icon to be added later
     toggleOutlineButton->setToolTip(tr("Show/Hide PDF Outline"));
     toggleOutlineButton->setFixedSize(26, 30);
     toggleOutlineButton->setStyleSheet(buttonStyle);
     toggleOutlineButton->setProperty("selected", false); // Initially hidden
+    updateButtonIcon(toggleOutlineButton, "outline");
     
     // Bookmarks Toggle Button
     toggleBookmarksButton = new QPushButton(this);
-    toggleBookmarksButton->setIcon(loadThemedIcon("bookmark"));  // Using bookpage icon for bookmarks
     toggleBookmarksButton->setToolTip(tr("Show/Hide Bookmarks"));
     toggleBookmarksButton->setFixedSize(26, 30);
     toggleBookmarksButton->setStyleSheet(buttonStyle);
     toggleBookmarksButton->setProperty("selected", false); // Initially hidden
+    updateButtonIcon(toggleBookmarksButton, "bookmark");
     
     // Add/Remove Bookmark Toggle Button
     toggleBookmarkButton = new QPushButton(this);
-    toggleBookmarkButton->setIcon(loadThemedIcon("star"));
     toggleBookmarkButton->setToolTip(tr("Add/Remove Bookmark"));
     toggleBookmarkButton->setFixedSize(26, 30);
     toggleBookmarkButton->setStyleSheet(buttonStyle);
     toggleBookmarkButton->setProperty("selected", false); // For toggle state styling
+    updateButtonIcon(toggleBookmarkButton, "star");
 
     // Touch Gestures Toggle Button
     touchGesturesButton = new QPushButton(this);
-    touchGesturesButton->setIcon(loadThemedIcon("hand"));  // Using hand icon for touch/gesture
     touchGesturesButton->setToolTip(tr("Toggle Touch Gestures"));
     touchGesturesButton->setFixedSize(26, 30);
     touchGesturesButton->setStyleSheet(buttonStyle);
     touchGesturesButton->setProperty("selected", touchGesturesEnabled); // For toggle state styling
+    updateButtonIcon(touchGesturesButton, "hand");
 
     selectFolderButton = new QPushButton(this);
-    selectFolderButton->setFixedSize(26, 30);
+    selectFolderButton->setFixedSize(0, 0);
     QIcon folderIcon(loadThemedIcon("folder"));  // Path to your icon in resources
     selectFolderButton->setIcon(folderIcon);
     selectFolderButton->setStyleSheet(buttonStyle);
@@ -412,7 +412,7 @@ void MainWindow::setupUi() {
     
     customColorInput = new QLineEdit(this);
     customColorInput->setPlaceholderText("Custom HEX");
-    customColorInput->setFixedSize(85, 30);
+    customColorInput->setFixedSize(0, 0);
     
     // Enable IME support for multi-language input
     customColorInput->setAttribute(Qt::WA_InputMethodEnabled, true);
@@ -460,24 +460,25 @@ void MainWindow::setupUi() {
     toolSelector->setFixedHeight(30);
     connect(toolSelector, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::changeTool);
 
+    // Hide toolSelector since it's not used in the layout but needed for functionality
+    toolSelector->hide();
+    toolSelector->setFixedSize(0, 0); // Make it invisible by setting size to 0
+
     // ✅ Individual tool buttons
     penToolButton = new QPushButton(this);
     penToolButton->setFixedSize(26, 30);
-    penToolButton->setIcon(loadThemedIcon("pen"));
     penToolButton->setStyleSheet(buttonStyle);
     penToolButton->setToolTip(tr("Pen Tool"));
     connect(penToolButton, &QPushButton::clicked, this, &MainWindow::setPenTool);
 
     markerToolButton = new QPushButton(this);
     markerToolButton->setFixedSize(26, 30);
-    markerToolButton->setIcon(loadThemedIcon("marker"));
     markerToolButton->setStyleSheet(buttonStyle);
     markerToolButton->setToolTip(tr("Marker Tool"));
     connect(markerToolButton, &QPushButton::clicked, this, &MainWindow::setMarkerTool);
 
     eraserToolButton = new QPushButton(this);
     eraserToolButton->setFixedSize(26, 30);
-    eraserToolButton->setIcon(loadThemedIcon("eraser"));
     eraserToolButton->setStyleSheet(buttonStyle);
     eraserToolButton->setToolTip(tr("Eraser Tool"));
     connect(eraserToolButton, &QPushButton::clicked, this, &MainWindow::setEraserTool);
@@ -493,10 +494,10 @@ void MainWindow::setupUi() {
     // Initialize straight line toggle button
     straightLineToggleButton = new QPushButton(this);
     straightLineToggleButton->setFixedSize(26, 30);
-    QIcon straightLineIcon(loadThemedIcon("straightLine"));  // Make sure this icon exists or use a different one
-    straightLineToggleButton->setIcon(straightLineIcon);
     straightLineToggleButton->setStyleSheet(buttonStyle);
     straightLineToggleButton->setToolTip(tr("Toggle Straight Line Mode"));
+    straightLineToggleButton->setProperty("selected", false); // Initially disabled
+    updateButtonIcon(straightLineToggleButton, "straightLine");
     connect(straightLineToggleButton, &QPushButton::clicked, this, [this]() {
         if (!currentCanvas()) return;
         
@@ -513,10 +514,10 @@ void MainWindow::setupUi() {
     
     ropeToolButton = new QPushButton(this);
     ropeToolButton->setFixedSize(26, 30);
-    QIcon ropeToolIcon(loadThemedIcon("rope")); // Make sure this icon exists
-    ropeToolButton->setIcon(ropeToolIcon);
     ropeToolButton->setStyleSheet(buttonStyle);
     ropeToolButton->setToolTip(tr("Toggle Rope Tool Mode"));
+    ropeToolButton->setProperty("selected", false); // Initially disabled
+    updateButtonIcon(ropeToolButton, "rope");
     connect(ropeToolButton, &QPushButton::clicked, this, [this]() {
         if (!currentCanvas()) return;
         
@@ -533,10 +534,10 @@ void MainWindow::setupUi() {
     
     markdownButton = new QPushButton(this);
     markdownButton->setFixedSize(26, 30);
-    QIcon markdownIcon(loadThemedIcon("markdown")); // Using text icon for markdown
-    markdownButton->setIcon(markdownIcon);
     markdownButton->setStyleSheet(buttonStyle);
     markdownButton->setToolTip(tr("Add Markdown Window"));
+    markdownButton->setProperty("selected", false); // Initially disabled
+    updateButtonIcon(markdownButton, "markdown");
     connect(markdownButton, &QPushButton::clicked, this, [this]() {
         if (!currentCanvas()) return;
         
@@ -549,10 +550,10 @@ void MainWindow::setupUi() {
     // Insert Picture Button
     insertPictureButton = new QPushButton(this);
     insertPictureButton->setFixedSize(26, 30);
-    QIcon pictureIcon(loadThemedIcon("background")); // Using import icon as placeholder for now
-    insertPictureButton->setIcon(pictureIcon);
     insertPictureButton->setStyleSheet(buttonStyle);
     insertPictureButton->setToolTip(tr("Insert Picture"));
+    insertPictureButton->setProperty("selected", false); // Initially disabled
+    updateButtonIcon(insertPictureButton, "background");
     connect(insertPictureButton, &QPushButton::clicked, this, [this]() {
         // qDebug() << "MainWindow: Insert Picture button clicked!";
         
@@ -749,7 +750,7 @@ void MainWindow::setupUi() {
     // 🌟 Horizontal Tab Bar (like modern web browsers)
     tabList = new QListWidget(this);
     tabList->setFlow(QListView::LeftToRight);  // Make it horizontal
-    tabList->setFixedHeight(32);  // Increased to accommodate scrollbar below tabs
+    tabList->setFixedHeight(38);  // Increased to accommodate scrollbar below tabs
     tabList->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     tabList->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     tabList->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -807,16 +808,34 @@ void MainWindow::setupUi() {
         }
     )");
 
-    // 🌟 Add Button for New Tab (styled like browser + button)
-    addTabButton = new QPushButton(this);
+    if (!canvasStack) {
+        canvasStack = new QStackedWidget(this);
+    }
+
+    connect(tabList, &QListWidget::currentRowChanged, this, &MainWindow::switchTab);
+
+    // Create horizontal tab container
+    tabBarContainer = new QWidget(this);
+    tabBarContainer->setObjectName("tabBarContainer");
+    tabBarContainer->setFixedHeight(40);  // Increased to accommodate scrollbar below tabs
+    
+    QHBoxLayout *tabBarLayout = new QHBoxLayout(tabBarContainer);
+    tabBarLayout->setContentsMargins(5, 5, 5, 5);
+    tabBarLayout->setSpacing(5);
+    tabBarLayout->addWidget(tabList, 1);  // Tab list takes most space
+    // Add button is now positioned manually next to last tab (not in layout)
+    
+    // 🌟 Add Button for New Tab (styled like browser + button) - created AFTER tabBarContainer
+    addTabButton = new QPushButton(tabBarContainer);  // Parent to tab bar container
     QIcon addTab(loadThemedIcon("addtab"));  // Path to your icon in resources
     addTabButton->setIcon(addTab);
     addTabButton->setFixedSize(30, 30);  // Even smaller to match thinner layout
+    addTabButton->raise();  // Keep it above other widgets
     addTabButton->setStyleSheet(R"(
         QPushButton {
-            background-color: rgba(220, 220, 220, 255);
-            border: 1px solid rgba(180, 180, 180, 255);
-            border-radius: 15px;
+            background-color: rgba(220, 220, 220, 0);
+            /*border: 1px solid rgba(180, 180, 180, 255);*/
+            border-radius: 0px;
             margin: 2px;
         }
         QPushButton:hover {
@@ -828,23 +847,11 @@ void MainWindow::setupUi() {
     )");
     addTabButton->setToolTip(tr("Add New Tab"));
     connect(addTabButton, &QPushButton::clicked, this, &MainWindow::addNewTab);
-
-    if (!canvasStack) {
-        canvasStack = new QStackedWidget(this);
-    }
-
-    connect(tabList, &QListWidget::currentRowChanged, this, &MainWindow::switchTab);
-
-    // Create horizontal tab container
-    tabBarContainer = new QWidget(this);
-    tabBarContainer->setObjectName("tabBarContainer");
-    tabBarContainer->setFixedHeight(38);  // Increased to accommodate scrollbar below tabs
     
-    QHBoxLayout *tabBarLayout = new QHBoxLayout(tabBarContainer);
-    tabBarLayout->setContentsMargins(5, 5, 5, 5);
-    tabBarLayout->setSpacing(5);
-    tabBarLayout->addWidget(tabList, 1);  // Tab list takes most space
-    tabBarLayout->addWidget(addTabButton, 0);  // Add button stays at the end
+    // Connect scroll bar to update button position
+    connect(tabList->horizontalScrollBar(), &QScrollBar::valueChanged, this, [this]() {
+        updateTabSizes(); // Reposition add button when scrolling
+    });
 
     connect(toggleTabBarButton, &QPushButton::clicked, this, [=]() {
         bool isVisible = tabBarContainer->isVisible();
@@ -852,6 +859,7 @@ void MainWindow::setupUi() {
         
         // Update button toggle state
         toggleTabBarButton->setProperty("selected", !isVisible);
+        updateButtonIcon(toggleTabBarButton, "tabs");
         toggleTabBarButton->style()->unpolish(toggleTabBarButton);
         toggleTabBarButton->style()->polish(toggleTabBarButton);
 
@@ -868,6 +876,7 @@ void MainWindow::setupUi() {
     connect(touchGesturesButton, &QPushButton::clicked, this, [this]() {
         setTouchGesturesEnabled(!touchGesturesEnabled);
         touchGesturesButton->setProperty("selected", touchGesturesEnabled);
+        updateButtonIcon(touchGesturesButton, "hand");
         touchGesturesButton->style()->unpolish(touchGesturesButton);
         touchGesturesButton->style()->polish(touchGesturesButton);
     });
@@ -908,10 +917,11 @@ void MainWindow::setupUi() {
 
     // ✅ Dial Toggle Button
     dialToggleButton = new QPushButton(this);
-    dialToggleButton->setIcon(loadThemedIcon("dial"));  // Icon for dial
     dialToggleButton->setFixedSize(26, 30);
     dialToggleButton->setToolTip(tr("Toggle Magic Dial"));
     dialToggleButton->setStyleSheet(buttonStyle);
+    dialToggleButton->setProperty("selected", false); // Initially hidden
+    updateButtonIcon(dialToggleButton, "dial");
 
     // ✅ Connect to toggle function
     connect(dialToggleButton, &QPushButton::clicked, this, &MainWindow::toggleDial);
@@ -922,10 +932,10 @@ void MainWindow::setupUi() {
 
     fastForwardButton = new QPushButton(this);
     fastForwardButton->setFixedSize(26, 30);
-    // QIcon ffIcon(":/resources/icons/fastforward.png");  // Path to your icon in resources
-    fastForwardButton->setIcon(loadThemedIcon("fastforward"));
     fastForwardButton->setToolTip(tr("Toggle Fast Forward 8x"));
     fastForwardButton->setStyleSheet(buttonStyle);
+    fastForwardButton->setProperty("selected", false); // Initially disabled
+    updateButtonIcon(fastForwardButton, "fastforward");
 
     // ✅ Toggle fast-forward mode
     connect(fastForwardButton, &QPushButton::clicked, [this]() {
@@ -944,12 +954,13 @@ void MainWindow::setupUi() {
     connect(dialModeSelector, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
         [this](int index) { changeDialMode(static_cast<DialMode>(index)); });
 
+    // Hide the dialModeSelector since it's not used in the layout but needed for compilation
+    dialModeSelector->hide();
+    dialModeSelector->setFixedSize(0, 0); // Make it invisible by setting size to 0
 
 
-    colorPreview = new QPushButton(this);
-    colorPreview->setFixedSize(26, 30);
-    colorPreview->setStyleSheet("border-radius: 15px; border: 1px solid gray;");
-    colorPreview->setEnabled(false);  // ✅ Prevents it from being clicked
+
+    // Removed unused colorPreview widget that was causing UI artifacts
 
     btnPageSwitch = new QPushButton(loadThemedIcon("bookpage"), "", this);
     btnPageSwitch->setStyleSheet(buttonStyle);
@@ -1095,9 +1106,8 @@ void MainWindow::setupUi() {
     controlLayout->addWidget(ropeToolButton); // Add rope tool button to layout
     controlLayout->addWidget(markdownButton); // Add markdown button to layout
     controlLayout->addWidget(insertPictureButton); // Add picture button to layout
-    // controlLayout->addWidget(colorPreview);
-    // controlLayout->addWidget(thicknessButton);
-    // controlLayout->addWidget(jumpToPageButton);
+    controlLayout->addWidget(thicknessButton);
+    controlLayout->addWidget(jumpToPageButton);
     controlLayout->addWidget(dialToggleButton);
     controlLayout->addWidget(fastForwardButton);
     // controlLayout->addWidget(channelSelector);
@@ -1109,8 +1119,7 @@ void MainWindow::setupUi() {
     controlLayout->addWidget(btnTool);
     controlLayout->addWidget(btnPresets);
     controlLayout->addWidget(addPresetButton);
-    // controlLayout->addWidget(dialModeSelector);
-    // controlLayout->addStretch();
+    // Removed dialModeSelector widget - no longer needed
     
     // controlLayout->addWidget(toolSelector);
     controlLayout->addWidget(fullscreenButton);
@@ -1175,16 +1184,16 @@ void MainWindow::setupUi() {
         updateScrollbarPositions();
     });
 
-    // Main layout: toolbar -> tab bar -> canvas (vertical stack)
+    // Main layout: tab bar -> toolbar -> canvas (vertical stack)
     QWidget *container = new QWidget;
     container->setObjectName("container");
     QVBoxLayout *mainLayout = new QVBoxLayout(container);
     mainLayout->setContentsMargins(0, 0, 0, 0);  // ✅ Remove extra margins
     mainLayout->setSpacing(0); // ✅ Remove spacing between components
-    
+
     // Add components in vertical order
-    mainLayout->addWidget(controlBar);        // Toolbar at top
-    mainLayout->addWidget(tabBarContainer);   // Tab bar below toolbar
+    mainLayout->addWidget(tabBarContainer);   // Tab bar at top
+    mainLayout->addWidget(controlBar);        // Toolbar below tab bar
     
     // Content area with sidebars and canvas
     QHBoxLayout *contentLayout = new QHBoxLayout;
@@ -1223,6 +1232,11 @@ void MainWindow::setupUi() {
     
     // Now that all UI components are created, update the color palette
     updateColorPalette();
+    
+    // Position add tab button initially
+    QTimer::singleShot(100, this, [this]() {
+        updateTabSizes();
+    });
 
 }
 
@@ -1350,17 +1364,25 @@ void MainWindow::updateToolButtonStates() {
     markerToolButton->setProperty("selected", false);
     eraserToolButton->setProperty("selected", false);
     
+    // Update icons for unselected state
+    updateButtonIcon(penToolButton, "pen");
+    updateButtonIcon(markerToolButton, "marker");
+    updateButtonIcon(eraserToolButton, "eraser");
+    
     // Set the selected property for the current tool
     ToolType currentTool = currentCanvas()->getCurrentTool();
     switch (currentTool) {
         case ToolType::Pen:
             penToolButton->setProperty("selected", true);
+            updateButtonIcon(penToolButton, "pen");
             break;
         case ToolType::Marker:
             markerToolButton->setProperty("selected", true);
+            updateButtonIcon(markerToolButton, "marker");
             break;
         case ToolType::Eraser:
             eraserToolButton->setProperty("selected", true);
+            updateButtonIcon(eraserToolButton, "eraser");
             break;
     }
     
@@ -1869,11 +1891,11 @@ void MainWindow::updatePanRange() {
     // Get the actual widget size instead of screen size for more accurate calculation
     QSize actualViewportSize = size();
     
-    // Adjust viewport size for toolbar and tab bar layout
+    // Adjust viewport size for tab bar and toolbar layout (tab bar is now above toolbar)
     QSize effectiveViewportSize = actualViewportSize;
-    int toolbarHeight = isToolbarTwoRows ? 80 : 50; // Toolbar height
     int tabBarHeight = (tabBarContainer && tabBarContainer->isVisible()) ? 38 : 0; // Tab bar height
-    effectiveViewportSize.setHeight(actualViewportSize.height() - toolbarHeight - tabBarHeight);
+    int toolbarHeight = isToolbarTwoRows ? 80 : 50; // Toolbar height
+    effectiveViewportSize.setHeight(actualViewportSize.height() - tabBarHeight - toolbarHeight);
     
     // Calculate scaled canvas size using proper DPR scaling
     int scaledCanvasWidth = canvasSize.width() * zoom / 100;
@@ -2193,12 +2215,12 @@ void MainWindow::addNewTab() {
     QHBoxLayout *tabLayout = new QHBoxLayout(tabWidget);
     tabLayout->setContentsMargins(5, 2, 5, 2);
 
-    // ✅ Create the label (Tab Name) - optimized for horizontal layout
+    // ✅ Create the label (Tab Name) - adaptive width based on content
     QLabel *tabLabel = new QLabel(QString("Tab %1").arg(newTabIndex + 1), tabWidget);    
     tabLabel->setObjectName("tabLabel"); // ✅ Name the label for easy retrieval later
     tabLabel->setWordWrap(false); // ✅ No wrapping for horizontal tabs
-    tabLabel->setFixedWidth(115); // ✅ Narrower width for compact layout
-    tabLabel->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
+    // Use expanding size policy so label grows with content
+    tabLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     tabLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter); // Left-align to show filename start
     tabLabel->setTextFormat(Qt::PlainText); // Ensure plain text for proper eliding
     // Tab label styling will be updated by theme
@@ -2339,13 +2361,13 @@ void MainWindow::addNewTab() {
                         QString pdfPath = in.readLine().trimmed();
                         file.close();
                         if (QFile::exists(pdfPath)) { // Check if PDF file actually exists
-                            tabNameText = elideTabText(QFileInfo(pdfPath).fileName(), 90); // Elide to fit tab width
+                            tabNameText = QFileInfo(pdfPath).fileName(); // Use full filename, adaptive width handles display
                         }
                     }
                 }
                 // Fallback to folder name if no PDF or PDF path invalid
                 if (tabNameText.isEmpty()) {
-                    tabNameText = elideTabText(QFileInfo(folderPath).fileName(), 90); // Elide to fit tab width
+                    tabNameText = QFileInfo(folderPath).fileName(); // Use full filename, adaptive width handles display
                 }
             }
             // Only update the label if a new valid name was determined.
@@ -2368,9 +2390,14 @@ void MainWindow::addNewTab() {
     
     // ✅ Create the tab item and set widget (horizontal layout)
     QListWidgetItem *tabItem = new QListWidgetItem();
-    tabItem->setSizeHint(QSize(135, 22)); // ✅ Narrower and thinner for compact layout
+    tabItem->setSizeHint(QSize(135, 32)); // Initial size, will be updated adaptively
     tabList->addItem(tabItem);
     tabList->setItemWidget(tabItem, tabWidget);  // Attach tab layout
+    
+    // Update tab sizes to adapt to new tab
+    QTimer::singleShot(0, this, [this]() {
+        updateTabSizes();
+    });
 
     canvasStack->addWidget(newCanvas);
 
@@ -2463,6 +2490,11 @@ void MainWindow::removeTabAt(int index) {
     // ✅ Remove tab entry
     QListWidgetItem *item = tabList->takeItem(index);
     delete item;
+    
+    // Update tab sizes and button position after removing tab
+    QTimer::singleShot(0, this, [this]() {
+        updateTabSizes();
+    });
 
     // ✅ Remove and delete the canvas safely
         QWidget *canvasWidget = canvasStack->widget(index); // Get widget before removal
@@ -2601,7 +2633,7 @@ void MainWindow::updateTabLabel() {
     if (!pdfPath.isEmpty()) {
             QFileInfo pdfInfo(pdfPath);
             if (pdfInfo.exists()) {
-            tabName = elideTabText(pdfInfo.fileName(), 90); // e.g., "mydocument.pdf" (elided)
+            tabName = pdfInfo.fileName(); // Use full filename, adaptive width handles display
         }
     }
 
@@ -2610,11 +2642,11 @@ void MainWindow::updateTabLabel() {
         if (folderPath.toLower().endsWith(".spn")) {
             // For .spn packages, use the .spn filename
             QFileInfo spnInfo(folderPath);
-            tabName = elideTabText(spnInfo.fileName(), 90); // e.g., "MyNotebook.spn" (elided)
+            tabName = spnInfo.fileName(); // Use full filename, adaptive width handles display
         } else {
             // For regular folders, use the folder name
         QFileInfo folderInfo(folderPath);
-            tabName = elideTabText(folderInfo.fileName(), 90); // e.g., "MyNotebook" (elided)
+            tabName = folderInfo.fileName(); // Use full filename, adaptive width handles display
         }
     }
 
@@ -2626,6 +2658,11 @@ void MainWindow::updateTabLabel() {
             if (tabLabel) {
                 tabLabel->setText(tabName); // ✅ Update tab label
                 tabLabel->setWordWrap(false); // No wrapping for horizontal tabs
+                
+                // Update tab sizes since text changed
+                QTimer::singleShot(0, this, [this]() {
+                    updateTabSizes();
+                });
             }
         }
     }
@@ -2857,19 +2894,17 @@ void MainWindow::positionDialContainer() {
     int dialWidth = dialContainer->width();   // 140px
     int dialHeight = dialContainer->height(); // 140px
     
-    // Calculate toolbar height based on current layout
-    int toolbarHeight = isToolbarTwoRows ? 80 : 50; // Approximate heights
-    
-    // Add tab bar height if visible
-    int tabBarHeight = (tabBarContainer && tabBarContainer->isVisible()) ? 38 : 0;
-    
+    // Calculate heights based on current layout (tab bar is now above toolbar)
+    int tabBarHeight = (tabBarContainer && tabBarContainer->isVisible()) ? 38 : 0; // Tab bar height
+    int toolbarHeight = isToolbarTwoRows ? 80 : 50; // Toolbar height
+
     // Define margins from edges
     int rightMargin = 20;  // Distance from right edge
-    int topMargin = 20;    // Distance from top edge (below toolbar and tabs)
-    
+    int topMargin = 20;    // Distance from top edge (below tab bar and toolbar)
+
     // Calculate ideal position (top-right corner with margins)
     int idealX = windowWidth - dialWidth - rightMargin;
-    int idealY = toolbarHeight + tabBarHeight + topMargin;
+    int idealY = tabBarHeight + toolbarHeight + topMargin;
     
     // Ensure dial stays within window bounds with minimum margins
     int minMargin = 10;
@@ -2878,7 +2913,7 @@ void MainWindow::positionDialContainer() {
     
     // Clamp position to stay within bounds
     int finalX = qBound(minMargin, idealX, maxX);
-    int finalY = qBound(toolbarHeight + tabBarHeight + minMargin, idealY, maxY);
+    int finalY = qBound(tabBarHeight + toolbarHeight + minMargin, idealY, maxY);
     
     // Move the dial to the calculated position
     dialContainer->move(finalX, finalY);
@@ -3706,6 +3741,30 @@ QIcon MainWindow::loadThemedIcon(const QString& baseName) {
     return QIcon(path);
 }
 
+QIcon MainWindow::loadThemedIconReversed(const QString& baseName) {
+    // Load the opposite of what loadThemedIcon would load
+    // In dark mode: load normal icons (better visibility when selected)
+    // In light mode: load reversed icons (better visibility when selected)
+    QString path = isDarkMode()
+        ? QString(":/resources/icons/%1.png").arg(baseName)
+        : QString(":/resources/icons/%1_reversed.png").arg(baseName);
+    return QIcon(path);
+}
+
+void MainWindow::updateButtonIcon(QPushButton* button, const QString& iconName) {
+    if (!button) return;
+    
+    bool isSelected = button->property("selected").toBool();
+    
+    if (isSelected) {
+        // When selected, use reversed icon for better contrast
+        button->setIcon(loadThemedIconReversed(iconName));
+    } else {
+        // When not selected, use normal themed icon
+        button->setIcon(loadThemedIcon(iconName));
+    }
+}
+
 QString MainWindow::createButtonStyle(bool darkMode) {
     if (darkMode) {
         // Dark mode: Keep current white highlights (good contrast)
@@ -3723,9 +3782,9 @@ QString MainWindow::createButtonStyle(bool darkMode) {
             }
             QPushButton[selected="true"] {
                 background: rgba(255, 255, 255, 100);
-                border: 2px solid rgba(255, 255, 255, 150);
+                /*border: 1px solid rgba(255, 255, 255, 150);*/
                 padding: 4px;
-                border-radius: 4px;
+                border-radius: 0px;
             }
             QPushButton[selected="true"]:hover {
                 background: rgba(255, 255, 255, 120);
@@ -3750,9 +3809,9 @@ QString MainWindow::createButtonStyle(bool darkMode) {
             }
             QPushButton[selected="true"] {
                 background: rgba(0, 0, 0, 80);
-                border: 2px solid rgba(0, 0, 0, 120);
+                /*border: 2px solid rgba(0, 0, 0, 120);*/
                 padding: 4px;
-                border-radius: 4px;
+                border-radius: 0px;
             }
             QPushButton[selected="true"]:hover {
                 background: rgba(0, 0, 0, 100);
@@ -3795,14 +3854,18 @@ void MainWindow::setUseCustomAccentColor(bool use) {
     }
 }
 void MainWindow::updateTheme() {
-    // Update control bar background color
+    // Update control bar background color to match tab list brightness
     QColor accentColor = getAccentColor();
+    bool darkMode = isDarkMode();
+    
     if (controlBar) {
+        // Use same background as unselected tab color
+        QString toolbarBgColor = darkMode ? "rgba(80, 80, 80, 255)" : "rgba(220, 220, 220, 255)";
         controlBar->setStyleSheet(QString(R"(
         QWidget#controlBar {
             background-color: %1;
             }
-        )").arg(accentColor.name()));
+        )").arg(toolbarBgColor));
     }
     
     // Update dial background color
@@ -3817,7 +3880,7 @@ void MainWindow::updateTheme() {
     // Update add tab button styling
     if (addTabButton) {
         bool darkMode = isDarkMode();
-        QString buttonBgColor = darkMode ? "rgba(80, 80, 80, 255)" : "rgba(220, 220, 220, 255)";
+        QString buttonBgColor = darkMode ? "rgba(80, 80, 80, 0)" : "rgba(220, 220, 220, 0)";
         QString buttonHoverColor = darkMode ? "rgba(90, 90, 90, 255)" : "rgba(200, 200, 200, 255)";
         QString buttonPressColor = darkMode ? "rgba(70, 70, 70, 255)" : "rgba(180, 180, 180, 255)";
         QString borderColor = darkMode ? "rgba(100, 100, 100, 255)" : "rgba(180, 180, 180, 255)";
@@ -3825,8 +3888,8 @@ void MainWindow::updateTheme() {
         addTabButton->setStyleSheet(QString(R"(
             QPushButton {
                 background-color: %1;
-                border: 1px solid %2;
-                border-radius: 12px;
+                /*border: 1px solid %2;*/
+                border-radius: 0px;
                 margin: 2px;
             }
             QPushButton:hover {
@@ -3972,47 +4035,52 @@ void MainWindow::updateTheme() {
         )").arg(bgColor).arg(textColor).arg(hoverColor).arg(selectedColor));
     }
     
-    // Update horizontal tab bar styling with accent color
-    if (tabList) {
-        bool darkMode = isDarkMode();
-        QString bgColor = darkMode ? "rgba(60, 60, 60, 255)" : "rgba(240, 240, 240, 255)";
-        QString itemBgColor = darkMode ? "rgba(80, 80, 80, 255)" : "rgba(220, 220, 220, 255)";
-        QString selectedBgColor = darkMode ? "rgba(45, 45, 45, 255)" : "white";
+    // Update horizontal tab bar container and tab list styling - entire container uses accent color
+    if (tabBarContainer && tabList) {
+        // Set the entire tab bar container to use accent color
+        tabBarContainer->setStyleSheet(QString(R"(
+        QWidget#tabBarContainer {
+            background-color: %1;
+        }
+        )").arg(accentColor.name()));
+        
+        // Tab list styling (transparent background to show container color)
+        // Swapped: selected tab now matches toolbar, unselected tabs stand out
+        QString itemBgColor = darkMode ? "rgba(45, 45, 45, 255)" : "white";
+        QString selectedBgColor = darkMode ? "rgba(80, 80, 80, 255)" : "rgba(220, 220, 220, 255)";
         QString borderColor = darkMode ? "rgba(100, 100, 100, 255)" : "rgba(180, 180, 180, 255)";
-        QString hoverBgColor = darkMode ? "rgba(90, 90, 90, 255)" : "rgba(230, 230, 230, 255)";
+        QString hoverBgColor = darkMode ? "rgba(70, 70, 70, 255)" : "rgba(240, 240, 240, 255)";
         
         tabList->setStyleSheet(QString(R"(
         QListWidget {
-            background-color: %1;
+            background-color: transparent;
             border: none;
-            border-bottom: 2px solid %2;
+            border-bottom: 2px solid %1;
             outline: none;
         }
         QListWidget::item {
-            background-color: %3;
-            border: 1px solid %4;
-            border-bottom: none;
+            background-color: %2;
+            border: 1px solid %3;
+            border-bottom: 1px solid %1;
             margin-right: 1px;
             margin-top: 2px;
             padding: 0px;
-            min-width: 80px;
-            max-width: 120px;
         }
         QListWidget::item:selected {
-            background-color: %5;
-            border: 1px solid %4;
-            border-bottom: 2px solid %2;
+            background-color: %4;
+            border: 1px solid %3;
+            border-bottom: 3px solid %4;
             margin-top: 1px;
         }
         QListWidget::item:hover:!selected {
-            background-color: %6;
+            background-color: %5;
         }
         QScrollBar:horizontal {
-            background: %1;
+            background: transparent;
             height: 8px;
             border: none;
             margin: 0px;
-            border-top: 1px solid %4;
+            border-top: 1px solid %3;
         }
         QScrollBar::handle:horizontal {
             background: rgba(150, 150, 150, 120);
@@ -4032,8 +4100,7 @@ void MainWindow::updateTheme() {
         QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
             background: transparent;
         }
-        )").arg(bgColor)
-           .arg(accentColor.name())
+        )").arg(accentColor.name())
            .arg(itemBgColor)
            .arg(borderColor)
            .arg(selectedBgColor)
@@ -4043,27 +4110,28 @@ void MainWindow::updateTheme() {
 
     
     // Force icon reload for all buttons that use themed icons
+    // Use updateButtonIcon for buttons with selectable states, direct setIcon for others
     if (loadPdfButton) loadPdfButton->setIcon(loadThemedIcon("pdf"));
     if (clearPdfButton) clearPdfButton->setIcon(loadThemedIcon("pdfdelete"));
-    if (pdfTextSelectButton) pdfTextSelectButton->setIcon(loadThemedIcon("ibeam"));
+    updateButtonIcon(pdfTextSelectButton, "ibeam");
 
-    if (benchmarkButton) benchmarkButton->setIcon(loadThemedIcon("benchmark"));
-    if (toggleTabBarButton) toggleTabBarButton->setIcon(loadThemedIcon("tabs"));
-    if (toggleOutlineButton) toggleOutlineButton->setIcon(loadThemedIcon("outline"));
-    if (toggleBookmarksButton) toggleBookmarksButton->setIcon(loadThemedIcon("bookmark"));
-    if (toggleBookmarkButton) toggleBookmarkButton->setIcon(loadThemedIcon("star"));
+    updateButtonIcon(benchmarkButton, "benchmark");
+    updateButtonIcon(toggleTabBarButton, "tabs");
+    updateButtonIcon(toggleOutlineButton, "outline");
+    updateButtonIcon(toggleBookmarksButton, "bookmark");
+    updateButtonIcon(toggleBookmarkButton, "star");
     if (selectFolderButton) selectFolderButton->setIcon(loadThemedIcon("folder"));
     if (saveButton) saveButton->setIcon(loadThemedIcon("save"));
     if (saveAnnotatedButton) saveAnnotatedButton->setIcon(loadThemedIcon("saveannotated"));
     if (fullscreenButton) fullscreenButton->setIcon(loadThemedIcon("fullscreen"));
     // if (backgroundButton) backgroundButton->setIcon(loadThemedIcon("background"));
-    if (straightLineToggleButton) straightLineToggleButton->setIcon(loadThemedIcon("straightLine"));
-    if (ropeToolButton) ropeToolButton->setIcon(loadThemedIcon("rope"));
-    if (markdownButton) markdownButton->setIcon(loadThemedIcon("markdown"));
+    updateButtonIcon(straightLineToggleButton, "straightLine");
+    updateButtonIcon(ropeToolButton, "rope");
+    updateButtonIcon(markdownButton, "markdown");
     if (deletePageButton) deletePageButton->setIcon(loadThemedIcon("trash"));
     if (zoomButton) zoomButton->setIcon(loadThemedIcon("zoom"));
-    if (dialToggleButton) dialToggleButton->setIcon(loadThemedIcon("dial"));
-    if (fastForwardButton) fastForwardButton->setIcon(loadThemedIcon("fastforward"));
+    updateButtonIcon(dialToggleButton, "dial");
+    updateButtonIcon(fastForwardButton, "fastforward");
     if (jumpToPageButton) jumpToPageButton->setIcon(loadThemedIcon("bookpage"));
     if (thicknessButton) thicknessButton->setIcon(loadThemedIcon("thickness"));
     if (btnPageSwitch) btnPageSwitch->setIcon(loadThemedIcon("bookpage"));
@@ -4075,12 +4143,13 @@ void MainWindow::updateTheme() {
     if (addPresetButton) addPresetButton->setIcon(loadThemedIcon("savepreset"));
     if (openControlPanelButton) openControlPanelButton->setIcon(loadThemedIcon("settings"));
     if (openRecentNotebooksButton) openRecentNotebooksButton->setIcon(loadThemedIcon("recent"));
-    if (penToolButton) penToolButton->setIcon(loadThemedIcon("pen"));
-    if (markerToolButton) markerToolButton->setIcon(loadThemedIcon("marker"));
-    if (eraserToolButton) eraserToolButton->setIcon(loadThemedIcon("eraser"));
+    updateButtonIcon(penToolButton, "pen");
+    updateButtonIcon(markerToolButton, "marker");
+    updateButtonIcon(eraserToolButton, "eraser");
+    updateButtonIcon(insertPictureButton, "background");
+    updateButtonIcon(touchGesturesButton, "hand");
     
-    // Update button styles with new theme
-    bool darkMode = isDarkMode();
+    // Update button styles with new theme (darkMode already declared at top of function)
     QString newButtonStyle = createButtonStyle(darkMode);
     
     // Update all buttons that use the buttonStyle
@@ -4133,6 +4202,8 @@ void MainWindow::updateTheme() {
     if (nextPageButton) nextPageButton->setStyleSheet(newButtonStyle);
     
     // Update color buttons with palette-based icons
+    // Removed colorPreview widget - no longer needed
+
     if (redButton) {
         QString redIconPath = useBrighterPalette ? ":/resources/icons/pen_light_red.png" : ":/resources/icons/pen_dark_red.png";
         redButton->setIcon(QIcon(redIconPath));
@@ -4209,6 +4280,73 @@ void MainWindow::loadThemeSettings() {
     
     // Apply theme immediately after loading
     updateTheme();
+}
+
+void MainWindow::updateTabSizes() {
+    if (!tabList) return;
+    
+    // Calculate max width: half of tabList width (so 2 tabs can fit side by side)
+    int tabListWidth = tabList->width();
+    int maxTabWidth = tabListWidth / 2;
+    int minTabWidth = 80; // Keep minimum at 80px
+    
+    // Ensure max is at least as big as min
+    if (maxTabWidth < minTabWidth) {
+        maxTabWidth = minTabWidth;
+    }
+    
+    int lastTabRight = 0; // Track where the last tab ends
+    
+    // Update each tab item's size
+    for (int i = 0; i < tabList->count(); ++i) {
+        QListWidgetItem *item = tabList->item(i);
+        if (!item) continue;
+        
+        QWidget *tabWidget = tabList->itemWidget(item);
+        if (!tabWidget) continue;
+        
+        // Get the label to measure text width
+        QLabel *label = tabWidget->findChild<QLabel*>("tabLabel");
+        if (!label) continue;
+        
+        // Calculate desired width based on text content
+        QFontMetrics fm(label->font());
+        int textWidth = fm.horizontalAdvance(label->text());
+        int desiredWidth = textWidth + 35; // Add padding for close button and margins
+        
+        // Clamp between min and max
+        int finalWidth = qBound(minTabWidth, desiredWidth, maxTabWidth);
+        
+        // Set the item size hint
+        item->setSizeHint(QSize(finalWidth, 32));
+        
+        // Calculate position of this tab to find the rightmost edge
+        QRect visualRect = tabList->visualItemRect(item);
+        lastTabRight = qMax(lastTabRight, visualRect.right());
+    }
+    
+    // Position the add tab button next to the last tab
+    if (addTabButton && tabBarContainer && tabList) {
+        // Get the scroll offset
+        int scrollOffset = tabList->horizontalScrollBar()->value();
+        
+        // Calculate the rightmost position for the button (stays at far right initially)
+        int maxButtonX = tabList->width() - addTabButton->width() - 10;
+        
+        // Calculate where the button would be if next to last tab
+        int buttonXNextToTab = lastTabRight - scrollOffset + 10; // 10px spacing from last tab
+        
+        // Button position: next to last tab, but don't go beyond the max position
+        int buttonX = qMin(buttonXNextToTab, maxButtonX);
+        
+        // Ensure button stays visible (at least some margin from left)
+        buttonX = qMax(buttonX, 10);
+        
+        int buttonY = 9; // Slightly lower to align with tabs (tabs have margin-top: 2px)
+        
+        addTabButton->move(buttonX, buttonY);
+        addTabButton->setVisible(true);
+    }
 }
 
 // performance optimizations
@@ -4896,6 +5034,7 @@ void MainWindow::loadUserSettings() {
     
     // Update button visual state to match loaded setting
     touchGesturesButton->setProperty("selected", touchGesturesEnabled);
+    updateButtonIcon(touchGesturesButton, "hand");
     touchGesturesButton->style()->unpolish(touchGesturesButton);
     touchGesturesButton->style()->polish(touchGesturesButton);
     
@@ -4934,11 +5073,10 @@ void MainWindow::toggleControlBar() {
         if (thicknessFrame && thicknessFrame->isVisible()) thicknessFrame->hide();
         
         // Hide orphaned widgets that are not added to any layout
-        if (colorPreview) colorPreview->hide();
-        if (thicknessButton) thicknessButton->hide();
-        if (jumpToPageButton) jumpToPageButton->hide();
+        // Removed colorPreview widget - no longer needed
+        // thicknessButton and jumpToPageButton are now properly in the layout
 
-        if (toolSelector) toolSelector->hide();
+        // toolSelector is now properly hidden with size 0x0
         if (zoomButton) zoomButton->hide();
         if (customColorInput) customColorInput->hide();
         
@@ -4948,7 +5086,7 @@ void MainWindow::toggleControlBar() {
             if (combo->parent() == this && !combo->isVisible()) {
                 // Already hidden, keep it hidden
             } else if (combo->parent() == this) {
-                // This might be the orphaned dialModeSelector or similar
+                // This might be other orphaned combo boxes
                 combo->hide();
             }
         }
@@ -4962,9 +5100,8 @@ void MainWindow::toggleControlBar() {
         // Restore tab bar to its previous state
         tabBarContainer->setVisible(sidebarWasVisibleBeforeFullscreen);
         
-        // Show orphaned widgets when control bar is visible
-        // Note: These are kept hidden normally since they're not in the layout
-        // Only show them if they were specifically intended to be visible
+        // Show widgets that are now properly in the layout
+        // thicknessButton and jumpToPageButton are now in the layout so they'll be visible automatically
     }
     
     // Update dial display to reflect new status
@@ -5137,6 +5274,14 @@ void MainWindow::updateColorButtonStates() {
     blackButton->setProperty("selected", false);
     whiteButton->setProperty("selected", false);
     
+    // Update all color button icons to unselected state
+    QString redIconName = darkMode ? "pen_light_red" : "pen_dark_red";
+    QString blueIconName = darkMode ? "pen_light_blue" : "pen_dark_blue";
+    QString yellowIconName = darkMode ? "pen_light_yellow" : "pen_dark_yellow";
+    QString greenIconName = darkMode ? "pen_light_green" : "pen_dark_green";
+    QString blackIconName = darkMode ? "pen_light_black" : "pen_dark_black";
+    QString whiteIconName = darkMode ? "pen_light_white" : "pen_dark_white";
+    
     // Set the selected property for the matching color button based on current palette
     QColor redColor = getPaletteColor("red");
     QColor blueColor = getPaletteColor("blue");
@@ -5145,6 +5290,7 @@ void MainWindow::updateColorButtonStates() {
     
     if (currentColor == redColor) {
         redButton->setProperty("selected", true);
+        // For color buttons, we don't reverse the icon - the colored pen icon should stay
     } else if (currentColor == blueColor) {
         blueButton->setProperty("selected", true);
     } else if (currentColor == yellowColor) {
@@ -5212,6 +5358,7 @@ void MainWindow::updateStraightLineButtonState() {
     // Set visual indicator that the button is active/inactive
     if (straightLineToggleButton) {
         straightLineToggleButton->setProperty("selected", isEnabled);
+        updateButtonIcon(straightLineToggleButton, "straightLine");
         
         // Force style update
         straightLineToggleButton->style()->unpolish(straightLineToggleButton);
@@ -5229,6 +5376,7 @@ void MainWindow::updateRopeToolButtonState() {
     // Set visual indicator that the button is active/inactive
     if (ropeToolButton) {
         ropeToolButton->setProperty("selected", isEnabled);
+        updateButtonIcon(ropeToolButton, "rope");
 
         // Force style update
         ropeToolButton->style()->unpolish(ropeToolButton);
@@ -5246,6 +5394,7 @@ void MainWindow::updateMarkdownButtonState() {
     // Set visual indicator that the button is active/inactive
     if (markdownButton) {
         markdownButton->setProperty("selected", isEnabled);
+        updateButtonIcon(markdownButton, "markdown");
 
         // Force style update
         markdownButton->style()->unpolish(markdownButton);
@@ -5263,6 +5412,7 @@ void MainWindow::updatePictureButtonState() {
     // Set visual indicator that the button is active/inactive
     if (insertPictureButton) {
         insertPictureButton->setProperty("selected", isEnabled);
+        updateButtonIcon(insertPictureButton, "background");
 
         // Force style update
         insertPictureButton->style()->unpolish(insertPictureButton);
@@ -5288,6 +5438,7 @@ void MainWindow::updateDialButtonState() {
     
     if (dialToggleButton) {
         dialToggleButton->setProperty("selected", isDialVisible);
+        updateButtonIcon(dialToggleButton, "dial");
         
         // Force style update
         dialToggleButton->style()->unpolish(dialToggleButton);
@@ -5298,6 +5449,7 @@ void MainWindow::updateDialButtonState() {
 void MainWindow::updateFastForwardButtonState() {
     if (fastForwardButton) {
         fastForwardButton->setProperty("selected", fastForwardMode);
+        updateButtonIcon(fastForwardButton, "fastforward");
         
         // Force style update
         fastForwardButton->style()->unpolish(fastForwardButton);
@@ -5419,6 +5571,7 @@ void MainWindow::resizeEvent(QResizeEvent *event) {
         layoutUpdateTimer->setSingleShot(true);
         connect(layoutUpdateTimer, &QTimer::timeout, this, [this]() {
             updateToolbarLayout();
+            updateTabSizes(); // Update tab widths when window resizes
             // Also reposition dial after resize finishes
             if (dialContainer && dialContainer->isVisible()) {
                 positionDialContainer();
@@ -5949,6 +6102,7 @@ void MainWindow::toggleOutlineSidebar() {
         // Update bookmarks button state
         if (toggleBookmarksButton) {
             toggleBookmarksButton->setProperty("selected", false);
+            updateButtonIcon(toggleBookmarksButton, "bookmark");
             toggleBookmarksButton->style()->unpolish(toggleBookmarksButton);
             toggleBookmarksButton->style()->polish(toggleBookmarksButton);
         }
@@ -5959,6 +6113,7 @@ void MainWindow::toggleOutlineSidebar() {
     // Update button toggle state
     if (toggleOutlineButton) {
         toggleOutlineButton->setProperty("selected", outlineSidebarVisible);
+        updateButtonIcon(toggleOutlineButton, "outline");
         toggleOutlineButton->style()->unpolish(toggleOutlineButton);
         toggleOutlineButton->style()->polish(toggleOutlineButton);
     }
@@ -6139,6 +6294,7 @@ void MainWindow::updatePdfTextSelectButtonState() {
     
     if (pdfTextSelectButton) {
         pdfTextSelectButton->setProperty("selected", isEnabled);
+        updateButtonIcon(pdfTextSelectButton, "ibeam");
         
         // Force style update (uses the same buttonStyle as other toggle buttons)
         pdfTextSelectButton->style()->unpolish(pdfTextSelectButton);
@@ -6167,6 +6323,7 @@ void MainWindow::toggleBookmarksSidebar() {
         // Update outline button state
         if (toggleOutlineButton) {
             toggleOutlineButton->setProperty("selected", false);
+            updateButtonIcon(toggleOutlineButton, "outline");
             toggleOutlineButton->style()->unpolish(toggleOutlineButton);
             toggleOutlineButton->style()->polish(toggleOutlineButton);
         }
@@ -6178,6 +6335,7 @@ void MainWindow::toggleBookmarksSidebar() {
     // Update button toggle state
     if (toggleBookmarksButton) {
         toggleBookmarksButton->setProperty("selected", bookmarksSidebarVisible);
+        updateButtonIcon(toggleBookmarksButton, "bookmark");
         toggleBookmarksButton->style()->unpolish(toggleBookmarksButton);
         toggleBookmarksButton->style()->polish(toggleBookmarksButton);
     }
@@ -6327,6 +6485,7 @@ void MainWindow::updateBookmarkButtonState() {
     bool isBookmarked = bookmarks.contains(currentPage);
     
     toggleBookmarkButton->setProperty("selected", isBookmarked);
+    updateButtonIcon(toggleBookmarkButton, "star");
     
     // Update tooltip
     if (isBookmarked) {
