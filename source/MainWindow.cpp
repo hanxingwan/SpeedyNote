@@ -88,7 +88,7 @@ void setupLinuxSignalHandlers() {
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false), localServer(nullptr) {
 
-    setWindowTitle(tr("SpeedyNote Beta 0.10.3"));
+    setWindowTitle(tr("SpeedyNote Beta 0.10.4"));
 
 #ifdef Q_OS_LINUX
     // Setup signal handlers for proper cleanup on Linux
