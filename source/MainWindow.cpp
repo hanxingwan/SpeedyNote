@@ -7041,7 +7041,8 @@ void MainWindow::cleanupSharedResources()
 #ifdef Q_OS_LINUX
     // On Linux, try to clean up stale shared memory segments
     // Use system() instead of QProcess to avoid Qt dependencies in cleanup
-    system("ipcs -m | grep $(whoami) | awk '/SpeedyNote/{print $2}' | xargs -r ipcrm -m 2>/dev/null");
+    int ret = system("ipcs -m | grep $(whoami) | awk '/SpeedyNote/{print $2}' | xargs -r ipcrm -m 2>/dev/null");
+    (void)ret; // Explicitly ignore return value
 #endif
 }
 
