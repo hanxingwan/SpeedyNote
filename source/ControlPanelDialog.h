@@ -7,6 +7,7 @@
 #include <QColorDialog>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QDoubleSpinBox>
 #include <QColor>
 #include <QTableWidget>
 #include <QHeaderView>
@@ -62,6 +63,9 @@ private:
     QWidget *toolbarTab;
     void createToolbarTab();
     void createPerformanceTab();
+    
+    // Wayland DPI scale override
+    QDoubleSpinBox *waylandDpiScaleSpinBox;
 
     QWidget *controllerMappingTab;
     QPushButton *reconnectButton;

@@ -251,6 +251,9 @@ protected:
 private:
     QPointF mapLogicalWidgetToPhysicalBuffer(const QPointF& logicalWidgetPoint);
     QRect mapRectBufferToWidgetLogical(const QRectF& physicalBufferRect);
+    
+    // Helper function to get correct DPI scale factor (Wayland-aware)
+    qreal getEffectiveDpiScale(QScreen *screen = nullptr) const;
 
     QPixmap buffer;            // Off-screen buffer
     QImage background;

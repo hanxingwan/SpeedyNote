@@ -34,6 +34,7 @@
 #include <QMessageBox>
 #include <QStandardPaths>
 #include <QUuid>
+#include <QSettings>
 
 #include <QtConcurrent/QtConcurrentRun>
 #include <QFuture>
@@ -225,13 +226,65 @@ InkCanvas::~InkCanvas() {
 
 
 
+// Helper function to get correct DPI scale factor (Wayland-aware)
+qreal InkCanvas::getEffectiveDpiScale(QScreen *screen) const {
+    if (!screen) {
+        screen = QGuiApplication::primaryScreen();
+    }
+    
+    qreal dpr = screen ? screen->devicePixelRatio() : 1.0;
+    QString platformName = QGuiApplication::platformName();
+    
+    if (platformName == "wayland") {
+        // Check if user has set a manual override
+        QSettings settings;
+        qreal manualScale = settings.value("display/waylandDpiScale", 0.0).toReal();
+        
+        if (manualScale > 1.0) {
+            return manualScale;
+        }
+        
+        // Try to derive actual scale factor from physical vs logical DPI
+        if (screen) {
+            qreal physicalDpi = screen->physicalDotsPerInch();
+            qreal logicalDpi = screen->logicalDotsPerInch();
+            
+            // Try calculating from physical DPI / logical DPI
+            if (logicalDpi > 0 && physicalDpi > 0) {
+                qreal calculatedScale = physicalDpi / logicalDpi;
+                if (qAbs(calculatedScale - 1.0) >= 0.01) {
+                    return calculatedScale;
+                }
+            }
+            
+            // If that doesn't work, try physical DPI / 96
+            if (physicalDpi > 0) {
+                qreal calculatedScale = physicalDpi / 96.0;
+                if (qAbs(calculatedScale - 1.0) >= 0.01) {
+                    return calculatedScale;
+                }
+            }
+        }
+        
+        return dpr;
+    }
+    
+    // X11/Windows: use standard device pixel ratio
+    return dpr;
+}
+
 void InkCanvas::initializeBuffer() {
     QScreen *screen = QGuiApplication::primaryScreen();
     qreal dpr = screen ? screen->devicePixelRatio() : 1.0;
 
     // Get logical screen size
     QSize logicalSize = screen ? screen->size() : QSize(1440, 900);
-    QSize pixelSize = logicalSize * dpr;
+    
+    // Get effective DPI scale (Wayland-aware)
+    qreal effectiveScale = getEffectiveDpiScale(screen);
+    
+    QSize pixelSize = logicalSize * effectiveScale;
+
     
     // ✅ Double the vertical height for pseudo smooth scrolling system
     // This allows combining two pages vertically for seamless scrolling
@@ -616,9 +669,10 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
         painter.setPen(linePen);
 
         qreal scaledDensity = backgroundDensity;
-
-        if (devicePixelRatioF() > 1.0)
-            scaledDensity *= devicePixelRatioF();  // Optional DPI handling
+        qreal effectiveScale = getEffectiveDpiScale();
+        
+        if (effectiveScale > 1.0)
+            scaledDensity *= effectiveScale;  // DPI handling (Wayland-aware)
 
         if (backgroundStyle == BackgroundStyle::Lines || backgroundStyle == BackgroundStyle::Grid) {
             for (int y = 0; y < buffer.height(); y += scaledDensity)
@@ -1340,15 +1394,15 @@ QRectF InkCanvas::calculatePreviewRect(const QPointF &start, const QPointF &oldE
     QRectF newLineRect = QRectF(screenStart, screenNewEnd).normalized();
     
     // Calculate padding based on pen thickness and device pixel ratio
-    qreal dpr = devicePixelRatioF();
+    qreal effectiveScale = getEffectiveDpiScale();
     qreal padding;
     
     if (currentTool == ToolType::Eraser) {
-        padding = penThickness * 6.0 * dpr;
+        padding = penThickness * 6.0 * effectiveScale;
     } else if (currentTool == ToolType::Marker) {
-        padding = penThickness * 8.0 * dpr;
+        padding = penThickness * 8.0 * effectiveScale;
     } else {
-        padding = penThickness * dpr;
+        padding = penThickness * effectiveScale;
     }
     
     // Ensure minimum padding
@@ -2114,8 +2168,9 @@ void InkCanvas::saveAnnotated(int pageNumber) {
             painter.setPen(linePen);
 
             qreal scaledDensity = backgroundDensity;
-            if (devicePixelRatioF() > 1.0) {
-                scaledDensity *= devicePixelRatioF();
+            qreal effectiveScale = getEffectiveDpiScale();
+            if (effectiveScale > 1.0) {
+                scaledDensity *= effectiveScale;  // DPI handling (Wayland-aware)
             }
 
             if (backgroundStyle == BackgroundStyle::Lines || backgroundStyle == BackgroundStyle::Grid) {
@@ -2306,9 +2361,9 @@ void InkCanvas::loadPage(int pageNumber) {
             // This prevents resizing cached buffers that might already be correctly sized
             if (!loadedFromCache) {
                 QScreen *screen = QGuiApplication::primaryScreen();
-                qreal dpr = screen ? screen->devicePixelRatio() : 1.0;
                 QSize logicalSize = screen ? screen->size() : QSize(1440, 900);
-                QSize expectedPixelSize = logicalSize * dpr;
+                qreal effectiveScale = getEffectiveDpiScale(screen);
+                QSize expectedPixelSize = logicalSize * effectiveScale;
                 
                 // ✅ Double the vertical height for pseudo smooth scrolling system
                 expectedPixelSize.setHeight(expectedPixelSize.height() * 2);
@@ -5095,6 +5150,7 @@ int InkCanvas::getAutoscrollThreshold() const {
     
     return singlePageHeight;
 }
+
 
 
 
