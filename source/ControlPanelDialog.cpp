@@ -18,6 +18,7 @@
 #include <QMetaObject>
 #include <QIcon>
 #include <QStandardPaths>
+#include <QSettings>
 
 ControlPanelDialog::ControlPanelDialog(MainWindow *mainWindow, InkCanvas *targetCanvas, QWidget *parent)
     : QDialog(parent), canvas(targetCanvas), selectedColor(canvas->getBackgroundColor()), mainWindowRef(mainWindow) {
@@ -249,13 +250,36 @@ void ControlPanelDialog::createPerformanceTab() {
     QLabel *notePDF = new QLabel(tr("Adjust how the PDF is rendered. Higher DPI means better quality but slower performance. DO NOT CHANGE THIS OPTION WHEN MULTIPLE TABS ARE OPEN. THIS MAY LEAD TO UNDEFINED BEHAVIOR!"));
     notePDF->setWordWrap(true);
     notePDF->setStyleSheet("color: gray; font-size: 10px;");
-
+    
+    // Wayland DPI scale override
+    QLabel *waylandDpiLabel = new QLabel(tr("Wayland DPI Scale Override:"));
+    waylandDpiScaleSpinBox = new QDoubleSpinBox();
+    waylandDpiScaleSpinBox->setRange(1.0, 3.0);
+    waylandDpiScaleSpinBox->setSingleStep(0.05);
+    waylandDpiScaleSpinBox->setDecimals(2);
+    waylandDpiScaleSpinBox->setSpecialValueText(tr("Auto"));
+    
+    QSettings settings;
+    qreal savedScale = settings.value("display/waylandDpiScale", 0.0).toReal();
+    waylandDpiScaleSpinBox->setValue(savedScale);
+    
+    connect(waylandDpiScaleSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [](double value) {
+        QSettings settings;
+        settings.setValue("display/waylandDpiScale", value);
+    });
+    
+    QLabel *noteWaylandDpi = new QLabel(tr("Wayland DPI scale override (1.0 = 100%, 1.5 = 150%, 2.0 = 200%). Set to 1.0 to disable. Only affects Wayland. Requires restart."));
+    noteWaylandDpi->setWordWrap(true);
+    noteWaylandDpi->setStyleSheet("color: gray; font-size: 10px;");
 
     layout->addWidget(previewToggle);
     layout->addWidget(note);
     layout->addWidget(dpiLabel);
     layout->addWidget(dpiSelector);
     layout->addWidget(notePDF);
+    layout->addWidget(waylandDpiLabel);
+    layout->addWidget(waylandDpiScaleSpinBox);
+    layout->addWidget(noteWaylandDpi);
 
     layout->addStretch();
 

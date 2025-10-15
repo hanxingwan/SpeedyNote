@@ -615,19 +615,19 @@ void MainWindow::setupUi() {
     zoom50Button->setFixedSize(35, 30);
     zoom50Button->setStyleSheet(buttonStyle);
     zoom50Button->setToolTip(tr("Set Zoom to 50%"));
-    connect(zoom50Button, &QPushButton::clicked, [this]() { zoomSlider->setValue(50 / initialDpr); updateDialDisplay(); });
+    connect(zoom50Button, &QPushButton::clicked, [this]() { zoomSlider->setValue(qRound(50.0 / initialDpr)); updateDialDisplay(); });
 
     dezoomButton = new QPushButton("1x", this);
     dezoomButton->setFixedSize(26, 30);
     dezoomButton->setStyleSheet(buttonStyle);
     dezoomButton->setToolTip(tr("Set Zoom to 100%"));
-    connect(dezoomButton, &QPushButton::clicked, [this]() { zoomSlider->setValue(100 / initialDpr); updateDialDisplay(); });
+    connect(dezoomButton, &QPushButton::clicked, [this]() { zoomSlider->setValue(qRound(100.0 / initialDpr)); updateDialDisplay(); });
 
     zoom200Button = new QPushButton("2x", this);
     zoom200Button->setFixedSize(31, 30);
     zoom200Button->setStyleSheet(buttonStyle);
     zoom200Button->setToolTip(tr("Set Zoom to 200%"));
-    connect(zoom200Button, &QPushButton::clicked, [this]() { zoomSlider->setValue(200 / initialDpr); updateDialDisplay(); });
+    connect(zoom200Button, &QPushButton::clicked, [this]() { zoomSlider->setValue(qRound(200.0 / initialDpr)); updateDialDisplay(); });
 
     panXSlider = new QScrollBar(Qt::Horizontal, this);
     panYSlider = new QScrollBar(Qt::Vertical, this);
@@ -1829,8 +1829,45 @@ void MainWindow::updateZoom() {
 
 qreal MainWindow::getDevicePixelRatio(){
     QScreen *screen = QGuiApplication::primaryScreen();
-    qreal devicePixelRatio = screen ? screen->devicePixelRatio() : 1.0; // Default to 1.0 if null
-    return devicePixelRatio;
+    qreal dpr = screen ? screen->devicePixelRatio() : 1.0;
+    QString platformName = QGuiApplication::platformName();
+    
+    if (platformName == "wayland") {
+        // Check if user has set a manual override
+        QSettings settings;
+        qreal manualScale = settings.value("display/waylandDpiScale", 0.0).toReal();
+        
+        if (manualScale > 1.0) {
+            return manualScale;
+        }
+        
+        // Try to derive actual scale factor from physical vs logical DPI
+        if (screen) {
+            qreal physicalDpi = screen->physicalDotsPerInch();
+            qreal logicalDpi = screen->logicalDotsPerInch();
+            
+            // Try calculating from physical DPI / logical DPI
+            if (logicalDpi > 0 && physicalDpi > 0) {
+                qreal calculatedScale = physicalDpi / logicalDpi;
+                if (qAbs(calculatedScale - 1.0) >= 0.01) {
+                    return calculatedScale;
+                }
+            }
+            
+            // If that doesn't work, try physical DPI / 96
+            if (physicalDpi > 0) {
+                qreal calculatedScale = physicalDpi / 96.0;
+                if (qAbs(calculatedScale - 1.0) >= 0.01) {
+                    return calculatedScale;
+                }
+            }
+        }
+        
+        return dpr;
+    }
+    
+    // X11/Windows: use standard device pixel ratio
+    return dpr;
 }
 
 void MainWindow::updatePanRange() {
@@ -2402,7 +2439,7 @@ void MainWindow::addNewTab() {
     tabList->setCurrentItem(tabItem);
     canvasStack->setCurrentWidget(newCanvas);
 
-    zoomSlider->setValue(100 / initialDpr); // Set initial zoom level based on DPR
+    zoomSlider->setValue(qRound(100.0 / initialDpr)); // Set initial zoom level based on DPR
     updateDialDisplay();
     updateStraightLineButtonState();  // Initialize straight line button state for the new tab
     updateRopeToolButtonState(); // Initialize rope tool button state for the new tab
@@ -2907,7 +2944,7 @@ void MainWindow::updateDialDisplay() {
             }
             break;  
         case DialMode::ZoomControl:
-            dialDisplay->setText(QString(tr("\n\nZoom\n%1%").arg(currentCanvas() ? currentCanvas()->getZoom() * initialDpr : zoomSlider->value() * initialDpr)));
+            dialDisplay->setText(QString(tr("\n\nZoom\n%1%").arg(currentCanvas() ? qRound(currentCanvas()->getZoom() * initialDpr) : qRound(zoomSlider->value() * initialDpr))));
             dialIconView->setPixmap(QPixmap(":/resources/reversed_icons/zoom_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
             break;
   
@@ -5092,9 +5129,9 @@ void MainWindow::cycleZoomLevels() {
     int targetZoom;
     
     // Calculate the scaled zoom levels based on initial DPR
-    int zoom50 = 50 / initialDpr;
-    int zoom100 = 100 / initialDpr;
-    int zoom200 = 200 / initialDpr;
+    int zoom50 = qRound(50.0 / initialDpr);
+    int zoom100 = qRound(100.0 / initialDpr);
+    int zoom200 = qRound(200.0 / initialDpr);
     
     // Cycle through 0.5x -> 1x -> 2x -> 0.5x...
     if (currentZoom <= zoom50 + 5) { // Close to 0.5x (with small tolerance)
@@ -7004,7 +7041,8 @@ void MainWindow::cleanupSharedResources()
 #ifdef Q_OS_LINUX
     // On Linux, try to clean up stale shared memory segments
     // Use system() instead of QProcess to avoid Qt dependencies in cleanup
-    system("ipcs -m | grep $(whoami) | awk '/SpeedyNote/{print $2}' | xargs -r ipcrm -m 2>/dev/null");
+    int ret = system("ipcs -m | grep $(whoami) | awk '/SpeedyNote/{print $2}' | xargs -r ipcrm -m 2>/dev/null");
+    (void)ret; // Explicitly ignore return value
 #endif
 }
 
