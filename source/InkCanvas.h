@@ -409,6 +409,10 @@ private:
     QTimer* inertiaTimer = nullptr; // Timer for inertia animation
     qreal inertiaVelocityX = 0.0; // Current inertia velocity X
     qreal inertiaVelocityY = 0.0; // Current inertia velocity Y
+    
+    // Auto-save timer (incremental saves to reduce page-switch burden)
+    QTimer* autoSaveTimer = nullptr; // Timer for periodic auto-save
+    int autoSaveInterval = 10000; // Auto-save interval in milliseconds (default 10 seconds)
     qreal inertiaPanX = 0.0; // Smooth pan X with sub-pixel precision
     qreal inertiaPanY = 0.0; // Smooth pan Y with sub-pixel precision
     QPointF lastTouchVelocity; // Last measured velocity for inertia
@@ -514,6 +518,7 @@ private slots:
     void cacheAdjacentPages(); // Cache adjacent pages after delay
     void cacheAdjacentNotePages(); // Cache adjacent note pages after delay
     void updateInertiaScroll(); // Update inertia scrolling animation
+    void onAutoSaveTimeout(); // Perform auto-save when timer expires
 };
 
 #endif // INKCANVAS_H
