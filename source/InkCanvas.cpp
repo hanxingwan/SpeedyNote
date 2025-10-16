@@ -4277,6 +4277,17 @@ void InkCanvas::invalidateBothPagesCache(int pageNumber) {
     // Invalidate both pages of a combined canvas to ensure cache doesn't have unsplit combined buffers
     QMutexLocker locker(&noteCacheMutex);
     
+    // ✅ FIX: Also invalidate PREVIOUS combined page (pageNumber - 1)
+    // because it displays the current page on its BOTTOM HALF
+    // Example: If editing page 100 on combined (100,101):
+    //   - Page (99,100) shows page 100 on bottom half → needs invalidation
+    //   - Page (100,101) shows page 100 on top half → needs invalidation
+    //   - Page (101,102) shows page 101 on bottom half → needs invalidation
+    if (pageNumber > 0) {
+        noteCache.remove(pageNumber - 1);
+        noteCacheAccessOrder.removeAll(pageNumber - 1);
+    }
+    
     noteCache.remove(pageNumber);
     noteCacheAccessOrder.removeAll(pageNumber);
     noteCache.remove(pageNumber + 1);
