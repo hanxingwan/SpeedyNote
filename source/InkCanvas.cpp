@@ -118,6 +118,12 @@ InkCanvas::InkCanvas(QWidget *parent)
     inertiaTimer = new QTimer(this);
     inertiaTimer->setInterval(16); // ~60 FPS
     connect(inertiaTimer, &QTimer::timeout, this, &InkCanvas::updateInertiaScroll);
+    
+    // Initialize auto-save timer (single-shot, triggered after first edit)
+    autoSaveTimer = new QTimer(this);
+    autoSaveTimer->setSingleShot(true);
+    autoSaveTimer->setInterval(autoSaveInterval);
+    connect(autoSaveTimer, &QTimer::timeout, this, &InkCanvas::onAutoSaveTimeout);
 }
 
 InkCanvas::~InkCanvas() {
@@ -172,6 +178,10 @@ InkCanvas::~InkCanvas() {
     }
     if (inertiaTimer) {
         inertiaTimer->stop();
+        // Timer will be deleted automatically as child of this
+    }
+    if (autoSaveTimer) {
+        autoSaveTimer->stop();
         // Timer will be deleted automatically as child of this
     }
     
@@ -1273,6 +1283,12 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
         
         drawing = false;
         
+        // ✅ AUTO-SAVE: Start timer when stroke ends (debouncing pattern)
+        // Timer will be reset if user starts drawing again before it fires
+        if (edited && autoSaveTimer && !autoSaveTimer->isActive()) {
+            autoSaveTimer->start();
+        }
+        
         // Reset tool state if we were using the hardware eraser
         if (wasUsingHardwareEraser) {
             currentTool = previousTool;
@@ -1819,6 +1835,12 @@ void InkCanvas::drawStroke(const QPointF &start, const QPointF &end, qreal press
     if (!edited){
         edited = true;
     }
+    
+    // ✅ AUTO-SAVE: Reset timer on new stroke to prevent saving during active drawing
+    // Timer will start when stroke ends (debouncing pattern)
+    if (autoSaveTimer && autoSaveTimer->isActive()) {
+        autoSaveTimer->stop();
+    }
 
     QPainter painter(&buffer);
     painter.setRenderHint(QPainter::Antialiasing);
@@ -1881,6 +1903,12 @@ void InkCanvas::eraseStroke(const QPointF &start, const QPointF &end, qreal pres
     bool wasEdited = edited;
     if (!edited){
         edited = true;
+    }
+    
+    // ✅ AUTO-SAVE: Reset timer on new stroke to prevent saving during active drawing
+    // Timer will start when stroke ends (debouncing pattern)
+    if (autoSaveTimer && autoSaveTimer->isActive()) {
+        autoSaveTimer->stop();
     }
 
     QPainter painter(&buffer);
@@ -2129,6 +2157,11 @@ void InkCanvas::saveToFile(int pageNumber) {
     
     edited = false;
     
+    // ✅ AUTO-SAVE: Stop timer after manual save (prevents redundant auto-save)
+    if (autoSaveTimer && autoSaveTimer->isActive()) {
+        autoSaveTimer->stop();
+    }
+    
     // Save windows with appropriate handling for combined canvas
     saveCombinedWindowsForPage(pageNumber);
     
@@ -2296,6 +2329,11 @@ void InkCanvas::loadPage(int pageNumber) {
     
     // Reset edited state when loading a new page
     edited = false;
+    
+    // ✅ AUTO-SAVE: Stop timer when switching pages (new page gets fresh auto-save cycle)
+    if (autoSaveTimer && autoSaveTimer->isActive()) {
+        autoSaveTimer->stop();
+    }
     
     // Handle background image loading (PDF or custom background)
     if (isPdfLoaded && pdfDocument && pageNumber >= 0 && pageNumber < pdfDocument->numPages()) {
@@ -2524,6 +2562,11 @@ void InkCanvas::clearCurrentPage() {
     // Mark as edited and update display
     edited = true;
     update();
+    
+    // ✅ AUTO-SAVE: Start timer after clearing page
+    if (edited && autoSaveTimer && !autoSaveTimer->isActive()) {
+        autoSaveTimer->start();
+    }
     
     // Auto-save the cleared page
     if (!saveFolder.isEmpty()) {
@@ -3125,6 +3168,18 @@ void InkCanvas::updateInertiaScroll() {
     setPanWithTouchScroll(newPanX, newPanY);
 }
 
+void InkCanvas::onAutoSaveTimeout() {
+    // ✅ Perform incremental auto-save to reduce page-switch burden
+    if (edited && !saveFolder.isEmpty()) {
+        saveToFile(lastActivePage);
+        saveCombinedWindowsForPage(lastActivePage);
+        edited = false;
+        
+        // Note: Timer is single-shot, so it won't fire again until the next stroke
+        // This prevents continuous disk writes while idle
+    }
+}
+
 // Helper function to map LOGICAL widget coordinates to PHYSICAL buffer coordinates
 QPointF InkCanvas::mapLogicalWidgetToPhysicalBuffer(const QPointF& logicalWidgetPoint) {
     // Use the same coordinate transformation logic as drawStroke for consistency
@@ -3182,6 +3237,11 @@ void InkCanvas::deleteRopeSelection() {
         // Mark as edited since we deleted content
         if (!edited) {
             edited = true;
+        }
+        
+        // ✅ AUTO-SAVE: Start timer after rope selection operation
+        if (edited && autoSaveTimer && !autoSaveTimer->isActive()) {
+            autoSaveTimer->start();
         }
         
         // Update the entire canvas to remove selection visuals
@@ -3283,6 +3343,11 @@ void InkCanvas::copyRopeSelection() {
         // Mark as edited since we added content
         if (!edited) {
             edited = true;
+        }
+        
+        // ✅ AUTO-SAVE: Start timer after rope selection operation
+        if (edited && autoSaveTimer && !autoSaveTimer->isActive()) {
+            autoSaveTimer->start();
         }
         
         // Update the entire affected area (original + copy + gap)
@@ -5251,18 +5316,16 @@ void InkCanvas::checkAutoscrollThreshold(int oldPanY, int newPanY) {
     // Check for backward autoscroll (scrolling up past -300 for delayed switching)
     // This gives more time for the save operation to complete on slower devices
     if (oldPanY > backwardSwitchThreshold && newPanY <= backwardSwitchThreshold) {
-        // Calculate relative pan offset for smooth continuation
-        // For backward scroll, pan is negative, so we want to restore to near the bottom
-        int excessPanY = newPanY - backwardSwitchThreshold;
-        
         // Determine if this is inertia scrolling or active dragging BEFORE emitting signal
         bool isInertiaScroll = (isTouchPanning && inertiaTimer && inertiaTimer->isActive());
         bool isActiveDrag = (isTouchPanning && !isInertiaScroll);
         
         // Store continuation state BEFORE page switch happens for BOTH inertia and active drag
         if (isActiveDrag || isInertiaScroll) {
-            // For backward, position near the bottom of the previous page
-            pendingContinuationPanY = threshold + excessPanY;
+            // ✅ FIX: For backward scroll, use the FULL negative pan value, not just excess
+            // When at -300, we should restore to threshold - 300 to maintain visual continuity
+            // This prevents the sudden jump from negative pan to 0
+            pendingContinuationPanY = threshold + newPanY;
             pendingContinuationPanX = panOffsetX;
             continueTouchGestureAfterPageLoad = true;
             pageSwitchInProgress = true;
