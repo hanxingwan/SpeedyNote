@@ -3171,8 +3171,23 @@ void InkCanvas::updateInertiaScroll() {
 void InkCanvas::onAutoSaveTimeout() {
     // ✅ Perform incremental auto-save to reduce page-switch burden
     if (edited && !saveFolder.isEmpty()) {
+        // Check if this is a combined canvas to determine if cache invalidation is needed
+        bool isCombinedCanvas = false;
+        if (!backgroundImage.isNull() && buffer.height() >= backgroundImage.height() * 1.8) {
+            isCombinedCanvas = true;
+        } else if (buffer.height() > 1400) { // Fallback heuristic for tall buffers
+            isCombinedCanvas = true;
+        }
+        
         saveToFile(lastActivePage);
         saveCombinedWindowsForPage(lastActivePage);
+        
+        // ✅ CACHE FIX: Invalidate cache after auto-save (just like manual save does)
+        // This ensures that navigating to previous/next combined pages shows the auto-saved edits
+        if (isCombinedCanvas) {
+            invalidateBothPagesCache(lastActivePage);
+        }
+        
         edited = false;
         
         // Note: Timer is single-shot, so it won't fire again until the next stroke
