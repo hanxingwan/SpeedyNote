@@ -2114,27 +2114,10 @@ void InkCanvas::saveToFile(int pageNumber) {
             }
             
             mergedNextImage.save(nextFilePath, "PNG");
-            
-        // Update cache for next page with merged content
-        {
-            QMutexLocker locker(&noteCacheMutex);
-            noteCache.insert(nextPageNumber, new QPixmap(QPixmap::fromImage(mergedNextImage)));
-            // ✅ LRU: Update access order
-            noteCacheAccessOrder.removeAll(nextPageNumber);
-            noteCacheAccessOrder.append(nextPageNumber);
-        }
-            
-            // Note: Cache invalidation is now handled during page switching for better timing
         }
         
-        // Update cache for current page
-        {
-            QMutexLocker locker(&noteCacheMutex);
-            noteCache.insert(pageNumber, new QPixmap(currentPageBuffer));
-            // ✅ LRU: Update access order
-            noteCacheAccessOrder.removeAll(nextPageNumber);
-            noteCacheAccessOrder.append(nextPageNumber);
-        }
+        // ❌ REMOVED: Cache updates here are redundant since cache gets invalidated after save
+        // Cache will be reloaded fresh from disk when needed
         
     } else {
         // Standard single page save
@@ -2145,14 +2128,8 @@ void InkCanvas::saveToFile(int pageNumber) {
         painter.drawPixmap(0, 0, buffer);
         image.save(filePath, "PNG");
         
-        // Update note cache with the saved buffer
-        {
-            QMutexLocker locker(&noteCacheMutex);
-            noteCache.insert(pageNumber, new QPixmap(buffer));
-            // ✅ LRU: Update access order
-            noteCacheAccessOrder.removeAll(pageNumber);
-            noteCacheAccessOrder.append(pageNumber);
-        }
+        // ❌ REMOVED: Cache updates here are redundant since cache gets invalidated after save
+        // Cache will be reloaded fresh from disk when needed
     }
     
     edited = false;
@@ -2362,11 +2339,7 @@ void InkCanvas::loadPage(int pageNumber) {
                 // Don't constrain widget size - let it expand to fill available space
                 // The paintEvent will center the PDF content within the widget
             
-                // Update cache with resized buffer
-                {
-                    QMutexLocker locker(&noteCacheMutex);
-                    noteCache.insert(pageNumber, new QPixmap(buffer));
-                }
+                // ❌ REMOVED: Don't cache the combined buffer! Cache should only have single pages from disk
             }
         }
         } // Close pdfCacheMutex scope
@@ -2403,11 +2376,7 @@ void InkCanvas::loadPage(int pageNumber) {
                 buffer = newBuffer;
                 setMaximumSize(bgWidth, bgHeight);
                 
-                // Update cache with resized buffer
-                {
-                    QMutexLocker locker(&noteCacheMutex);
-                    noteCache.insert(pageNumber, new QPixmap(buffer));
-                }
+                // ❌ REMOVED: Don't cache the combined buffer! Cache should only have single pages from disk
             }
         } else {
             backgroundImage = QPixmap(); // No background for this page
@@ -4305,6 +4274,7 @@ void InkCanvas::invalidateBothPagesCache(int pageNumber) {
     
     noteCache.remove(pageNumber);
     noteCacheAccessOrder.removeAll(pageNumber);
+    
     noteCache.remove(pageNumber + 1);
     noteCacheAccessOrder.removeAll(pageNumber + 1);
 }
