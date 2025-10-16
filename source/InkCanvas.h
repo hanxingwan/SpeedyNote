@@ -98,6 +98,9 @@ public:
     QString getSaveFolder() const { return saveFolder; }
     QString getDisplayPath() const; // ✅ Get display path (.spn package or folder)
     void syncSpnPackage(); // ✅ Sync changes back to .spn file
+    
+    // ✅ Cache invalidation helper
+    void invalidateBothPagesCache(int pageNumber); // Invalidate both pages of a combined canvas
 
     void setLastActivePage(int page) { lastActivePage = page; }
     int getLastActivePage() const { return lastActivePage; }
@@ -305,6 +308,18 @@ private:
     QCache<int, QPixmap> pdfCache; // Caches 5 pages of the PDF
     mutable QMutex pdfCacheMutex; // Thread safety for pdfCache
     QList<int> pdfCacheAccessOrder; // Track access order for LRU eviction (most recent at end)
+    
+    // ✅ PDF TEXT BOX CACHE: Cache text boxes to avoid re-allocation on every page visit
+    struct TextBoxCacheEntry {
+        QList<Poppler::TextBox*> textBoxes;
+        QList<int> pageNumbers;
+        ~TextBoxCacheEntry() {
+            qDeleteAll(textBoxes);
+        }
+    };
+    QMap<int, TextBoxCacheEntry*> pdfTextBoxCache; // Maps page number -> text boxes
+    QList<int> pdfTextBoxCacheAccessOrder; // Track access order for LRU eviction
+    
     std::unique_ptr<Poppler::Document> pdfDocument;
     int currentPdfPage;
     bool isPdfLoaded = false;
@@ -358,9 +373,6 @@ public:
     QStringList getBookmarks() const;
     void setBookmarks(const QStringList &bookmarkList);
     
-    // ✅ Cache management
-    void invalidateCurrentPageCache(); // Invalidate cache for current page when modified
-    
 private:
     // Combined canvas window management
     void loadCombinedWindowsForPage(int pageNumber); // Load windows for combined canvas pages
@@ -368,8 +380,8 @@ private:
     QList<PictureWindow*> loadPictureWindowsForPage(int pageNumber); // Load picture windows without affecting current
     
     // PDF text selection helpers for combined canvas
-    void loadPdfTextBoxesForSinglePage(int pageNumber); // Load text boxes for single page
-    void loadPdfTextBoxesForCombinedCanvas(int pageNumber, int singlePageHeight); // Load text boxes for combined canvas
+    void loadPdfTextBoxesForSinglePage(int pageNumber, TextBoxCacheEntry* entry); // Load text boxes for single page
+    void loadPdfTextBoxesForCombinedCanvas(int pageNumber, int singlePageHeight, TextBoxCacheEntry* entry); // Load text boxes for combined canvas
     // ✅ Migration from old txt files to JSON
     void migrateOldMetadataFiles();
     
@@ -406,6 +418,13 @@ private:
     // Page switch cooldown during inertia
     QElapsedTimer pageSwitchCooldown; // Prevents rapid page switches during inertia
     bool pageSwitchInProgress = false; // True when waiting for page switch to complete
+    
+    // Touch gesture continuation across page switches (for active dragging)
+    bool continueTouchGestureAfterPageLoad = false; // True when we should continue gesture after page load
+    int pendingContinuationPanX = 0; // Stored pan X to restore after page load
+    int pendingContinuationPanY = 0; // Stored pan Y to restore after page load
+    QPointF pendingContinuationTouchPos; // Touch position at the moment of page switch
+    QElapsedTimer pageSwitchRecoveryTimer; // Timer to ignore spurious multi-touch events after page switch
 
     // Background style members (moved to unified JSON metadata section above)
 

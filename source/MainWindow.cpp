@@ -1799,6 +1799,16 @@ void MainWindow::saveCurrentPageConcurrent() {
         }
     });
     
+    // ✅ CRITICAL: Wait for save to complete, then invalidate cache
+    // This ensures files are fully written before cache tries to reload them
+    concurrentSaveFuture.waitForFinished();
+    
+    // Invalidate cache after saving
+    if (isCombinedCanvas) {
+        // Always invalidate both pages to ensure they're reloaded from disk as single pages
+        canvas->invalidateBothPagesCache(pageNumber);
+    }
+    
     // Mark as not edited since we're saving
     canvas->setEdited(false);
 }
