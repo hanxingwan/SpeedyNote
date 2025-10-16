@@ -136,6 +136,15 @@ InkCanvas::~InkCanvas() {
         pdfDocument = nullptr;
     }
     
+    // ✅ MEMORY LEAK FIX: Delete PDF text boxes
+    qDeleteAll(currentPdfTextBoxes);
+    currentPdfTextBoxes.clear();
+    
+    // ✅ MEMORY LEAK FIX: Clear text box cache
+    qDeleteAll(pdfTextBoxCache);
+    pdfTextBoxCache.clear();
+    pdfTextBoxCacheAccessOrder.clear();
+    
     // ✅ Clear caches to free memory
     {
         QMutexLocker locker(&pdfCacheMutex);
@@ -379,6 +388,16 @@ void InkCanvas::clearPdf() {
         pdfCache.clear();
         pdfCacheAccessOrder.clear();
     }
+    
+    // ✅ MEMORY LEAK FIX: Delete PDF text boxes
+    qDeleteAll(currentPdfTextBoxes);
+    currentPdfTextBoxes.clear();
+    currentPdfTextBoxPageNumbers.clear();
+    
+    // ✅ MEMORY LEAK FIX: Clear text box cache
+    qDeleteAll(pdfTextBoxCache);
+    pdfTextBoxCache.clear();
+    pdfTextBoxCacheAccessOrder.clear();
 
     // ✅ Clear the background image immediately to remove PDF from display
     backgroundImage = QPixmap();
@@ -414,6 +433,16 @@ void InkCanvas::clearPdfNoDelete() {
         QMutexLocker locker(&pdfCacheMutex);
         pdfCache.clear();
     }
+    
+    // ✅ MEMORY LEAK FIX: Delete PDF text boxes
+    qDeleteAll(currentPdfTextBoxes);
+    currentPdfTextBoxes.clear();
+    currentPdfTextBoxPageNumbers.clear();
+    
+    // ✅ MEMORY LEAK FIX: Clear text box cache
+    qDeleteAll(pdfTextBoxCache);
+    pdfTextBoxCache.clear();
+    pdfTextBoxCacheAccessOrder.clear();
     
     // Reset cache system state
     currentCachedPage = -1;
@@ -1137,8 +1166,6 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
                 lastMovePoint = event->position();
                 if (!edited){
                     edited = true;
-                    // Invalidate cache for current page since it's been modified
-                    invalidateCurrentPageCache();
                 }
             }
         } else if (straightLineMode && !isErasing) {
@@ -1228,8 +1255,6 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
             update();
             if (!edited){
                 edited = true;
-                // Invalidate cache for current page since it's been modified
-                invalidateCurrentPageCache();
             }
         } else if (straightLineMode && isErasing) {
             // For erasing in straight line mode, most of the work is done during movement
@@ -1243,8 +1268,6 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
             update();
             if (!edited){
                 edited = true;
-                // Invalidate cache for current page since it's been modified
-                invalidateCurrentPageCache();
             }
         }
         
@@ -1567,10 +1590,6 @@ void InkCanvas::mousePressEvent(QMouseEvent *event) {
                     // Mark canvas as edited
                     setEdited(true);
                     
-                    // ✅ CACHE FIX: Invalidate note cache when pictures are created
-                    // This ensures that when switching pages and coming back, the new picture is shown
-                    invalidateCurrentPageCache();
-                    
                     //qDebug() << "  Canvas marked as edited";
                 } else {
                     //qDebug() << "  ERROR: Failed to copy image to notebook!";
@@ -1645,9 +1664,6 @@ void InkCanvas::mousePressEvent(QMouseEvent *event) {
                     if (mainWindow) {
                         mainWindow->updatePictureButtonState();
                     }
-                    
-                    // ✅ CACHE FIX: Invalidate note cache when pictures are added
-                    invalidateCurrentPageCache();
                     
                     // Show brief success message
                     QMessageBox::information(this, tr("Image Pasted"), 
@@ -1798,10 +1814,10 @@ void InkCanvas::drawStroke(const QPointF &start, const QPointF &end, qreal press
         initializeBuffer();
     }
 
+    // Track if this is the first edit
+    bool wasEdited = edited;
     if (!edited){
         edited = true;
-        // Invalidate cache for current page since it's been modified
-        invalidateCurrentPageCache();
     }
 
     QPainter painter(&buffer);
@@ -1842,7 +1858,7 @@ void InkCanvas::drawStroke(const QPointF &start, const QPointF &end, qreal press
     
     QPointF bufferStart = (adjustedStart / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
     QPointF bufferEnd = (adjustedEnd / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
-
+    
     painter.drawLine(bufferStart, bufferEnd);
 
     QRectF updateRect = QRectF(bufferStart, bufferEnd)
@@ -1861,10 +1877,10 @@ void InkCanvas::eraseStroke(const QPointF &start, const QPointF &end, qreal pres
         initializeBuffer();
     }
 
+    // Track if this is the first edit
+    bool wasEdited = edited;
     if (!edited){
         edited = true;
-        // Invalidate cache for current page since it's been modified
-        invalidateCurrentPageCache();
     }
 
     QPainter painter(&buffer);
@@ -1886,7 +1902,7 @@ void InkCanvas::eraseStroke(const QPointF &start, const QPointF &end, qreal pres
     
     QPointF bufferStart = (adjustedStart / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
     QPointF bufferEnd = (adjustedEnd / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
-
+    
     painter.drawLine(bufferStart, bufferEnd);
 
     qreal updatePadding = eraserThickness / 2.0 + 5.0; // Half the eraser thickness plus some extra padding
@@ -2211,7 +2227,7 @@ void InkCanvas::loadPage(int pageNumber) {
 
     // Update current note page tracker
     currentCachedNotePage = pageNumber;
-
+    
     // ✅ NEW APPROACH: Cache single pages, combine on-the-fly
     // Load individual pages into cache (will skip if already cached)
     loadSingleNotePageToCache(pageNumber);
@@ -2388,6 +2404,50 @@ void InkCanvas::loadPage(int pageNumber) {
 
     // Cache adjacent note pages after delay for faster navigation
     checkAndCacheAdjacentNotePages(pageNumber);
+    
+    // ✅ Handle touch gesture continuation after page load (for active dragging/inertia across page boundary)
+    if (continueTouchGestureAfterPageLoad) {
+        // Restore pan offsets to continue the gesture seamlessly
+        panOffsetX = pendingContinuationPanX;
+        panOffsetY = pendingContinuationPanY;
+        
+        // Reset touch pan start positions for correct delta calculation
+        touchPanStartX = panOffsetX;
+        touchPanStartY = panOffsetY;
+        
+        // ✅ CRITICAL: Update inertia pan positions to match the new page
+        // This ensures inertia scrolling continues from the correct position
+        inertiaPanX = panOffsetX;
+        inertiaPanY = panOffsetY;
+        
+        // Emit pan change to update scrollbars
+        emit panChanged(panOffsetX, panOffsetY);
+        
+        // Clear old cached frame immediately to prevent memory leak
+        cachedFrame = QPixmap();
+        cachedFrameOffset = QPoint(0, 0);
+        
+        // Schedule cached frame rebuild after the widget has been rendered
+        // Use a zero-delay timer to ensure rendering happens first, without blocking
+        QTimer::singleShot(0, this, [this]() {
+            if (isTouchPanning) {
+                // Only rebuild if still touch panning (prevents stale timer callbacks)
+                cachedFrame = grab();
+                cachedFrameOffset = QPoint(0, 0);
+            }
+        });
+        
+        // Reset continuation flag
+        continueTouchGestureAfterPageLoad = false;
+        pendingContinuationPanX = 0;
+        pendingContinuationPanY = 0;
+        
+        // Reset page switch progress to allow detection of the next page boundary
+        // Use a short timer to ensure the page is fully loaded before allowing next switch
+        QTimer::singleShot(50, this, [this]() {
+            pageSwitchInProgress = false;
+        });
+    }
 
     update();
     adjustSize();            // Force the widget to update its size
@@ -2463,7 +2523,6 @@ void InkCanvas::clearCurrentPage() {
     
     // Mark as edited and update display
     edited = true;
-    invalidateCurrentPageCache();
     update();
     
     // Auto-save the cleared page
@@ -2756,6 +2815,13 @@ bool InkCanvas::event(QEvent *event) {
                 touchPanStartX = panOffsetX;
                 touchPanStartY = panOffsetY;
             } else if (event->type() == QEvent::TouchUpdate && isPanning) {
+                // ✅ SAFETY: If we're in single-finger panning but suddenly see multiple touch points,
+                // this is likely spurious (finger count shouldn't change without TouchBegin/End)
+                if (activeTouchPoints != 1) {
+                    // Touch count changed mid-gesture - this is invalid, ignore it
+                    event->accept();
+                    return true;
+                }
                 QPointF delta = touchPoint.position() - lastTouchPos;
                 qint64 elapsed = velocityTimer.elapsed();
                 
@@ -2808,7 +2874,21 @@ bool InkCanvas::event(QEvent *event) {
                 lastTouchPos = touchPoint.position();
             }
         } else if (activeTouchPoints == 2) {
-            // Two finger pinch zoom
+            // ✅ SAFETY: Only block spurious 2-finger events during active page switch recovery
+            // This prevents false zoom triggers during fast page switches without blocking legitimate pinch-zoom
+            
+            // During page switch recovery window (50ms), require TouchBegin for 2-finger gestures
+            // This blocks spurious 2-finger detections that happen during page transitions
+            // but allows normal pinch-zoom gestures at other times
+            if (pageSwitchRecoveryTimer.isValid() && pageSwitchRecoveryTimer.elapsed() < 50 
+                && event->type() == QEvent::TouchUpdate) {
+                // We're in the critical page switch recovery period - ignore spurious 2-finger events
+                // (Reduced to 50ms to minimize interference with legitimate gestures)
+                event->accept();
+                return true;
+            }
+            
+            // Two finger pinch zoom (legitimate)
             isPanning = false;
             if (isTouchPanning) {
                 isTouchPanning = false;  // Disable efficient scrolling during pinch-zoom
@@ -2895,12 +2975,20 @@ bool InkCanvas::event(QEvent *event) {
                 update();
             }
         } else {
-            // More than 2 fingers - ignore
+            // More than 2 fingers - reset everything to prevent corrupted state
             isPanning = false;
             if (isTouchPanning) {
                 isTouchPanning = false;  // Disable efficient scrolling
                 emit touchPanningChanged(false);  // Notify that touch panning has ended
             }
+            
+            // Clear any page switch recovery state - something went wrong
+            pageSwitchRecoveryTimer.invalidate();
+            continueTouchGestureAfterPageLoad = false;
+            
+            // Clear cached frame to force full redraw
+            cachedFrame = QPixmap();
+            cachedFrameOffset = QPoint(0, 0);
         }
         
         if (event->type() == QEvent::TouchEnd) {
@@ -2960,6 +3048,10 @@ bool InkCanvas::event(QEvent *event) {
                     update();
                 }
             }
+            
+            // ✅ Invalidate recovery timer when gesture ends cleanly
+            // This prevents stale page switch recovery state from affecting the next gesture
+            pageSwitchRecoveryTimer.invalidate();
             
             // Emit signal that touch gesture has ended
             emit touchGestureEnded();
@@ -3090,8 +3182,6 @@ void InkCanvas::deleteRopeSelection() {
         // Mark as edited since we deleted content
         if (!edited) {
             edited = true;
-            // Invalidate cache for current page since it's been modified
-            invalidateCurrentPageCache();
         }
         
         // Update the entire canvas to remove selection visuals
@@ -3193,8 +3283,6 @@ void InkCanvas::copyRopeSelection() {
         // Mark as edited since we added content
         if (!edited) {
             edited = true;
-            // Invalidate cache for current page since it's been modified
-            invalidateCurrentPageCache();
         }
         
         // Update the entire affected area (original + copy + gap)
@@ -3270,7 +3358,9 @@ void InkCanvas::loadPdfTextBoxes(int pageNumber) {
     // Clear existing text boxes and page number tracking
     // CRITICAL: Clear selectedTextBoxes first to prevent crashes in paintEvent
     selectedTextBoxes.clear();  // Must clear before deleting currentPdfTextBoxes
-    qDeleteAll(currentPdfTextBoxes);
+    
+    // ✅ NO LONGER DELETE: currentPdfTextBoxes will reference cached data
+    // qDeleteAll(currentPdfTextBoxes); // ❌ DON'T DELETE - cached pointers!
     currentPdfTextBoxes.clear();
     currentPdfTextBoxPageNumbers.clear();
     
@@ -3290,31 +3380,62 @@ void InkCanvas::loadPdfTextBoxes(int pageNumber) {
         singlePageHeight = buffer.height() / 2;
     }
 
+    // ✅ CACHE KEY: For combined canvas, use negative page number to differentiate
+    int cacheKey = isCombinedCanvas ? -(pageNumber + 1) : pageNumber;
+    
+    // ✅ CHECK CACHE FIRST
+    if (pdfTextBoxCache.contains(cacheKey)) {
+        TextBoxCacheEntry* entry = pdfTextBoxCache[cacheKey];
+        currentPdfTextBoxes = entry->textBoxes;
+        currentPdfTextBoxPageNumbers = entry->pageNumbers;
+        
+        // Update LRU access order
+        pdfTextBoxCacheAccessOrder.removeAll(cacheKey);
+        pdfTextBoxCacheAccessOrder.append(cacheKey);
+        return;
+    }
+    
+    // ✅ NOT IN CACHE: Allocate new text boxes
+    TextBoxCacheEntry* newEntry = new TextBoxCacheEntry();
+    
     if (isCombinedCanvas) {
-        // For combined canvas, load text boxes for both pages
-        loadPdfTextBoxesForCombinedCanvas(pageNumber, singlePageHeight);
+        loadPdfTextBoxesForCombinedCanvas(pageNumber, singlePageHeight, newEntry);
     } else {
-        // For single page canvas, load normally
-        loadPdfTextBoxesForSinglePage(pageNumber);
+        loadPdfTextBoxesForSinglePage(pageNumber, newEntry);
+    }
+    
+    // ✅ CACHE THE RESULT
+    pdfTextBoxCache[cacheKey] = newEntry;
+    pdfTextBoxCacheAccessOrder.append(cacheKey);
+    
+    // ✅ USE THE CACHED DATA
+    currentPdfTextBoxes = newEntry->textBoxes;
+    currentPdfTextBoxPageNumbers = newEntry->pageNumbers;
+    
+    // ✅ LRU EVICTION: Keep only last 5 pages in cache
+    while (pdfTextBoxCacheAccessOrder.size() > 5) {
+        int oldestKey = pdfTextBoxCacheAccessOrder.takeFirst();
+        TextBoxCacheEntry* oldEntry = pdfTextBoxCache.take(oldestKey);
+        delete oldEntry; // Destructor will qDeleteAll(textBoxes)
     }
 }
 
-void InkCanvas::loadPdfTextBoxesForSinglePage(int pageNumber) {
+void InkCanvas::loadPdfTextBoxesForSinglePage(int pageNumber, TextBoxCacheEntry* entry) {
     // Get the page for text operations
     currentPdfPageForText = std::unique_ptr<Poppler::Page>(pdfDocument->page(pageNumber));
     if (!currentPdfPageForText) {
         return;
     }
 
-    // Load text boxes for the single page
+    // Load text boxes for the single page and populate cache entry
     auto textBoxVector = currentPdfPageForText->textList();
     for (auto& textBox : textBoxVector) {
-        currentPdfTextBoxes.append(textBox.release()); // Transfer ownership to QList
-        currentPdfTextBoxPageNumbers.append(pageNumber); // Track page number for each text box
+        entry->textBoxes.append(textBox.release()); // Transfer ownership to cache entry
+        entry->pageNumbers.append(pageNumber); // Track page number for each text box
     }
 }
 
-void InkCanvas::loadPdfTextBoxesForCombinedCanvas(int pageNumber, int singlePageHeight) {
+void InkCanvas::loadPdfTextBoxesForCombinedCanvas(int pageNumber, int singlePageHeight, TextBoxCacheEntry* entry) {
     // For combined canvas showing pages N and N+1:
     // - Top half shows page N (coordinates as-is)
     // - Bottom half shows page N+1 (coordinates will be adjusted in mapping functions)
@@ -3325,8 +3446,8 @@ void InkCanvas::loadPdfTextBoxesForCombinedCanvas(int pageNumber, int singlePage
         auto topTextBoxVector = currentPdfPageForText->textList();
         for (auto& textBox : topTextBoxVector) {
             // Text boxes for top half keep their original coordinates
-            currentPdfTextBoxes.append(textBox.release());
-            currentPdfTextBoxPageNumbers.append(pageNumber); // Track as page N
+            entry->textBoxes.append(textBox.release());
+            entry->pageNumbers.append(pageNumber); // Track as page N
         }
     }
     
@@ -3338,8 +3459,8 @@ void InkCanvas::loadPdfTextBoxesForCombinedCanvas(int pageNumber, int singlePage
             auto bottomTextBoxVector = currentPdfPageForTextSecond->textList();
             for (auto& textBox : bottomTextBoxVector) {
                 // Text boxes for bottom half - coordinates will be adjusted in mapping functions
-                currentPdfTextBoxes.append(textBox.release());
-                currentPdfTextBoxPageNumbers.append(nextPageNumber); // Track as page N+1
+                entry->textBoxes.append(textBox.release());
+                entry->pageNumbers.append(nextPageNumber); // Track as page N+1
             }
         }
     }
@@ -3781,14 +3902,20 @@ void InkCanvas::renderPdfPageToCacheThreadSafe(int pageNumber, Poppler::Document
     
     // Cache the combined image (thread-safe)
     if (!combinedImage.isNull()) {
-        QPixmap cachedPixmap = QPixmap::fromImage(combinedImage);
+        // Create QPixmap directly from QImage without intermediate copy
         {
             QMutexLocker locker(&pdfCacheMutex);
-            pdfCache.insert(pageNumber, new QPixmap(cachedPixmap));
+            pdfCache.insert(pageNumber, new QPixmap(QPixmap::fromImage(combinedImage)));
             // ✅ LRU: Add newly cached page to end of access order (most recent)
             pdfCacheAccessOrder.removeAll(pageNumber); // Remove if already present
             pdfCacheAccessOrder.append(pageNumber);
         }
+        
+        // ✅ Explicitly release large intermediate QImage objects to prevent accumulation
+        // These can accumulate during rapid page traversal before garbage collection
+        currentPageImage = QImage();
+        nextPageImage = QImage();
+        combinedImage = QImage();
     }
 }
 
@@ -4081,12 +4208,14 @@ void InkCanvas::cacheAdjacentNotePages() {
     }
 }
 
-void InkCanvas::invalidateCurrentPageCache() {
-    if (currentCachedNotePage >= 0) {
-        QMutexLocker locker(&noteCacheMutex);
-        noteCache.remove(currentCachedNotePage);
-        noteCacheAccessOrder.removeAll(currentCachedNotePage);
-    }
+void InkCanvas::invalidateBothPagesCache(int pageNumber) {
+    // Invalidate both pages of a combined canvas to ensure cache doesn't have unsplit combined buffers
+    QMutexLocker locker(&noteCacheMutex);
+    
+    noteCache.remove(pageNumber);
+    noteCacheAccessOrder.removeAll(pageNumber);
+    noteCache.remove(pageNumber + 1);
+    noteCacheAccessOrder.removeAll(pageNumber + 1);
 }
 
 QList<MarkdownWindow*> InkCanvas::loadMarkdownWindowsForPage(int pageNumber) {
@@ -5031,10 +5160,6 @@ void InkCanvas::handlePictureMouseRelease(QMouseEvent *event) {
     // Mark canvas as edited since picture was moved/resized
     setEdited(true);
     
-    // ✅ CACHE FIX: Invalidate note cache when pictures are moved/resized
-    // This ensures that when switching pages and coming back, the updated picture positions are shown
-    invalidateCurrentPageCache();
-    
     // Save current state
     if (pictureManager) {
         int currentPage = getLastActivePage();
@@ -5059,10 +5184,12 @@ void InkCanvas::checkAutoscrollThreshold(int oldPanY, int newPanY) {
         return; 
     }
     
-    // During inertia scrolling, enforce cooldown to prevent rapid page switches
-    if (isTouchPanning && inertiaTimer && inertiaTimer->isActive()) {
-        // Check if we're in cooldown period (500ms after last page switch)
-        if (pageSwitchInProgress && pageSwitchCooldown.isValid() && pageSwitchCooldown.elapsed() < 500) {
+    // Enforce cooldown to prevent rapid page switches during touch panning (both active and inertia)
+    // With smooth continuation, this prevents pages from flipping too quickly
+    if (isTouchPanning) {
+        // Check if we're in cooldown period (300ms after last page switch) 
+        // Reduced from 500ms since smooth continuation makes it feel more natural
+        if (pageSwitchInProgress && pageSwitchCooldown.isValid() && pageSwitchCooldown.elapsed() < 300) {
             return; // Skip autoscroll checks during cooldown
         }
     }
@@ -5095,39 +5222,61 @@ void InkCanvas::checkAutoscrollThreshold(int oldPanY, int newPanY) {
     
     // Check for forward autoscroll (scrolling down past the first page)
     if (oldPanY < threshold && newPanY >= threshold) {
-        emit autoScrollRequested(1); // 1 for forward
+        // Calculate relative pan offset beyond threshold for smooth continuation
+        int excessPanY = newPanY - threshold;
         
-        // Stop inertia during page switch to allow proper pan reset
-        if (isTouchPanning && inertiaTimer && inertiaTimer->isActive()) {
-            inertiaTimer->stop();
-            isTouchPanning = false;
-            emit touchPanningChanged(false);  // Notify that touch panning has ended
+        // Determine if this is inertia scrolling or active dragging BEFORE emitting signal
+        bool isInertiaScroll = (isTouchPanning && inertiaTimer && inertiaTimer->isActive());
+        bool isActiveDrag = (isTouchPanning && !isInertiaScroll);
+        
+        // Store continuation state BEFORE page switch happens for BOTH inertia and active drag
+        if (isActiveDrag || isInertiaScroll) {
+            pendingContinuationPanY = excessPanY;
+            pendingContinuationPanX = panOffsetX;
+            continueTouchGestureAfterPageLoad = true;
             pageSwitchInProgress = true;
             pageSwitchCooldown.start();
             
-            // Clear cached frame - page switch will load new content
-            cachedFrame = QPixmap();
-            cachedFrameOffset = QPoint(0, 0);
+            if (isActiveDrag) {
+                pageSwitchRecoveryTimer.start(); // Only start recovery timer for active dragging
+            }
         }
+        
+        emit autoScrollRequested(1); // 1 for forward
+        
+        // For both inertia and active dragging, we keep touch panning active
+        // and let loadPage() handle continuation for smooth scrolling
     }
     
     // Check for backward autoscroll (scrolling up past -300 for delayed switching)
     // This gives more time for the save operation to complete on slower devices
     if (oldPanY > backwardSwitchThreshold && newPanY <= backwardSwitchThreshold) {
-        emit autoScrollRequested(-1); // -1 for backward (delayed until -300)
+        // Calculate relative pan offset for smooth continuation
+        // For backward scroll, pan is negative, so we want to restore to near the bottom
+        int excessPanY = newPanY - backwardSwitchThreshold;
         
-        // Stop inertia during page switch to allow proper pan reset
-        if (isTouchPanning && inertiaTimer && inertiaTimer->isActive()) {
-            inertiaTimer->stop();
-            isTouchPanning = false;
-            emit touchPanningChanged(false);  // Notify that touch panning has ended
+        // Determine if this is inertia scrolling or active dragging BEFORE emitting signal
+        bool isInertiaScroll = (isTouchPanning && inertiaTimer && inertiaTimer->isActive());
+        bool isActiveDrag = (isTouchPanning && !isInertiaScroll);
+        
+        // Store continuation state BEFORE page switch happens for BOTH inertia and active drag
+        if (isActiveDrag || isInertiaScroll) {
+            // For backward, position near the bottom of the previous page
+            pendingContinuationPanY = threshold + excessPanY;
+            pendingContinuationPanX = panOffsetX;
+            continueTouchGestureAfterPageLoad = true;
             pageSwitchInProgress = true;
             pageSwitchCooldown.start();
             
-            // Clear cached frame - page switch will load new content
-            cachedFrame = QPixmap();
-            cachedFrameOffset = QPoint(0, 0);
+            if (isActiveDrag) {
+                pageSwitchRecoveryTimer.start(); // Only start recovery timer for active dragging
+            }
         }
+        
+        emit autoScrollRequested(-1); // -1 for backward (delayed until -300)
+        
+        // For both inertia and active dragging, we keep touch panning active
+        // and let loadPage() handle continuation for smooth scrolling
     }
 }
 

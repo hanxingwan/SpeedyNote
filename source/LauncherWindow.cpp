@@ -365,9 +365,8 @@ void LauncherWindow::populateRecentGrid()
     QLayoutItem *child;
     while ((child = recentGridLayout->takeAt(0)) != nullptr) {
         if (child->widget()) {
-            // Disconnect all signals to prevent memory leaks
-            child->widget()->disconnect();
-            child->widget()->deleteLater(); // Use deleteLater for safer deletion
+            // ✅ No need to disconnect - deleteLater() handles signal cleanup automatically
+            child->widget()->deleteLater();
         }
         delete child;
     }
@@ -409,9 +408,8 @@ void LauncherWindow::populateStarredGrid()
     QLayoutItem *child;
     while ((child = starredGridLayout->takeAt(0)) != nullptr) {
         if (child->widget()) {
-            // Disconnect all signals to prevent memory leaks
-            child->widget()->disconnect();
-            child->widget()->deleteLater(); // Use deleteLater for safer deletion
+            // ✅ No need to disconnect - deleteLater() handles signal cleanup automatically
+            child->widget()->deleteLater();
         }
         delete child;
     }
@@ -1161,7 +1159,7 @@ void LauncherWindow::clearRecentGrid()
     QLayoutItem *child;
     while ((child = recentGridLayout->takeAt(0)) != nullptr) {
         if (child->widget()) {
-            child->widget()->disconnect();
+            // ✅ No need to disconnect - deleteLater() handles signal cleanup automatically
             child->widget()->deleteLater();
         }
         delete child;
@@ -1176,7 +1174,7 @@ void LauncherWindow::clearStarredGrid()
     QLayoutItem *child;
     while ((child = starredGridLayout->takeAt(0)) != nullptr) {
         if (child->widget()) {
-            child->widget()->disconnect();
+            // ✅ No need to disconnect - deleteLater() handles signal cleanup automatically
             child->widget()->deleteLater();
         }
         delete child;
