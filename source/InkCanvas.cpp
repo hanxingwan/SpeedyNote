@@ -142,11 +142,17 @@ InkCanvas::~InkCanvas() {
         pdfDocument = nullptr;
     }
     
-    // ✅ MEMORY LEAK FIX: Delete PDF text boxes
-    qDeleteAll(currentPdfTextBoxes);
+    // ✅ Clear text box references (pointers owned by cache, don't delete here)
     currentPdfTextBoxes.clear();
+    currentPdfTextBoxPageNumbers.clear();
     
-    // ✅ MEMORY LEAK FIX: Clear text box cache
+    // ✅ Clear page size cache and trackers
+    pdfPageSizeCache.clear();
+    currentTextPageNumber = -1;
+    currentTextPageNumberSecond = -1;
+    currentTextBoxesLoadedForPage = -1;
+    
+    // ✅ MEMORY LEAK FIX: Clear text box cache (will delete all TextBox* via entry destructors)
     qDeleteAll(pdfTextBoxCache);
     pdfTextBoxCache.clear();
     pdfTextBoxCacheAccessOrder.clear();
@@ -162,6 +168,18 @@ InkCanvas::~InkCanvas() {
         noteCache.clear();
         noteCacheAccessOrder.clear();
     }
+    
+    // ✅ CRITICAL: Wait for and clean up any active PDF watchers before destruction
+    for (QFutureWatcher<void>* watcher : activePdfWatchers) {
+        if (watcher) {
+            if (!watcher->isFinished()) {
+                watcher->cancel();
+                watcher->waitForFinished(); // Wait for thread to complete
+            }
+            delete watcher; // Delete immediately
+        }
+    }
+    activePdfWatchers.clear();
     
     // ✅ Stop and clean up timers
     if (pdfCacheTimer) {
@@ -188,7 +206,7 @@ InkCanvas::~InkCanvas() {
     // ✅ Clear inertia scrolling resources
     cachedFrame = QPixmap(); // Release cached frame memory
     recentVelocities.clear(); // Clear velocity history
-
+    
     // ✅ MEMORY LEAK FIX: Clear rope selection buffer to release memory
     selectionBuffer = QPixmap();
     selectionRect = QRect();
@@ -201,28 +219,33 @@ InkCanvas::~InkCanvas() {
     backgroundImage = QPixmap();
     picturePreviewRect = QRect();
     
-    // ✅ Cancel and clean up any active PDF watchers
+    // ✅ CRITICAL: Wait for and clean up any active PDF watchers
+    // Must wait for futures to complete to prevent memory leaks from thread-local Poppler::Documents
     for (QFutureWatcher<void>* watcher : activePdfWatchers) {
-        if (watcher && !watcher->isFinished()) {
+        if (watcher) {
+            if (!watcher->isFinished()) {
             watcher->cancel();
+                watcher->waitForFinished(); // Block until thread completes and releases resources
         }
-        watcher->deleteLater();
+            delete watcher; // Delete immediately, not later
+        }
     }
     activePdfWatchers.clear();
     
-    // ✅ Cancel and clean up any active note cache watchers
+    // ✅ Wait for and clean up any active note cache watchers
     for (QFutureWatcher<void>* watcher : activeNoteWatchers) {
-        if (watcher && !watcher->isFinished()) {
+        if (watcher) {
+            if (!watcher->isFinished()) {
             watcher->cancel();
+                watcher->waitForFinished(); // Block until thread completes
         }
-        watcher->deleteLater();
+            delete watcher; // Delete immediately, not later
+        }
     }
     activeNoteWatchers.clear();
     
     // ✅ Clear PDF text boxes - CRITICAL: Clear selectedTextBoxes first to prevent crashes
-    selectedTextBoxes.clear();  // Must clear before deleting currentPdfTextBoxes
-    qDeleteAll(currentPdfTextBoxes);
-    currentPdfTextBoxes.clear();
+    selectedTextBoxes.clear();  // References to cached text boxes, don't delete
     
     // ✅ Explicitly clean up window managers to prevent memory leaks
     if (markdownManager) {
@@ -354,12 +377,15 @@ void InkCanvas::loadPdf(const QString &pdfPath) {
         pdfCacheTimer->stop();
     }
     
-    // Cancel and clean up any active PDF watchers from previous PDF
+    // ✅ CRITICAL: Wait for and clean up any active PDF watchers from previous PDF
     for (QFutureWatcher<void>* watcher : activePdfWatchers) {
-        if (watcher && !watcher->isFinished()) {
+        if (watcher) {
+            if (!watcher->isFinished()) {
             watcher->cancel();
+                watcher->waitForFinished(); // Wait for thread to complete
         }
-        watcher->deleteLater();
+            delete watcher; // Delete immediately
+        }
     }
     activePdfWatchers.clear();
     
@@ -373,7 +399,6 @@ void InkCanvas::loadPdf(const QString &pdfPath) {
         
         totalPdfPages = pdfDocument->numPages();
         isPdfLoaded = true;
-        totalPdfPages = pdfDocument->numPages();
         // ✅ Don't automatically load page 0 - let MainWindow handle initial page loading
         
         // ✅ Save the PDF path in the unified JSON metadata
@@ -399,12 +424,18 @@ void InkCanvas::clearPdf() {
         pdfCacheAccessOrder.clear();
     }
     
-    // ✅ MEMORY LEAK FIX: Delete PDF text boxes
-    qDeleteAll(currentPdfTextBoxes);
+    // ✅ Clear text box references (pointers owned by cache, don't delete here)
     currentPdfTextBoxes.clear();
     currentPdfTextBoxPageNumbers.clear();
+    selectedTextBoxes.clear();
     
-    // ✅ MEMORY LEAK FIX: Clear text box cache
+    // ✅ Clear page size cache and trackers
+    pdfPageSizeCache.clear();
+    currentTextPageNumber = -1;
+    currentTextPageNumberSecond = -1;
+    currentTextBoxesLoadedForPage = -1;
+    
+    // ✅ MEMORY LEAK FIX: Clear text box cache (will delete all TextBox* via entry destructors)
     qDeleteAll(pdfTextBoxCache);
     pdfTextBoxCache.clear();
     pdfTextBoxCacheAccessOrder.clear();
@@ -418,12 +449,15 @@ void InkCanvas::clearPdf() {
         pdfCacheTimer->stop();
     }
     
-    // Cancel and clean up any active PDF watchers
+    // ✅ CRITICAL: Wait for and clean up any active PDF watchers
     for (QFutureWatcher<void>* watcher : activePdfWatchers) {
-        if (watcher && !watcher->isFinished()) {
+        if (watcher) {
+            if (!watcher->isFinished()) {
             watcher->cancel();
+                watcher->waitForFinished(); // Wait for thread to complete
         }
-        watcher->deleteLater();
+            delete watcher; // Delete immediately
+        }
     }
     activePdfWatchers.clear();
 
@@ -444,10 +478,16 @@ void InkCanvas::clearPdfNoDelete() {
         pdfCache.clear();
     }
     
-    // ✅ MEMORY LEAK FIX: Delete PDF text boxes
-    qDeleteAll(currentPdfTextBoxes);
+    // ✅ Clear text box references (pointers owned by cache, don't delete here)
     currentPdfTextBoxes.clear();
     currentPdfTextBoxPageNumbers.clear();
+    selectedTextBoxes.clear();
+    
+    // ✅ Clear page size cache and trackers
+    pdfPageSizeCache.clear();
+    currentTextPageNumber = -1;
+    currentTextPageNumberSecond = -1;
+    currentTextBoxesLoadedForPage = -1;
     
     // ✅ MEMORY LEAK FIX: Clear text box cache
     qDeleteAll(pdfTextBoxCache);
@@ -460,12 +500,15 @@ void InkCanvas::clearPdfNoDelete() {
         pdfCacheTimer->stop();
     }
     
-    // Cancel and clean up any active PDF watchers
+    // ✅ CRITICAL: Wait for and clean up any active PDF watchers
     for (QFutureWatcher<void>* watcher : activePdfWatchers) {
-        if (watcher && !watcher->isFinished()) {
+        if (watcher) {
+            if (!watcher->isFinished()) {
             watcher->cancel();
+                watcher->waitForFinished(); // Wait for thread to complete
         }
-        watcher->deleteLater();
+            delete watcher; // Delete immediately
+        }
     }
     activePdfWatchers.clear();
 }
@@ -493,7 +536,8 @@ void InkCanvas::loadPdfPage(int pageNumber) {
     
     if (isCached) {
         loadPage(pageNumber);  // Load annotations
-        loadPdfTextBoxes(pageNumber); // Load text boxes for PDF text selection
+        // ✅ MEMORY OPTIMIZATION: Don't load text boxes until user attempts selection
+        // loadPdfTextBoxes(pageNumber); // Load text boxes for PDF text selection
         update();
         
         // Check and cache adjacent pages after delay
@@ -515,7 +559,8 @@ void InkCanvas::loadPdfPage(int pageNumber) {
     }
     
     loadPage(pageNumber);  // Load existing canvas annotations
-    loadPdfTextBoxes(pageNumber); // Load text boxes for PDF text selection
+    // ✅ MEMORY OPTIMIZATION: Don't load text boxes until user attempts selection
+    // loadPdfTextBoxes(pageNumber); // Load text boxes for PDF text selection
     update();
     
     // Cache adjacent pages after delay
@@ -709,7 +754,7 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
 
         qreal scaledDensity = backgroundDensity;
         qreal effectiveScale = getEffectiveDpiScale();
-        
+
         if (effectiveScale > 1.0)
             scaledDensity *= effectiveScale;  // DPI handling (Wayland-aware)
 
@@ -997,6 +1042,12 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
     // This redirects stylus input to text selection instead of drawing
     if (pdfTextSelectionEnabled && isPdfLoaded) {
         if (event->type() == QEvent::TabletPress) {
+            // ✅ LAZY LOAD: Only load text boxes when user actually attempts selection
+            // Check if text boxes need to be loaded or reloaded for current page
+            if (currentCachedPage >= 0 && currentTextBoxesLoadedForPage != currentCachedPage) {
+                loadPdfTextBoxes(currentCachedPage);
+            }
+            
             pdfTextSelecting = true;
             pdfSelectionStart = event->position();
             pdfSelectionEnd = pdfSelectionStart;
@@ -1031,12 +1082,12 @@ void InkCanvas::tabletEvent(QTabletEvent *event) {
             if (pdfTextSelectionTimer && pdfTextSelectionTimer->isActive()) {
                 pdfTextSelectionTimer->stop();
                 if (hasPendingSelection) {
-                    updatePdfTextSelection(pendingSelectionStart, pendingSelectionEnd);
+                    updatePdfTextSelection(pendingSelectionStart, pendingSelectionEnd, true); // Final selection
                     hasPendingSelection = false;
                 }
             } else {
                 // Update selection with final position
-                updatePdfTextSelection(pdfSelectionStart, pdfSelectionEnd);
+                updatePdfTextSelection(pdfSelectionStart, pdfSelectionEnd, true); // Final selection
             }
             
             pdfTextSelecting = false;
@@ -1695,6 +1746,12 @@ void InkCanvas::mousePressEvent(QMouseEvent *event) {
     // Handle PDF text selection when enabled (mouse/touch fallback - stylus handled in tabletEvent)
     if (pdfTextSelectionEnabled && isPdfLoaded) {
         if (event->button() == Qt::LeftButton) {
+            // ✅ LAZY LOAD: Only load text boxes when user actually attempts selection
+            // Check if text boxes need to be loaded or reloaded for current page
+            if (currentCachedPage >= 0 && currentTextBoxesLoadedForPage != currentCachedPage) {
+                loadPdfTextBoxes(currentCachedPage);
+            }
+            
             pdfTextSelecting = true;
             pdfSelectionStart = event->position();
             pdfSelectionEnd = pdfSelectionStart;
@@ -1795,12 +1852,12 @@ void InkCanvas::mouseReleaseEvent(QMouseEvent *event) {
             if (pdfTextSelectionTimer && pdfTextSelectionTimer->isActive()) {
                 pdfTextSelectionTimer->stop();
                 if (hasPendingSelection) {
-                    updatePdfTextSelection(pendingSelectionStart, pendingSelectionEnd);
+                    updatePdfTextSelection(pendingSelectionStart, pendingSelectionEnd, true); // Final selection
                     hasPendingSelection = false;
                 }
             } else {
                 // Update selection with final position
-                updatePdfTextSelection(pdfSelectionStart, pdfSelectionEnd);
+                updatePdfTextSelection(pdfSelectionStart, pdfSelectionEnd, true); // Final selection
             }
             
             pdfTextSelecting = false;
@@ -1880,7 +1937,7 @@ void InkCanvas::drawStroke(const QPointF &start, const QPointF &end, qreal press
     
     QPointF bufferStart = (adjustedStart / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
     QPointF bufferEnd = (adjustedEnd / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
-    
+
     painter.drawLine(bufferStart, bufferEnd);
 
     QRectF updateRect = QRectF(bufferStart, bufferEnd)
@@ -1930,7 +1987,7 @@ void InkCanvas::eraseStroke(const QPointF &start, const QPointF &end, qreal pres
     
     QPointF bufferStart = (adjustedStart / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
     QPointF bufferEnd = (adjustedEnd / (zoomFactor / 100.0)) + QPointF(panOffsetX, panOffsetY);
-    
+
     painter.drawLine(bufferStart, bufferEnd);
 
     qreal updatePadding = eraserThickness / 2.0 + 5.0; // Half the eraser thickness plus some extra padding
@@ -2237,7 +2294,7 @@ void InkCanvas::loadPage(int pageNumber) {
 
     // Update current note page tracker
     currentCachedNotePage = pageNumber;
-    
+
     // ✅ NEW APPROACH: Cache single pages, combine on-the-fly
     // Load individual pages into cache (will skip if already cached)
     loadSingleNotePageToCache(pageNumber);
@@ -2487,7 +2544,7 @@ void InkCanvas::deletePage(int pageNumber) {
     // Remove deleted page from note cache
     {
         QMutexLocker locker(&noteCacheMutex);
-        noteCache.remove(pageNumber);
+    noteCache.remove(pageNumber);
         noteCacheAccessOrder.removeAll(pageNumber);
     }
 
@@ -2903,7 +2960,7 @@ bool InkCanvas::event(QEvent *event) {
             // Two finger pinch zoom (legitimate)
             isPanning = false;
             if (isTouchPanning) {
-                isTouchPanning = false;  // Disable efficient scrolling during pinch-zoom
+            isTouchPanning = false;  // Disable efficient scrolling during pinch-zoom
                 emit touchPanningChanged(false);  // Notify that touch panning has ended
             }
             
@@ -2990,7 +3047,7 @@ bool InkCanvas::event(QEvent *event) {
             // More than 2 fingers - reset everything to prevent corrupted state
             isPanning = false;
             if (isTouchPanning) {
-                isTouchPanning = false;  // Disable efficient scrolling
+            isTouchPanning = false;  // Disable efficient scrolling
                 emit touchPanningChanged(false);  // Notify that touch panning has ended
             }
             
@@ -3413,6 +3470,11 @@ void InkCanvas::loadPdfTextBoxes(int pageNumber) {
     currentPdfTextBoxes.clear();
     currentPdfTextBoxPageNumbers.clear();
     
+    // ✅ Reset page trackers
+    currentTextPageNumber = -1;
+    currentTextPageNumberSecond = -1;
+    currentTextBoxesLoadedForPage = -1;
+    
     if (!pdfDocument || pageNumber < 0 || pageNumber >= pdfDocument->numPages()) {
         return;
     }
@@ -3437,6 +3499,7 @@ void InkCanvas::loadPdfTextBoxes(int pageNumber) {
         TextBoxCacheEntry* entry = pdfTextBoxCache[cacheKey];
         currentPdfTextBoxes = entry->textBoxes;
         currentPdfTextBoxPageNumbers = entry->pageNumbers;
+        currentTextBoxesLoadedForPage = pageNumber; // Track which page these text boxes belong to
         
         // Update LRU access order
         pdfTextBoxCacheAccessOrder.removeAll(cacheKey);
@@ -3446,7 +3509,7 @@ void InkCanvas::loadPdfTextBoxes(int pageNumber) {
     
     // ✅ NOT IN CACHE: Allocate new text boxes
     TextBoxCacheEntry* newEntry = new TextBoxCacheEntry();
-    
+
     if (isCombinedCanvas) {
         loadPdfTextBoxesForCombinedCanvas(pageNumber, singlePageHeight, newEntry);
     } else {
@@ -3460,6 +3523,7 @@ void InkCanvas::loadPdfTextBoxes(int pageNumber) {
     // ✅ USE THE CACHED DATA
     currentPdfTextBoxes = newEntry->textBoxes;
     currentPdfTextBoxPageNumbers = newEntry->pageNumbers;
+    currentTextBoxesLoadedForPage = pageNumber; // Track which page these text boxes belong to
     
     // ✅ LRU EVICTION: Keep only last 5 pages in cache
     while (pdfTextBoxCacheAccessOrder.size() > 5) {
@@ -3467,21 +3531,55 @@ void InkCanvas::loadPdfTextBoxes(int pageNumber) {
         TextBoxCacheEntry* oldEntry = pdfTextBoxCache.take(oldestKey);
         delete oldEntry; // Destructor will qDeleteAll(textBoxes)
     }
+    
+    // ✅ CRITICAL: Also evict old page sizes from cache to prevent unbounded growth
+    // Keep page sizes synchronized with text box cache
+    // Collect which page numbers are currently in use from cache keys
+    QSet<int> pagesInUse;
+    for (int key : pdfTextBoxCacheAccessOrder) {
+        int absKey = qAbs(key);
+        // For combined canvas: key is -(pageNumber+1), so page is |key|-1
+        // For single page: key is pageNumber
+        if (key < 0) {
+            // Combined canvas: pages are (|key|-1) and |key|
+            int basePage = absKey - 1;
+            pagesInUse.insert(basePage);
+            pagesInUse.insert(basePage + 1);
+        } else {
+            // Single page
+            pagesInUse.insert(key);
+        }
+    }
+    
+    // Remove page sizes not in use
+    auto it = pdfPageSizeCache.begin();
+    while (it != pdfPageSizeCache.end()) {
+        if (!pagesInUse.contains(it.key())) {
+            it = pdfPageSizeCache.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 void InkCanvas::loadPdfTextBoxesForSinglePage(int pageNumber, TextBoxCacheEntry* entry) {
-    // Get the page for text operations
-    currentPdfPageForText = std::unique_ptr<Poppler::Page>(pdfDocument->page(pageNumber));
-    if (!currentPdfPageForText) {
+    // ✅ Create a temporary local page object (will be destroyed at end of function)
+    std::unique_ptr<Poppler::Page> tempPage(pdfDocument->page(pageNumber));
+    if (!tempPage) {
         return;
     }
 
+    // ✅ Cache the page size for coordinate mapping (lightweight)
+    pdfPageSizeCache[pageNumber] = tempPage->pageSizeF();
+    currentTextPageNumber = pageNumber;
+
     // Load text boxes for the single page and populate cache entry
-    auto textBoxVector = currentPdfPageForText->textList();
+    auto textBoxVector = tempPage->textList();
     for (auto& textBox : textBoxVector) {
         entry->textBoxes.append(textBox.release()); // Transfer ownership to cache entry
         entry->pageNumbers.append(pageNumber); // Track page number for each text box
     }
+    // tempPage automatically destroyed here, releasing Poppler::Page resources
 }
 
 void InkCanvas::loadPdfTextBoxesForCombinedCanvas(int pageNumber, int singlePageHeight, TextBoxCacheEntry* entry) {
@@ -3489,34 +3587,46 @@ void InkCanvas::loadPdfTextBoxesForCombinedCanvas(int pageNumber, int singlePage
     // - Top half shows page N (coordinates as-is)
     // - Bottom half shows page N+1 (coordinates will be adjusted in mapping functions)
     
-    // Load text boxes for top half (page N)
-    currentPdfPageForText = std::unique_ptr<Poppler::Page>(pdfDocument->page(pageNumber));
-    if (currentPdfPageForText) {
-        auto topTextBoxVector = currentPdfPageForText->textList();
+    // Load text boxes for top half (page N) - use temporary local page object
+    {
+        std::unique_ptr<Poppler::Page> tempPage(pdfDocument->page(pageNumber));
+        if (tempPage) {
+            // ✅ Cache the page size for coordinate mapping (lightweight)
+            pdfPageSizeCache[pageNumber] = tempPage->pageSizeF();
+            currentTextPageNumber = pageNumber;
+            
+            auto topTextBoxVector = tempPage->textList();
         for (auto& textBox : topTextBoxVector) {
             // Text boxes for top half keep their original coordinates
-            entry->textBoxes.append(textBox.release());
-            entry->pageNumbers.append(pageNumber); // Track as page N
+                entry->textBoxes.append(textBox.release());
+                entry->pageNumbers.append(pageNumber); // Track as page N
         }
+        }
+        // tempPage automatically destroyed here
     }
     
     // Load text boxes for bottom half (page N+1) if it exists
     int nextPageNumber = pageNumber + 1;
     if (nextPageNumber < pdfDocument->numPages()) {
-        currentPdfPageForTextSecond = std::unique_ptr<Poppler::Page>(pdfDocument->page(nextPageNumber));
-        if (currentPdfPageForTextSecond) {
-            auto bottomTextBoxVector = currentPdfPageForTextSecond->textList();
+        std::unique_ptr<Poppler::Page> tempPageSecond(pdfDocument->page(nextPageNumber));
+        if (tempPageSecond) {
+            // ✅ Cache the page size for coordinate mapping (lightweight)
+            pdfPageSizeCache[nextPageNumber] = tempPageSecond->pageSizeF();
+            currentTextPageNumberSecond = nextPageNumber;
+            
+            auto bottomTextBoxVector = tempPageSecond->textList();
             for (auto& textBox : bottomTextBoxVector) {
                 // Text boxes for bottom half - coordinates will be adjusted in mapping functions
                 entry->textBoxes.append(textBox.release());
                 entry->pageNumbers.append(nextPageNumber); // Track as page N+1
             }
         }
+        // tempPageSecond automatically destroyed here
     }
 }
 
 QPointF InkCanvas::mapWidgetToPdfCoordinates(const QPointF &widgetPoint) {
-    if (!currentPdfPageForText || backgroundImage.isNull()) {
+    if (backgroundImage.isNull() || currentTextPageNumber < 0) {
         return QPointF();
     }
     
@@ -3560,21 +3670,24 @@ QPointF InkCanvas::mapWidgetToPdfCoordinates(const QPointF &widgetPoint) {
     }
     
     // Determine which page and adjust coordinates for combined canvas
-    std::unique_ptr<Poppler::Page>* targetPage = &currentPdfPageForText;
+    int targetPageNumber = currentTextPageNumber;
     QPointF finalAdjustedPoint = adjustedPoint;
     
-    if (isCombinedCanvas && currentPdfPageForTextSecond) {
+    if (isCombinedCanvas && currentTextPageNumberSecond >= 0) {
         // Check if the point is in the bottom half (page N+1)
         if (adjustedPoint.y() >= singlePageHeight) {
             // Bottom half - use second page and adjust coordinates
-            targetPage = &currentPdfPageForTextSecond;
+            targetPageNumber = currentTextPageNumberSecond;
             finalAdjustedPoint.setY(adjustedPoint.y() - singlePageHeight); // Shift back to page coordinate system
         }
         // Top half - use first page with original coordinates
     }
     
-    // Convert to PDF coordinates
-    QSizeF pdfPageSize = (*targetPage)->pageSizeF();
+    // Get cached page size
+    if (!pdfPageSizeCache.contains(targetPageNumber)) {
+        return QPointF(); // Page size not cached
+    }
+    QSizeF pdfPageSize = pdfPageSizeCache[targetPageNumber];
     QSizeF imageSize = isCombinedCanvas ? QSizeF(backgroundImage.width(), singlePageHeight * 2) : backgroundImage.size();
     
     // For combined canvas, we need to scale based on single page height
@@ -3592,7 +3705,7 @@ QPointF InkCanvas::mapWidgetToPdfCoordinates(const QPointF &widgetPoint) {
 }
 
 QPointF InkCanvas::mapPdfToWidgetCoordinates(const QPointF &pdfPoint, int pageNumber) {
-    if (!currentPdfPageForText || backgroundImage.isNull()) {
+    if (backgroundImage.isNull() || currentTextPageNumber < 0) {
         return QPointF();
     }
     
@@ -3609,7 +3722,7 @@ QPointF InkCanvas::mapPdfToWidgetCoordinates(const QPointF &pdfPoint, int pageNu
     }
     
     // Determine which page to use and coordinate adjustments
-    std::unique_ptr<Poppler::Page>* sourcePage = &currentPdfPageForText;
+    int sourcePageNumber = currentTextPageNumber;
     qreal yOffset = 0;
     
     if (isCombinedCanvas && pageNumber != -1) {
@@ -3619,16 +3732,21 @@ QPointF InkCanvas::mapPdfToWidgetCoordinates(const QPointF &pdfPoint, int pageNu
             basePage = currentPdfTextBoxPageNumbers[0];
         }
         
-        if (pageNumber > basePage && currentPdfPageForTextSecond) {
+        if (pageNumber > basePage && currentTextPageNumberSecond >= 0) {
             // This text box belongs to the second page (bottom half)
-            sourcePage = &currentPdfPageForTextSecond;
+            sourcePageNumber = currentTextPageNumberSecond;
             yOffset = singlePageHeight; // Shift down to bottom half
         }
         // Otherwise, use first page (top half) with no offset
     }
     
+    // Get cached page size
+    if (!pdfPageSizeCache.contains(sourcePageNumber)) {
+        return QPointF(); // Page size not cached
+    }
+    QSizeF pdfPageSize = pdfPageSizeCache[sourcePageNumber];
+    
     // Convert from PDF coordinates to image coordinates
-    QSizeF pdfPageSize = (*sourcePage)->pageSizeF();
     QSizeF imageSize = backgroundImage.size();
     
     // For combined canvas, scale based on single page height
@@ -3673,10 +3791,21 @@ QPointF InkCanvas::mapPdfToWidgetCoordinates(const QPointF &pdfPoint, int pageNu
     return widgetPoint;
 }
 
-void InkCanvas::updatePdfTextSelection(const QPointF &start, const QPointF &end) {
+void InkCanvas::updatePdfTextSelection(const QPointF &start, const QPointF &end, bool isFinal) {
     // Early return if PDF is not loaded or no text boxes available
     if (!isPdfLoaded || currentPdfTextBoxes.isEmpty()) {
         return;
+    }
+
+    // Check if this is a combined canvas
+    bool isCombinedCanvas = false;
+    int singlePageHeight = 0;
+    if (!backgroundImage.isNull() && buffer.height() >= backgroundImage.height() * 1.8) {
+        isCombinedCanvas = true;
+        singlePageHeight = backgroundImage.height();
+    } else if (buffer.height() > 1400) {
+        isCombinedCanvas = true;
+        singlePageHeight = buffer.height() / 2;
     }
 
     // Clear previous selection efficiently
@@ -3686,19 +3815,110 @@ void InkCanvas::updatePdfTextSelection(const QPointF &start, const QPointF &end)
     QRectF widgetSelectionRect(start, end);
     widgetSelectionRect = widgetSelectionRect.normalized();
     
-    // Convert to PDF coordinate space
-    QPointF pdfTopLeft = mapWidgetToPdfCoordinates(widgetSelectionRect.topLeft());
-    QPointF pdfBottomRight = mapWidgetToPdfCoordinates(widgetSelectionRect.bottomRight());
-    QRectF pdfSelectionRect(pdfTopLeft, pdfBottomRight);
-    pdfSelectionRect = pdfSelectionRect.normalized();
+    // Convert widget coordinates to buffer coordinates to determine which page(s) are selected
+    // Widget coordinates are affected by pan and zoom, buffer coordinates are the actual canvas
+    QPointF bufferTopLeft = mapWidgetToCanvas(widgetSelectionRect.topLeft());
+    QPointF bufferBottomRight = mapWidgetToCanvas(widgetSelectionRect.bottomRight());
+    QRectF bufferSelectionRect(bufferTopLeft, bufferBottomRight);
+    bufferSelectionRect = bufferSelectionRect.normalized();
     
     // Reserve space for efficiency if we expect many selections
     selectedTextBoxes.reserve(qMin(currentPdfTextBoxes.size(), 50));
     
-    // Find intersecting text boxes with optimized loop
-    for (const Poppler::TextBox* textBox : currentPdfTextBoxes) {
-        if (textBox && textBox->boundingBox().intersects(pdfSelectionRect)) {
-            selectedTextBoxes.append(const_cast<Poppler::TextBox*>(textBox));
+    int matchCount = 0;
+    
+    if (!isCombinedCanvas) {
+        // Single page mode - use simple coordinate mapping
+        QPointF pdfTopLeft = mapWidgetToPdfCoordinates(widgetSelectionRect.topLeft());
+        QPointF pdfBottomRight = mapWidgetToPdfCoordinates(widgetSelectionRect.bottomRight());
+        QRectF pdfSelectionRect(pdfTopLeft, pdfBottomRight);
+        pdfSelectionRect = pdfSelectionRect.normalized();
+        
+        // Find intersecting text boxes
+        for (int i = 0; i < currentPdfTextBoxes.size(); ++i) {
+            const Poppler::TextBox* textBox = currentPdfTextBoxes[i];
+            if (!textBox) continue;
+            
+            if (textBox->boundingBox().intersects(pdfSelectionRect)) {
+                selectedTextBoxes.append(const_cast<Poppler::TextBox*>(textBox));
+                matchCount++;
+            }
+        }
+    } else {
+        // Combined canvas mode - handle each page separately
+        // Determine which page(s) the selection spans (using buffer coordinates)
+        bool selectsTopHalf = (bufferSelectionRect.top() < singlePageHeight || bufferSelectionRect.bottom() < singlePageHeight);
+        bool selectsBottomHalf = (bufferSelectionRect.top() >= singlePageHeight || bufferSelectionRect.bottom() >= singlePageHeight);
+        
+        // Determine base page number from currentCachedPage or currentTextPageNumber
+        int basePage = currentTextPageNumber;
+        if (basePage < 0) basePage = currentCachedPage;
+        
+        // Process each text box
+        for (int i = 0; i < currentPdfTextBoxes.size(); ++i) {
+            const Poppler::TextBox* textBox = currentPdfTextBoxes[i];
+            if (!textBox) continue;
+            
+            int textBoxPage = (i < currentPdfTextBoxPageNumbers.size()) ? currentPdfTextBoxPageNumbers[i] : -1;
+            if (textBoxPage < 0) continue;
+            
+            // Determine if this text box is on the top or bottom page
+            bool isTopPage = (textBoxPage == basePage);
+            bool isBottomPage = (textBoxPage == basePage + 1);
+            
+            // Skip text boxes on pages we're not selecting
+            if (isTopPage && !selectsTopHalf) {
+                continue;
+            }
+            if (isBottomPage && !selectsBottomHalf) {
+                continue;
+            }
+            
+            // Create selection rectangle in buffer space for this page's region
+            QRectF pageRegionBuffer;
+            if (isTopPage) {
+                pageRegionBuffer = QRectF(0, 0, buffer.width(), singlePageHeight);
+            } else if (isBottomPage) {
+                pageRegionBuffer = QRectF(0, singlePageHeight, buffer.width(), singlePageHeight);
+            } else {
+                continue; // Not a page we're displaying
+            }
+            
+            // Clip selection to this page's region in buffer space
+            QRectF clippedBufferRect = bufferSelectionRect.intersected(pageRegionBuffer);
+            if (clippedBufferRect.isEmpty()) {
+                continue;
+            }
+            
+            // For bottom page, shift Y coordinate to be relative to that page's origin
+            if (isBottomPage) {
+                clippedBufferRect.translate(0, -singlePageHeight);
+            }
+            
+            // Now map to PDF coordinates (which expects buffer coordinates relative to page origin)
+            // Get page size for this specific page
+            QSizeF pageSize = pdfPageSizeCache.value(textBoxPage, QSizeF());
+            if (pageSize.isEmpty()) {
+                continue;
+            }
+            
+            // Map buffer coordinates to PDF coordinates (no Y-flip, direct scale like mapWidgetToPdfCoordinates)
+            qreal scaleX = pageSize.width() / buffer.width();
+            qreal scaleY = pageSize.height() / singlePageHeight;
+            
+            qreal pdfLeft = clippedBufferRect.left() * scaleX;
+            qreal pdfTop = clippedBufferRect.top() * scaleY;
+            qreal pdfRight = clippedBufferRect.right() * scaleX;
+            qreal pdfBottom = clippedBufferRect.bottom() * scaleY;
+            
+            QRectF pdfSelectionRect(QPointF(pdfLeft, pdfTop), QPointF(pdfRight, pdfBottom));
+            pdfSelectionRect = pdfSelectionRect.normalized();
+            
+            // Check intersection with this text box
+            if (textBox->boundingBox().intersects(pdfSelectionRect)) {
+                selectedTextBoxes.append(const_cast<Poppler::TextBox*>(textBox));
+                matchCount++;
+            }
         }
     }
     
@@ -3717,61 +3937,134 @@ void InkCanvas::updatePdfTextSelection(const QPointF &start, const QPointF &end)
 QList<Poppler::TextBox*> InkCanvas::getTextBoxesInSelection(const QPointF &start, const QPointF &end) {
     QList<Poppler::TextBox*> selectedBoxes;
     
-    if (!currentPdfPageForText) {
-        // qDebug() << "PDF text selection: No current page for text";
+    if (currentTextPageNumber < 0) {
         return selectedBoxes;
     }
     
-    // Convert widget coordinates to PDF coordinates
-    QPointF pdfStart = mapWidgetToPdfCoordinates(start);
-    QPointF pdfEnd = mapWidgetToPdfCoordinates(end);
+    // For combined canvas, we need to handle coordinate spaces per-page
+    bool isCombinedCanvas = false;
+    int singlePageHeight = buffer.height();
     
-    // qDebug() << "PDF text selection: Widget coords" << start << "to" << end;
-    // qDebug() << "PDF text selection: PDF coords" << pdfStart << "to" << pdfEnd;
+    if (!backgroundImage.isNull() && buffer.height() >= backgroundImage.height() * 1.8) {
+        isCombinedCanvas = true;
+        singlePageHeight = backgroundImage.height() / 2;
+    } else if (buffer.height() > 1400) {
+        isCombinedCanvas = true;
+        singlePageHeight = buffer.height() / 2;
+    }
     
-    // Create selection rectangle in PDF coordinates
-    QRectF selectionRect(pdfStart, pdfEnd);
-    selectionRect = selectionRect.normalized();
-    
-    // qDebug() << "PDF text selection: Selection rect in PDF coords:" << selectionRect;
-    
-    // Find text boxes that intersect with the selection
-    int intersectionCount = 0;
-    for (Poppler::TextBox* textBox : currentPdfTextBoxes) {
-        if (textBox) {
-            QRectF textBoxRect = textBox->boundingBox();
-            bool intersects = textBoxRect.intersects(selectionRect);
+    if (!isCombinedCanvas) {
+        // Single page mode - use original logic
+        QPointF pdfStart = mapWidgetToPdfCoordinates(start);
+        QPointF pdfEnd = mapWidgetToPdfCoordinates(end);
+        
+        QRectF selectionRect(pdfStart, pdfEnd);
+        selectionRect = selectionRect.normalized();
+        
+        // Check all text boxes
+        for (Poppler::TextBox* textBox : currentPdfTextBoxes) {
+            if (textBox) {
+                QRectF textBoxRect = textBox->boundingBox();
+                if (textBoxRect.intersects(selectionRect)) {
+                    selectedBoxes.append(textBox);
+                }
+            }
+        }
+    } else {
+        // Combined canvas mode - handle each page separately
+        if (currentPdfTextBoxPageNumbers.isEmpty()) {
+            return selectedBoxes;
+        }
+        
+        int basePage = currentPdfTextBoxPageNumbers.first();
+        
+        // Determine which page(s) the selection spans
+        bool selectsTopHalf = (start.y() < singlePageHeight || end.y() < singlePageHeight);
+        bool selectsBottomHalf = (start.y() >= singlePageHeight || end.y() >= singlePageHeight);
+        
+        // Process each text box
+        for (int i = 0; i < currentPdfTextBoxes.size(); ++i) {
+            Poppler::TextBox* textBox = currentPdfTextBoxes[i];
+            if (!textBox || i >= currentPdfTextBoxPageNumbers.size()) {
+                continue;
+            }
             
-            if (intersects) {
+            int textBoxPage = currentPdfTextBoxPageNumbers[i];
+            bool isTopPage = (textBoxPage == basePage);
+            bool isBottomPage = (textBoxPage == basePage + 1);
+            
+            // Skip text boxes on pages we're not selecting
+            if (isTopPage && !selectsTopHalf) {
+                continue;
+            }
+            if (isBottomPage && !selectsBottomHalf) {
+                continue;
+            }
+            
+            // Create selection rectangle in widget space for this page's region
+            QRectF widgetSelectionRect(start, end);
+            widgetSelectionRect = widgetSelectionRect.normalized();
+            
+            // Clip selection to this page's region in widget space
+            QRectF pageRegionWidget;
+            if (isTopPage) {
+                // Top half: Y from 0 to singlePageHeight
+                pageRegionWidget = QRectF(0, 0, buffer.width(), singlePageHeight);
+            } else {
+                // Bottom half: Y from singlePageHeight to buffer.height()
+                pageRegionWidget = QRectF(0, singlePageHeight, buffer.width(), singlePageHeight);
+            }
+            
+            QRectF clippedWidgetRect = widgetSelectionRect.intersected(pageRegionWidget);
+            
+            if (clippedWidgetRect.isEmpty()) {
+                continue; // Selection doesn't touch this page
+            }
+            
+            // Map corners to PDF coordinates
+            QPointF pdfTopLeft = mapWidgetToPdfCoordinates(clippedWidgetRect.topLeft());
+            QPointF pdfBottomRight = mapWidgetToPdfCoordinates(clippedWidgetRect.bottomRight());
+            
+            QRectF selectionRect(pdfTopLeft, pdfBottomRight);
+            selectionRect = selectionRect.normalized();
+            
+            // Check intersection
+            QRectF textBoxRect = textBox->boundingBox();
+            
+            if (textBoxRect.intersects(selectionRect)) {
                 selectedBoxes.append(textBox);
-                intersectionCount++;
-                // qDebug() << "PDF text selection: Text box intersects:" << textBox->text() 
-                //          << "at" << textBoxRect;
             }
         }
     }
-    
-    // qDebug() << "PDF text selection: Found" << intersectionCount << "intersecting text boxes";
     
     return selectedBoxes;
 }
 
 void InkCanvas::handlePdfLinkClick(const QPointF &position) {
-    if (!isPdfLoaded || !currentPdfPageForText) {
+    if (!isPdfLoaded || currentTextPageNumber < 0) {
         return;
     }
 
     // Convert widget coordinates to PDF coordinates
     QPointF pdfPoint = mapWidgetToPdfCoordinates(position);
     
-    // Get PDF page size for reference
-    QSizeF pdfPageSize = currentPdfPageForText->pageSizeF();
+    // Get PDF page size from cache
+    if (!pdfPageSizeCache.contains(currentTextPageNumber)) {
+        return;
+    }
+    QSizeF pdfPageSize = pdfPageSizeCache[currentTextPageNumber];
     
     // Convert to normalized coordinates (0.0 to 1.0) to match Poppler's link coordinate system
     QPointF normalizedPoint(pdfPoint.x() / pdfPageSize.width(), pdfPoint.y() / pdfPageSize.height());
     
+    // ✅ Create temporary page to get links (will be destroyed at end of function)
+    std::unique_ptr<Poppler::Page> tempPage(pdfDocument->page(currentTextPageNumber));
+    if (!tempPage) {
+        return;
+    }
+    
     // Get links for the current page
-    auto links = currentPdfPageForText->links();
+    auto links = tempPage->links();
     
     for (const auto& link : links) {
         QRectF linkArea = link->linkArea();
@@ -3872,8 +4165,8 @@ void InkCanvas::renderPdfPageToCacheThreadSafe(int pageNumber, Poppler::Document
                 pdfCache.remove(pageToEvict);
             } else {
                 // Fallback if access order is somehow empty
-                auto oldestKey = pdfCache.keys().first();
-                pdfCache.remove(oldestKey);
+            auto oldestKey = pdfCache.keys().first();
+            pdfCache.remove(oldestKey);
             }
         }
     }
@@ -4133,11 +4426,11 @@ void InkCanvas::loadSingleNotePageToCache(int pageNumber) {
                 noteCache.remove(pageToEvict);
             } else {
                 // Fallback if access order is somehow empty
-                auto keys = noteCache.keys();
-                if (!keys.isEmpty()) {
-                    noteCache.remove(keys.first());
-                }
+            auto keys = noteCache.keys();
+            if (!keys.isEmpty()) {
+                noteCache.remove(keys.first());
             }
+        }
         }
     }
     
@@ -4145,12 +4438,12 @@ void InkCanvas::loadSingleNotePageToCache(int pageNumber) {
     QPixmap singlePageCanvas;
     if (singlePageCanvas.load(filePath)) {
         // Cache the single page (thread-safe)
-        QMutexLocker locker(&noteCacheMutex);
+            QMutexLocker locker(&noteCacheMutex);
         noteCache.insert(pageNumber, new QPixmap(singlePageCanvas));
         // ✅ LRU: Add newly cached page to end of access order (most recent)
         noteCacheAccessOrder.removeAll(pageNumber); // Remove if already present
         noteCacheAccessOrder.append(pageNumber);
-    }
+        }
 }
 
 void InkCanvas::checkAndCacheAdjacentNotePages(int targetPage) {
@@ -4259,7 +4552,7 @@ void InkCanvas::cacheAdjacentNotePages() {
 
 void InkCanvas::invalidateBothPagesCache(int pageNumber) {
     // Invalidate both pages of a combined canvas to ensure cache doesn't have unsplit combined buffers
-    QMutexLocker locker(&noteCacheMutex);
+        QMutexLocker locker(&noteCacheMutex);
     
     // ✅ FIX: Also invalidate PREVIOUS combined page (pageNumber - 1)
     // because it displays the current page on its BOTTOM HALF

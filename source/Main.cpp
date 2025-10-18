@@ -47,61 +47,65 @@ static bool isWindows11() {
 // Helper function to apply dark/light palette to Qt application
 static void applySystemPalette(QApplication &app) {
 #ifdef Q_OS_WIN
-    if (isWindowsDarkMode()) {
-        // Windows 11 has native dark mode support with WinUI 3, so use default style
-        // For older Windows versions, use Fusion style for proper dark mode support
-        if (!isWindows11()) {
+    // Windows 11 has native dark/light mode support with WinUI 3, so use default style
+    // For older Windows versions, use Fusion style for proper dark mode support
+    if (!isWindows11()) {
+        if (isWindowsDarkMode()) {
             app.setStyle("Fusion");
+        } else {
+            app.setStyle("windowsvista");
         }
-        
+    }
+
+    if (isWindowsDarkMode()) {
         // Create a comprehensive dark palette for Qt widgets
         QPalette darkPalette;
-        
+
         // Base colors
         QColor darkGray(53, 53, 53);
         QColor gray(128, 128, 128);
         QColor black(25, 25, 25);
         QColor blue(42, 130, 218);
         QColor lightGray(180, 180, 180);
-        
+
         // Window colors (main background)
         darkPalette.setColor(QPalette::Window, QColor(45, 45, 45));
         darkPalette.setColor(QPalette::WindowText, Qt::white);
-        
+
         // Base (text input background) colors
         darkPalette.setColor(QPalette::Base, QColor(35, 35, 35));
         darkPalette.setColor(QPalette::AlternateBase, darkGray);
         darkPalette.setColor(QPalette::Text, Qt::white);
-        
+
         // Tooltip colors
         darkPalette.setColor(QPalette::ToolTipBase, QColor(60, 60, 60));
         darkPalette.setColor(QPalette::ToolTipText, Qt::white);
-        
+
         // Button colors (critical for dialogs)
         darkPalette.setColor(QPalette::Button, darkGray);
         darkPalette.setColor(QPalette::ButtonText, Qt::white);
-        
+
         // 3D effects and borders (critical for proper widget rendering)
         darkPalette.setColor(QPalette::Light, QColor(80, 80, 80));
         darkPalette.setColor(QPalette::Midlight, QColor(65, 65, 65));
         darkPalette.setColor(QPalette::Dark, QColor(35, 35, 35));
         darkPalette.setColor(QPalette::Mid, QColor(50, 50, 50));
         darkPalette.setColor(QPalette::Shadow, QColor(20, 20, 20));
-        
+
         // Bright text
         darkPalette.setColor(QPalette::BrightText, Qt::red);
-        
+
         // Link colors
         darkPalette.setColor(QPalette::Link, blue);
         darkPalette.setColor(QPalette::LinkVisited, QColor(blue).lighter());
-        
+
         // Highlight colors (selection)
         darkPalette.setColor(QPalette::Highlight, blue);
         darkPalette.setColor(QPalette::HighlightedText, Qt::white);
-        
+
         // Placeholder text (for line edits, spin boxes, etc.)
         darkPalette.setColor(QPalette::PlaceholderText, gray);
-        
+
         // Disabled colors (all color groups)
         darkPalette.setColor(QPalette::Disabled, QPalette::WindowText, gray);
         darkPalette.setColor(QPalette::Disabled, QPalette::Text, gray);
@@ -109,11 +113,10 @@ static void applySystemPalette(QApplication &app) {
         darkPalette.setColor(QPalette::Disabled, QPalette::Base, QColor(50, 50, 50));
         darkPalette.setColor(QPalette::Disabled, QPalette::Button, QColor(50, 50, 50));
         darkPalette.setColor(QPalette::Disabled, QPalette::Highlight, QColor(80, 80, 80));
-        
+
         app.setPalette(darkPalette);
     } else {
         // Use default Windows style and palette for light mode
-        app.setStyle("windowsvista");
         app.setPalette(QPalette());
     }
 #else

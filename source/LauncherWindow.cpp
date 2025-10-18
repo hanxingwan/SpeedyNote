@@ -105,7 +105,7 @@ void LauncherWindow::setupUi()
     tabList->setSpacing(4);
     
     // Add tab items with explicit sizing
-    QListWidgetItem *returnItem = new QListWidgetItem(loadThemedIcon("cross"), tr("Return"));
+    QListWidgetItem *returnItem = new QListWidgetItem(loadThemedIcon("recent"), tr("Return"));
     QListWidgetItem *newItem = new QListWidgetItem(loadThemedIcon("addtab"), tr("New"));
     QListWidgetItem *openPdfItem = new QListWidgetItem(loadThemedIcon("pdf"), tr("Open PDF"));
     QListWidgetItem *openNotebookItem = new QListWidgetItem(loadThemedIcon("folder"), tr("Open Notes"));
