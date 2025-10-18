@@ -226,7 +226,7 @@ void MainWindow::setupUi() {
     connect(clearPdfButton, &QPushButton::clicked, this, &MainWindow::clearPdf);
 
     pdfTextSelectButton = new QPushButton(this);
-    pdfTextSelectButton->setFixedSize(14, 30);
+    pdfTextSelectButton->setFixedSize(26, 30);
     pdfTextSelectButton->setStyleSheet(buttonStyle);
     pdfTextSelectButton->setToolTip(tr("Toggle PDF Text Selection"));
     pdfTextSelectButton->setProperty("selected", false); // Initially disabled
@@ -5607,7 +5607,7 @@ void MainWindow::updateToolbarLayout() {
     int scaledWidth = width();
     
     // Dynamic threshold based on zoom button visibility
-    int threshold = areZoomButtonsVisible() ? 1388 : 1278;
+    int threshold = areZoomButtonsVisible() ? 1340 : 1230;
     
     // Debug output to understand what's happening
     // qDebug() << "Window width:" << scaledWidth << "Threshold:" << threshold << "Zoom buttons visible:" << areZoomButtonsVisible();

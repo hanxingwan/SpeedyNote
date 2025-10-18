@@ -254,10 +254,10 @@ void ControlPanelDialog::createPerformanceTab() {
     // Wayland DPI scale override
     QLabel *waylandDpiLabel = new QLabel(tr("Wayland DPI Scale Override:"));
     waylandDpiScaleSpinBox = new QDoubleSpinBox();
-    waylandDpiScaleSpinBox->setRange(1.0, 3.0);
+    waylandDpiScaleSpinBox->setRange(0.0, 3.0);  // Start at 0.0 to allow "Auto" as separate option
     waylandDpiScaleSpinBox->setSingleStep(0.05);
     waylandDpiScaleSpinBox->setDecimals(2);
-    waylandDpiScaleSpinBox->setSpecialValueText(tr("Auto"));
+    waylandDpiScaleSpinBox->setSpecialValueText(tr("Auto"));  // 0.0 = Auto
     
     QSettings settings;
     qreal savedScale = settings.value("display/waylandDpiScale", 0.0).toReal();
@@ -268,7 +268,7 @@ void ControlPanelDialog::createPerformanceTab() {
         settings.setValue("display/waylandDpiScale", value);
     });
     
-    QLabel *noteWaylandDpi = new QLabel(tr("Wayland DPI scale override (1.0 = 100%, 1.5 = 150%, 2.0 = 200%). Set to 1.0 to disable. Only affects Wayland. Requires restart."));
+    QLabel *noteWaylandDpi = new QLabel(tr("Wayland DPI scale override. Auto = system default, 1.00 = 100%, 1.50 = 150%, 2.00 = 200%. Only affects Wayland. Requires restart."));
     noteWaylandDpi->setWordWrap(true);
     noteWaylandDpi->setStyleSheet("color: gray; font-size: 10px;");
 
