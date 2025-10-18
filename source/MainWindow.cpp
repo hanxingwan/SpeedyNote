@@ -1847,7 +1847,9 @@ qreal MainWindow::getDevicePixelRatio(){
         QSettings settings;
         qreal manualScale = settings.value("display/waylandDpiScale", 0.0).toReal();
         
-        if (manualScale > 1.0) {
+        // If user set a manual value (anything > 0.0), use it
+        // 0.0 = Auto, 1.00 = explicit 100%, etc.
+        if (manualScale > 0.0) {
             return manualScale;
         }
         
