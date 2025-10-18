@@ -169,6 +169,18 @@ InkCanvas::~InkCanvas() {
         noteCacheAccessOrder.clear();
     }
     
+    // ✅ CRITICAL: Wait for and clean up any active PDF watchers before destruction
+    for (QFutureWatcher<void>* watcher : activePdfWatchers) {
+        if (watcher) {
+            if (!watcher->isFinished()) {
+                watcher->cancel();
+                watcher->waitForFinished(); // Wait for thread to complete
+            }
+            delete watcher; // Delete immediately
+        }
+    }
+    activePdfWatchers.clear();
+    
     // ✅ Stop and clean up timers
     if (pdfCacheTimer) {
         pdfCacheTimer->stop();
@@ -3521,16 +3533,31 @@ void InkCanvas::loadPdfTextBoxes(int pageNumber) {
     }
     
     // ✅ CRITICAL: Also evict old page sizes from cache to prevent unbounded growth
-    // Keep page sizes synchronized with text box cache (same 5-page limit)
-    while (pdfPageSizeCache.size() > 5) {
-        // Remove the page size that's not in the current access order
-        auto it = pdfPageSizeCache.begin();
-        while (it != pdfPageSizeCache.end()) {
-            if (!pdfTextBoxCacheAccessOrder.contains(qAbs(it.key()))) {
-                it = pdfPageSizeCache.erase(it);
-            } else {
-                ++it;
-            }
+    // Keep page sizes synchronized with text box cache
+    // Collect which page numbers are currently in use from cache keys
+    QSet<int> pagesInUse;
+    for (int key : pdfTextBoxCacheAccessOrder) {
+        int absKey = qAbs(key);
+        // For combined canvas: key is -(pageNumber+1), so page is |key|-1
+        // For single page: key is pageNumber
+        if (key < 0) {
+            // Combined canvas: pages are (|key|-1) and |key|
+            int basePage = absKey - 1;
+            pagesInUse.insert(basePage);
+            pagesInUse.insert(basePage + 1);
+        } else {
+            // Single page
+            pagesInUse.insert(key);
+        }
+    }
+    
+    // Remove page sizes not in use
+    auto it = pdfPageSizeCache.begin();
+    while (it != pdfPageSizeCache.end()) {
+        if (!pagesInUse.contains(it.key())) {
+            it = pdfPageSizeCache.erase(it);
+        } else {
+            ++it;
         }
     }
 }
@@ -3765,18 +3792,8 @@ QPointF InkCanvas::mapPdfToWidgetCoordinates(const QPointF &pdfPoint, int pageNu
 }
 
 void InkCanvas::updatePdfTextSelection(const QPointF &start, const QPointF &end, bool isFinal) {
-    // Only print detailed debug when selection is finalized (not during dragging)
-    if (isFinal) {
-        qDebug() << "========================================";
-        qDebug() << "[TEXT-SELECT] FINAL selection";
-        qDebug() << "[TEXT-SELECT] start:" << start << "end:" << end;
-    }
-    
     // Early return if PDF is not loaded or no text boxes available
     if (!isPdfLoaded || currentPdfTextBoxes.isEmpty()) {
-        if (isFinal) {
-            qDebug() << "[TEXT-SELECT] Early return - isPdfLoaded:" << isPdfLoaded << "currentPdfTextBoxes.size():" << currentPdfTextBoxes.size();
-        }
         return;
     }
 
@@ -3790,14 +3807,6 @@ void InkCanvas::updatePdfTextSelection(const QPointF &start, const QPointF &end,
         isCombinedCanvas = true;
         singlePageHeight = buffer.height() / 2;
     }
-    
-    if (isFinal) {
-        qDebug() << "[TEXT-SELECT] isCombinedCanvas:" << isCombinedCanvas;
-        qDebug() << "[TEXT-SELECT] singlePageHeight:" << singlePageHeight;
-        qDebug() << "[TEXT-SELECT] buffer.height():" << buffer.height();
-        qDebug() << "[TEXT-SELECT] currentPdfTextBoxes.size():" << currentPdfTextBoxes.size();
-        qDebug() << "[TEXT-SELECT] currentPdfTextBoxPageNumbers.size():" << currentPdfTextBoxPageNumbers.size();
-    }
 
     // Clear previous selection efficiently
     selectedTextBoxes.clear();
@@ -3806,20 +3815,12 @@ void InkCanvas::updatePdfTextSelection(const QPointF &start, const QPointF &end,
     QRectF widgetSelectionRect(start, end);
     widgetSelectionRect = widgetSelectionRect.normalized();
     
-    if (isFinal) {
-        qDebug() << "[TEXT-SELECT] widgetSelectionRect:" << widgetSelectionRect;
-    }
-    
     // Convert widget coordinates to buffer coordinates to determine which page(s) are selected
     // Widget coordinates are affected by pan and zoom, buffer coordinates are the actual canvas
     QPointF bufferTopLeft = mapWidgetToCanvas(widgetSelectionRect.topLeft());
     QPointF bufferBottomRight = mapWidgetToCanvas(widgetSelectionRect.bottomRight());
     QRectF bufferSelectionRect(bufferTopLeft, bufferBottomRight);
     bufferSelectionRect = bufferSelectionRect.normalized();
-    
-    if (isFinal) {
-        qDebug() << "[TEXT-SELECT] bufferSelectionRect:" << bufferSelectionRect;
-    }
     
     // Reserve space for efficiency if we expect many selections
     selectedTextBoxes.reserve(qMin(currentPdfTextBoxes.size(), 50));
@@ -3828,14 +3829,10 @@ void InkCanvas::updatePdfTextSelection(const QPointF &start, const QPointF &end,
     
     if (!isCombinedCanvas) {
         // Single page mode - use simple coordinate mapping
-    QPointF pdfTopLeft = mapWidgetToPdfCoordinates(widgetSelectionRect.topLeft());
-    QPointF pdfBottomRight = mapWidgetToPdfCoordinates(widgetSelectionRect.bottomRight());
-    QRectF pdfSelectionRect(pdfTopLeft, pdfBottomRight);
-    pdfSelectionRect = pdfSelectionRect.normalized();
-    
-        if (isFinal) {
-            qDebug() << "[TEXT-SELECT] Single page - pdfSelectionRect:" << pdfSelectionRect;
-        }
+        QPointF pdfTopLeft = mapWidgetToPdfCoordinates(widgetSelectionRect.topLeft());
+        QPointF pdfBottomRight = mapWidgetToPdfCoordinates(widgetSelectionRect.bottomRight());
+        QRectF pdfSelectionRect(pdfTopLeft, pdfBottomRight);
+        pdfSelectionRect = pdfSelectionRect.normalized();
         
         // Find intersecting text boxes
         for (int i = 0; i < currentPdfTextBoxes.size(); ++i) {
@@ -3843,12 +3840,7 @@ void InkCanvas::updatePdfTextSelection(const QPointF &start, const QPointF &end,
             if (!textBox) continue;
             
             if (textBox->boundingBox().intersects(pdfSelectionRect)) {
-                if (isFinal) {
-                    int textBoxPage = (i < currentPdfTextBoxPageNumbers.size()) ? currentPdfTextBoxPageNumbers[i] : -1;
-                    qDebug() << "[TEXT-SELECT] MATCH #" << matchCount << "- page:" << textBoxPage 
-                             << "textBoxRect:" << textBox->boundingBox() << "text:" << textBox->text().left(30);
-                }
-            selectedTextBoxes.append(const_cast<Poppler::TextBox*>(textBox));
+                selectedTextBoxes.append(const_cast<Poppler::TextBox*>(textBox));
                 matchCount++;
             }
         }
@@ -3858,23 +3850,9 @@ void InkCanvas::updatePdfTextSelection(const QPointF &start, const QPointF &end,
         bool selectsTopHalf = (bufferSelectionRect.top() < singlePageHeight || bufferSelectionRect.bottom() < singlePageHeight);
         bool selectsBottomHalf = (bufferSelectionRect.top() >= singlePageHeight || bufferSelectionRect.bottom() >= singlePageHeight);
         
-        if (isFinal) {
-            qDebug() << "[TEXT-SELECT] Combined canvas - selectsTopHalf:" << selectsTopHalf << "selectsBottomHalf:" << selectsBottomHalf;
-        }
-        
         // Determine base page number from currentCachedPage or currentTextPageNumber
         int basePage = currentTextPageNumber;
         if (basePage < 0) basePage = currentCachedPage;
-        
-        if (isFinal) {
-            qDebug() << "[TEXT-SELECT] basePage:" << basePage;
-            // Debug: Show what pages we have in currentPdfTextBoxPageNumbers
-            QSet<int> uniquePages;
-            for (int pageNum : currentPdfTextBoxPageNumbers) {
-                uniquePages.insert(pageNum);
-            }
-            qDebug() << "[TEXT-SELECT] Unique pages in currentPdfTextBoxPageNumbers:" << uniquePages;
-        }
         
         // Process each text box
         for (int i = 0; i < currentPdfTextBoxes.size(); ++i) {
@@ -3888,17 +3866,11 @@ void InkCanvas::updatePdfTextSelection(const QPointF &start, const QPointF &end,
             bool isTopPage = (textBoxPage == basePage);
             bool isBottomPage = (textBoxPage == basePage + 1);
             
-            if (isFinal && i < 5) {
-                qDebug() << "[TEXT-SELECT] TextBox #" << i << "page:" << textBoxPage << "isTopPage:" << isTopPage << "isBottomPage:" << isBottomPage;
-            }
-            
             // Skip text boxes on pages we're not selecting
             if (isTopPage && !selectsTopHalf) {
-                if (isFinal && i < 5) qDebug() << "[TEXT-SELECT] SKIPPING (isTopPage && !selectsTopHalf)";
                 continue;
             }
             if (isBottomPage && !selectsBottomHalf) {
-                if (isFinal && i < 5) qDebug() << "[TEXT-SELECT] SKIPPING (isBottomPage && !selectsBottomHalf)";
                 continue;
             }
             
@@ -3944,19 +3916,10 @@ void InkCanvas::updatePdfTextSelection(const QPointF &start, const QPointF &end,
             
             // Check intersection with this text box
             if (textBox->boundingBox().intersects(pdfSelectionRect)) {
-                if (isFinal) {
-                    qDebug() << "[TEXT-SELECT] MATCH #" << matchCount << "- page:" << textBoxPage 
-                             << "textBoxRect:" << textBox->boundingBox() << "text:" << textBox->text().left(30);
-                }
                 selectedTextBoxes.append(const_cast<Poppler::TextBox*>(textBox));
                 matchCount++;
             }
         }
-    }
-    
-    if (isFinal) {
-        qDebug() << "[TEXT-SELECT] Total matches:" << matchCount;
-        qDebug() << "========================================";
     }
     
     // Only emit signal and update if we have selected text
@@ -3974,60 +3937,40 @@ void InkCanvas::updatePdfTextSelection(const QPointF &start, const QPointF &end,
 QList<Poppler::TextBox*> InkCanvas::getTextBoxesInSelection(const QPointF &start, const QPointF &end) {
     QList<Poppler::TextBox*> selectedBoxes;
     
-    qDebug() << "========================================";
-    qDebug() << "[TEXT-SELECT] getTextBoxesInSelection CALLED";
-    qDebug() << "[TEXT-SELECT] start:" << start << "end:" << end;
-    qDebug() << "[TEXT-SELECT] buffer.height():" << buffer.height();
-    qDebug() << "[TEXT-SELECT] backgroundImage.height():" << backgroundImage.height();
-    qDebug() << "[TEXT-SELECT] currentTextPageNumber:" << currentTextPageNumber;
-    
     if (currentTextPageNumber < 0) {
-        qDebug() << "[TEXT-SELECT] ERROR: No current page for text, returning empty";
         return selectedBoxes;
     }
     
-    // ✅ FIX: For combined canvas, we need to handle coordinate spaces per-page
+    // For combined canvas, we need to handle coordinate spaces per-page
     bool isCombinedCanvas = false;
     int singlePageHeight = buffer.height();
     
     if (!backgroundImage.isNull() && buffer.height() >= backgroundImage.height() * 1.8) {
         isCombinedCanvas = true;
         singlePageHeight = backgroundImage.height() / 2;
-        qDebug() << "[TEXT-SELECT] Detected COMBINED canvas (height ratio check)";
     } else if (buffer.height() > 1400) {
         isCombinedCanvas = true;
         singlePageHeight = buffer.height() / 2;
-        qDebug() << "[TEXT-SELECT] Detected COMBINED canvas (fallback heuristic)";
     }
     
-    qDebug() << "[TEXT-SELECT] isCombinedCanvas:" << isCombinedCanvas;
-    qDebug() << "[TEXT-SELECT] singlePageHeight:" << singlePageHeight;
-    
-    // ✅ NEW APPROACH: For combined canvas, determine which page we're selecting on
-    // and create selection rectangle in canvas space, then check against each text box
-    // by transforming to the appropriate page's coordinate space
-    
     if (!isCombinedCanvas) {
-        qDebug() << "[TEXT-SELECT] Using SINGLE PAGE mode";
         // Single page mode - use original logic
-    QPointF pdfStart = mapWidgetToPdfCoordinates(start);
-    QPointF pdfEnd = mapWidgetToPdfCoordinates(end);
-    
-    QRectF selectionRect(pdfStart, pdfEnd);
-    selectionRect = selectionRect.normalized();
-    
+        QPointF pdfStart = mapWidgetToPdfCoordinates(start);
+        QPointF pdfEnd = mapWidgetToPdfCoordinates(end);
+        
+        QRectF selectionRect(pdfStart, pdfEnd);
+        selectionRect = selectionRect.normalized();
+        
         // Check all text boxes
-    for (Poppler::TextBox* textBox : currentPdfTextBoxes) {
-        if (textBox) {
-            QRectF textBoxRect = textBox->boundingBox();
+        for (Poppler::TextBox* textBox : currentPdfTextBoxes) {
+            if (textBox) {
+                QRectF textBoxRect = textBox->boundingBox();
                 if (textBoxRect.intersects(selectionRect)) {
-                selectedBoxes.append(textBox);
+                    selectedBoxes.append(textBox);
                 }
             }
         }
-        qDebug() << "[TEXT-SELECT] Single page mode found" << selectedBoxes.size() << "text boxes";
     } else {
-        qDebug() << "[TEXT-SELECT] Using COMBINED CANVAS mode";
         // Combined canvas mode - handle each page separately
         if (currentPdfTextBoxPageNumbers.isEmpty()) {
             return selectedBoxes;
@@ -4035,15 +3978,9 @@ QList<Poppler::TextBox*> InkCanvas::getTextBoxesInSelection(const QPointF &start
         
         int basePage = currentPdfTextBoxPageNumbers.first();
         
-        qDebug() << "[TEXT-SELECT] Combined mode: singlePageHeight =" << singlePageHeight;
-        qDebug() << "[TEXT-SELECT] Selection widget coords: start" << start << "end" << end;
-        
         // Determine which page(s) the selection spans
         bool selectsTopHalf = (start.y() < singlePageHeight || end.y() < singlePageHeight);
         bool selectsBottomHalf = (start.y() >= singlePageHeight || end.y() >= singlePageHeight);
-        
-        qDebug() << "[TEXT-SELECT] selectsTopHalf:" << selectsTopHalf << "selectsBottomHalf:" << selectsBottomHalf;
-        qDebug() << "[TEXT-SELECT] basePage:" << basePage << "total text boxes:" << currentPdfTextBoxes.size();
         
         // Process each text box
         for (int i = 0; i < currentPdfTextBoxes.size(); ++i) {
@@ -4056,15 +3993,11 @@ QList<Poppler::TextBox*> InkCanvas::getTextBoxesInSelection(const QPointF &start
             bool isTopPage = (textBoxPage == basePage);
             bool isBottomPage = (textBoxPage == basePage + 1);
             
-            qDebug() << "[TEXT-SELECT] TextBox" << i << "page:" << textBoxPage << "isTop:" << isTopPage << "isBottom:" << isBottomPage;
-            
             // Skip text boxes on pages we're not selecting
             if (isTopPage && !selectsTopHalf) {
-                qDebug() << "[TEXT-SELECT]   Skipping (top page but not selecting top half)";
                 continue;
             }
             if (isBottomPage && !selectsBottomHalf) {
-                qDebug() << "[TEXT-SELECT]   Skipping (bottom page but not selecting bottom half)";
                 continue;
             }
             
@@ -4082,14 +4015,9 @@ QList<Poppler::TextBox*> InkCanvas::getTextBoxesInSelection(const QPointF &start
                 pageRegionWidget = QRectF(0, singlePageHeight, buffer.width(), singlePageHeight);
             }
             
-            qDebug() << "[TEXT-SELECT]   Page region widget:" << pageRegionWidget;
-            qDebug() << "[TEXT-SELECT]   Widget selection rect:" << widgetSelectionRect;
-            
             QRectF clippedWidgetRect = widgetSelectionRect.intersected(pageRegionWidget);
-            qDebug() << "[TEXT-SELECT]   Clipped widget rect:" << clippedWidgetRect;
             
             if (clippedWidgetRect.isEmpty()) {
-                qDebug() << "[TEXT-SELECT]   Skipping (clipped rect is empty)";
                 continue; // Selection doesn't touch this page
             }
             
@@ -4097,26 +4025,16 @@ QList<Poppler::TextBox*> InkCanvas::getTextBoxesInSelection(const QPointF &start
             QPointF pdfTopLeft = mapWidgetToPdfCoordinates(clippedWidgetRect.topLeft());
             QPointF pdfBottomRight = mapWidgetToPdfCoordinates(clippedWidgetRect.bottomRight());
             
-            qDebug() << "[TEXT-SELECT]   PDF coords: topLeft" << pdfTopLeft << "bottomRight" << pdfBottomRight;
-            
             QRectF selectionRect(pdfTopLeft, pdfBottomRight);
             selectionRect = selectionRect.normalized();
             
-            qDebug() << "[TEXT-SELECT]   Selection rect in PDF coords:" << selectionRect;
-            
             // Check intersection
             QRectF textBoxRect = textBox->boundingBox();
-            qDebug() << "[TEXT-SELECT]   TextBox boundingBox:" << textBoxRect << "text:" << textBox->text();
             
             if (textBoxRect.intersects(selectionRect)) {
-                qDebug() << "[TEXT-SELECT]   ✓ INTERSECTS - adding to selection";
                 selectedBoxes.append(textBox);
-            } else {
-                qDebug() << "[TEXT-SELECT]   ✗ No intersection";
             }
         }
-        
-        qDebug() << "[TEXT-SELECT] FINAL: Selected" << selectedBoxes.size() << "text boxes total";
     }
     
     return selectedBoxes;
