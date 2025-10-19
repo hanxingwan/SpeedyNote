@@ -1200,6 +1200,13 @@ MainWindow::~MainWindow() {
     // Qt will automatically delete all canvases when canvasStack is destroyed
     // Manual deletion here would cause double-delete and segfault!
     
+    // ✅ CRITICAL: Stop controller thread before destruction
+    // Qt will abort if a QThread is destroyed while still running
+    if (controllerThread && controllerThread->isRunning()) {
+        controllerThread->quit();
+        controllerThread->wait();  // Wait for thread to finish
+    }
+    
     // Cleanup shared launcher instance
     if (sharedLauncher) {
         sharedLauncher->deleteLater();
