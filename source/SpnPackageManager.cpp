@@ -18,6 +18,12 @@
 #include <QByteArray>
 #include <QDataStream>
 #include <QVersionNumber>
+#include <QCoreApplication>
+#include <QTextStream>
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 
 const QString SpnPackageManager::SPN_EXTENSION = ".spn";
 const QString SpnPackageManager::TEMP_PREFIX = "speedynote_";
@@ -54,6 +60,16 @@ QString SpnPackageManager::extractSpnToTemp(const QString &spnPath)
     if (!unpackSpnToDirectory(spnPath, tempDir)) {
         QDir(tempDir).removeRecursively();
         return QString();
+    }
+    
+    // ✅ Create a lock file to mark this directory as "in use" by current session
+    QString lockFilePath = tempDir + "/.inuse.lock";
+    QFile lockFile(lockFilePath);
+    if (lockFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QTextStream out(&lockFile);
+        out << QString::number(QCoreApplication::applicationPid()) << "\n";
+        out << QDateTime::currentDateTime().toString(Qt::ISODate) << "\n";
+        lockFile.close();
     }
     
     return tempDir;
@@ -224,6 +240,12 @@ QString SpnPackageManager::getTempDirForSpn(const QString &spnPath)
 void SpnPackageManager::cleanupTempDir(const QString &tempDir)
 {
     if (!tempDir.isEmpty() && QDir(tempDir).exists()) {
+        // ✅ Remove lock file first (if it exists)
+        QString lockFilePath = tempDir + "/.inuse.lock";
+        if (QFile::exists(lockFilePath)) {
+            QFile::remove(lockFilePath);
+        }
+        
         QDir(tempDir).removeRecursively();
     }
 }
@@ -389,6 +411,49 @@ void SpnPackageManager::cleanupOrphanedTempDirs()
 
     for (const QFileInfo &dirInfo : tempDirs) {
         QString dirPath = dirInfo.absoluteFilePath();
+        
+        // ✅ Check for lock file - if it exists, verify the process is still running
+        QString lockFilePath = dirPath + "/.inuse.lock";
+        bool isInUse = false;
+        
+        if (QFile::exists(lockFilePath)) {
+            // Read the PID from the lock file
+            QFile lockFile(lockFilePath);
+            if (lockFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                QTextStream in(&lockFile);
+                QString pidStr = in.readLine().trimmed();
+                lockFile.close();
+                
+                bool ok;
+                qint64 pid = pidStr.toLongLong(&ok);
+                
+                if (ok && pid > 0) {
+                    // Check if the process is still running
+#ifdef Q_OS_WIN
+                    // Windows: Try to open the process handle
+                    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, static_cast<DWORD>(pid));
+                    if (process != NULL) {
+                        DWORD exitCode;
+                        if (GetExitCodeProcess(process, &exitCode) && exitCode == STILL_ACTIVE) {
+                            isInUse = true; // Process is still running
+                        }
+                        CloseHandle(process);
+                    }
+#else
+                    // Linux/Unix: Check if /proc/[pid] exists
+                    QString procPath = QString("/proc/%1").arg(pid);
+                    if (QDir(procPath).exists()) {
+                        isInUse = true; // Process is still running
+                    }
+#endif
+                }
+            }
+        }
+        
+        if (isInUse) {
+            // Directory is actually in use by a running process, skip it
+            continue;
+        }
 
         // Calculate size before deletion (for logging)
         qint64 dirSize = 0;
