@@ -1195,7 +1195,10 @@ void MainWindow::setupUi() {
 MainWindow::~MainWindow() {
 
     saveButtonMappings();  // ✅ Save on exit, as backup
-    delete canvas;
+    
+    // Note: Do NOT manually delete canvas - it's a child of canvasStack
+    // Qt will automatically delete all canvases when canvasStack is destroyed
+    // Manual deletion here would cause double-delete and segfault!
     
     // Cleanup shared launcher instance
     if (sharedLauncher) {
