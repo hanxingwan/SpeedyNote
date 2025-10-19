@@ -303,29 +303,32 @@ int main(int argc, char *argv[]) {
     // Determine which window to show based on command line arguments
     if (!inputFile.isEmpty()) {
         // If a file is specified, go directly to MainWindow
-        MainWindow w;
+        // Allocate on heap to avoid destructor issues on exit
+        MainWindow *w = new MainWindow();
+        w->setAttribute(Qt::WA_DeleteOnClose); // Qt will delete when closed
+        
         if (createNewPackage) {
             // Handle --create-new command
             if (inputFile.toLower().endsWith(".spn")) {
-                w.show(); // Show window first
-                w.createNewSpnPackage(inputFile);
+                w->show(); // Show window first
+                w->createNewSpnPackage(inputFile);
             } else {
                 // Invalid file extension for new package
-                w.show();
+                w->show();
             }
         } else {
             // Check file extension to determine how to handle it
             if (inputFile.toLower().endsWith(".pdf")) {
                 // Handle PDF file association
-                w.show(); // Show window first for dialog parent
-                w.openPdfFile(inputFile);
+                w->show(); // Show window first for dialog parent
+                w->openPdfFile(inputFile);
             } else if (inputFile.toLower().endsWith(".spn")) {
                 // Handle SpeedyNote package
-                w.show(); // Show window first
-                w.openSpnPackage(inputFile);
+                w->show(); // Show window first
+                w->openSpnPackage(inputFile);
             } else {
                 // Unknown file type, just show the application
-                w.show();
+                w->show();
             }
         }
         return app.exec();
