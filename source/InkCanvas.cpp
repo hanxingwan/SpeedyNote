@@ -704,13 +704,16 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
         // Calculate where the cached canvas region will be drawn
         QRect cachedCanvasRect = cachedCanvasRegion.translated(cachedFrameOffset);
         
-        // Fill only the areas outside the canvas region (much faster on large displays)
-        QRegion outsideRegion(rect());
+        // Get the actual update region that Qt wants us to repaint
+        QRegion updateRegion = event->region();
+        
+        // Fill only the areas outside the canvas region (within update region only)
+        QRegion outsideRegion = updateRegion;
         outsideRegion -= QRegion(cachedCanvasRect);
         
         if (!outsideRegion.isEmpty()) {
             painter.setClipRegion(outsideRegion);
-            painter.fillRect(rect(), palette().window().color());
+            painter.fillRect(updateRegion.boundingRect(), palette().window().color());
             painter.setClipping(false);
         }
         
@@ -2756,10 +2759,19 @@ void InkCanvas::setPanWithTouchScroll(int xOffset, int yOffset) {
     // Update the cached frame offset for the next paint
     cachedFrameOffset = QPoint(deltaX, deltaY);
     
-    // Use update() for non-blocking updates to reduce touch input lag
-    // This allows the touch event to return quickly, improving responsiveness
-    // Qt will coalesce multiple update() calls automatically for efficiency
-    update();
+    // PERFORMANCE FIX: Only update the region that actually changes
+    // Calculate the union of old and new canvas positions to minimize GPU work
+    QRect oldCanvasRect = cachedCanvasRegion;
+    QRect newCanvasRect = cachedCanvasRegion.translated(cachedFrameOffset);
+    QRect updateRect = oldCanvasRect.united(newCanvasRect);
+    
+    // Clip update rect to widget bounds to avoid updating outside the widget
+    updateRect = updateRect.intersected(rect());
+    
+    // Use update(rect) for non-blocking updates to reduce touch input lag
+    // Only invalidate the region that actually changes, not the entire widget
+    // This is critical for performance on low-end GPUs (Mali, Panfrost, etc.)
+    update(updateRect);
     
     // Emit signal for MainWindow to update scrollbars
     // MainWindow checks isTouchPanningActive() and skips expensive operations
