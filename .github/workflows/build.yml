@@ -83,6 +83,13 @@ jobs:
 
     - name: Build packages
       run: |
+        # Debug: show current directory and files
+        echo "Current directory: $(pwd)"
+        echo "Files in current directory:"
+        ls -la
+        echo "Checking build-package.sh:"
+        ls -la build-package.sh || echo "build-package.sh not found"
+        
         if [ "${{ matrix.distro }}" = "archlinux" ]; then
           # Switch to non-root user for ArchLinux
           sudo -u builder bash -c "
