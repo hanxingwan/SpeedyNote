@@ -8,6 +8,9 @@ on:
 jobs:
   build-debian:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64, armhf]
     container: debian:bookworm
     
     steps:
@@ -19,24 +22,27 @@ jobs:
         apt-get update
         apt-get install -y cmake make pkg-config git sudo devscripts \
           qt6-base-dev qt6-tools-dev libpoppler-qt6-dev \
-          libsdl2-dev libasound2-dev
+          libsdl2-dev libasound2-dev crossbuild-essential-${{ matrix.arch }}
 
     - name: Build Debian package
       run: |
         pwd
         ls -la
         chmod +x build-package.sh
-        ./build-package.sh --deb
+        ./build-package.sh --deb --arch ${{ matrix.arch }}
 
     - name: Upload Debian package
       uses: actions/upload-artifact@v4
       with:
-        name: debian-package
+        name: debian-package-${{ matrix.arch }}
         path: "*.deb"
         retention-days: 30
 
   build-fedora:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [x86_64, aarch64]
     container: fedora:latest
     
     steps:
@@ -54,12 +60,12 @@ jobs:
         pwd
         ls -la
         chmod +x build-package.sh
-        ./build-package.sh --rpm
+        ./build-package.sh --rpm --arch ${{ matrix.arch }}
 
     - name: Upload Fedora package
       uses: actions/upload-artifact@v4
       with:
-        name: fedora-package
+        name: fedora-package-${{ matrix.arch }}
         path: "*.rpm"
         retention-days: 30
 
@@ -119,6 +125,5 @@ jobs:
           artifacts/**/*.deb
           artifacts/**/*.rpm
           artifacts/**/*.pkg.tar.zst
-          artifacts/**/*.apk
         draft: false
         prerelease: false
