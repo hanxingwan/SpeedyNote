@@ -6,115 +6,130 @@ on:
       - 'v*'
 
 jobs:
-  build-packages:
+  build-debian:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - distro: debian
-            image: debian:bookworm
-          - distro: fedora  
-            image: fedora:latest
-          - distro: archlinux
-            image: archlinux:latest
-          - distro: alpine
-            image: alpine:latest
-
-    container:
-      image: ${{ matrix.image }}
-
+    container: debian:bookworm
+    
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Install common dependencies
+    - name: Install dependencies
       run: |
-        if [ "${{ matrix.distro }}" = "debian" ]; then
-          apt-get update
-          apt-get install -y cmake make pkg-config git sudo
-        elif [ "${{ matrix.distro }}" = "fedora" ]; then
-          dnf install -y cmake make pkg-config git sudo
-        elif [ "${{ matrix.distro }}" = "archlinux" ]; then
-          pacman -Sy --noconfirm cmake make pkgconf git sudo base-devel
-        elif [ "${{ matrix.distro }}" = "alpine" ]; then
-          apk update
-          apk add cmake make pkgconf git sudo
-        fi
+        apt-get update
+        apt-get install -y cmake make pkg-config git sudo \
+          qt6-base-dev qt6-tools-dev libpoppler-qt6-dev \
+          libsdl2-dev libasound2-dev
 
-    - name: Install distro-specific build dependencies
+    - name: Build Debian package
       run: |
-        if [ "${{ matrix.distro }}" = "debian" ]; then
-          apt-get install -y \
-            qt6-base-dev \
-            qt6-tools-dev \
-            libpoppler-qt6-dev \
-            libsdl2-dev \
-            libasound2-dev
-        elif [ "${{ matrix.distro }}" = "fedora" ]; then
-          dnf install -y \
-            qt6-qtbase-devel \
-            qt6-qttools-devel \
-            poppler-qt6-devel \
-            SDL2-devel \
-            alsa-lib-devel
-        elif [ "${{ matrix.distro }}" = "archlinux" ]; then
-          pacman -Sy --noconfirm \
-            qt6-base \
-            qt6-tools \
-            poppler-qt6 \
-            sdl2-compat \
-            alsa-lib
-        elif [ "${{ matrix.distro }}" = "alpine" ]; then
-          apk add \
-            qt6-qtbase-dev \
-            qt6-qttools-dev \
-            poppler-qt5-dev \
-            poppler-qt6 \
-            sdl2-dev \
-            alsa-lib-dev
-        fi
+        chmod +x build-package.sh
+        ./build-package.sh --deb
 
-    - name: Setup non-root user for ArchLinux
-      if: matrix.distro == 'archlinux'
+    - name: Upload Debian package
+      uses: actions/upload-artifact@v4
+      with:
+        name: debian-package
+        path: "*.deb"
+        retention-days: 30
+
+  build-fedora:
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        dnf install -y cmake make pkg-config git sudo \
+          qt6-qtbase-devel qt6-qttools-devel poppler-qt6-devel \
+          SDL2-devel alsa-lib-devel
+
+    - name: Build Fedora package
+      run: |
+        chmod +x build-package.sh
+        ./build-package.sh --rpm
+
+    - name: Upload Fedora package
+      uses: actions/upload-artifact@v4
+      with:
+        name: fedora-package
+        path: "*.rpm"
+        retention-days: 30
+
+  build-archlinux:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        pacman -Sy --noconfirm cmake make pkgconf git sudo base-devel \
+          qt6-base qt6-tools poppler-qt6 sdl2-compat alsa-lib
+
+    - name: Setup non-root user
       run: |
         useradd -m builder
         chown -R builder:builder $GITHUB_WORKSPACE
         echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
-    - name: Build packages
+    - name: Build ArchLinux package
       run: |
-        # Debug: show current directory and files
+        sudo -u builder bash -c "
+          cd $GITHUB_WORKSPACE
+          chmod +x build-package.sh
+          ./build-package.sh --arch
+        "
+
+    - name: Upload ArchLinux package
+      uses: actions/upload-artifact@v4
+      with:
+        name: archlinux-package
+        path: "*.pkg.tar.zst"
+        retention-days: 30
+
+  build-alpine:
+    runs-on: ubuntu-latest
+    container: alpine:latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        apk update
+        apk add cmake make pkgconf git sudo \
+          qt6-qtbase-dev qt6-qttools-dev poppler-qt5-dev \
+          poppler-qt6 sdl2-dev alsa-lib-dev
+
+    - name: Debug workspace
+      run: |
         echo "Current directory: $(pwd)"
-        echo "Files in current directory:"
+        echo "Files in workspace:"
         ls -la
         echo "Checking build-package.sh:"
         ls -la build-package.sh || echo "build-package.sh not found"
-        
-        if [ "${{ matrix.distro }}" = "archlinux" ]; then
-          # Switch to non-root user for ArchLinux
-          sudo -u builder bash -c "
-            cd $GITHUB_WORKSPACE
-            chmod +x build-package.sh
-            ./build-package.sh --${{ matrix.distro }}
-          "
-        else
-          chmod +x build-package.sh
-          ./build-package.sh --${{ matrix.distro }}
-        fi
 
-    - name: Upload packages
+    - name: Build Alpine package
+      run: |
+        chmod +x build-package.sh
+        ./build-package.sh --apk
+
+    - name: Upload Alpine package
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ matrix.distro }}-packages
-        path: |
-          *.deb
-          *.rpm  
-          *.pkg.tar.zst
-          *.apk
+        name: alpine-package
+        path: "*.apk"
         retention-days: 30
 
   create-release:
-    needs: build-packages
+    needs: [build-debian, build-fedora, build-archlinux, build-alpine]
     runs-on: ubuntu-latest
     permissions:
       contents: write
