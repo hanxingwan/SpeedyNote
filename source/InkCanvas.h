@@ -400,7 +400,8 @@ private:
     
     // Efficient touch pan scrolling (Squid-style optimization)
     bool isTouchPanning = false; // True when actively panning with touch (not mouse wheel)
-    QPixmap cachedFrame; // Cached frame for efficient touch panning
+    QPixmap cachedFrame; // Cached frame for efficient touch panning (canvas region only)
+    QRect cachedCanvasRegion; // Canvas region position when cached (for performance optimization)
     QPoint cachedFrameOffset; // Offset of cached frame during panning
     int touchPanStartX = 0; // Pan X value when touch gesture started
     int touchPanStartY = 0; // Pan Y value when touch gesture started

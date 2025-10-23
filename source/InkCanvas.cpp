@@ -8,6 +8,7 @@
 #include <QScreen>
 #include <QGuiApplication>
 #include <QColor>
+#include <QDebug>
 #include <cmath>
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -699,12 +700,23 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
     
     // ⚡ SQUID-STYLE OPTIMIZATION: During touch panning, draw cached frame shifted by pan delta
     if (isTouchPanning && !cachedFrame.isNull()) {
-        // Fill entire background (simpler and avoids visual artifacts)
-        painter.fillRect(rect(), palette().window().color());
+        // PERFORMANCE FIX: Only fill and draw the necessary regions
+        // Calculate where the cached canvas region will be drawn
+        QRect cachedCanvasRect = cachedCanvasRegion.translated(cachedFrameOffset);
         
-        // Draw the cached frame at the offset position (no antialiasing for speed)
+        // Fill only the areas outside the canvas region (much faster on large displays)
+        QRegion outsideRegion(rect());
+        outsideRegion -= QRegion(cachedCanvasRect);
+        
+        if (!outsideRegion.isEmpty()) {
+            painter.setClipRegion(outsideRegion);
+            painter.fillRect(rect(), palette().window().color());
+            painter.setClipping(false);
+        }
+        
+        // Draw only the canvas region at the offset position (no antialiasing for speed)
         painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
-        painter.drawPixmap(cachedFrameOffset, cachedFrame);
+        painter.drawPixmap(cachedCanvasRect.topLeft(), cachedFrame);
         return; // Skip expensive rendering during gesture
     }
     
@@ -2498,7 +2510,22 @@ void InkCanvas::loadPage(int pageNumber) {
         QTimer::singleShot(0, this, [this]() {
             if (isTouchPanning) {
                 // Only rebuild if still touch panning (prevents stale timer callbacks)
-                cachedFrame = grab();
+                // PERFORMANCE FIX: Recalculate and grab only canvas region
+                qreal scaledCanvasWidth = buffer.width() * (internalZoomFactor / 100.0);
+                qreal scaledCanvasHeight = buffer.height() * (internalZoomFactor / 100.0);
+                
+                qreal centerOffsetX = (scaledCanvasWidth < width()) ? (width() - scaledCanvasWidth) / 2.0 : 0;
+                qreal centerOffsetY = (scaledCanvasHeight < height()) ? (height() - scaledCanvasHeight) / 2.0 : 0;
+                
+                cachedCanvasRegion = QRect(
+                    qRound(centerOffsetX - panOffsetX * (internalZoomFactor / 100.0)),
+                    qRound(centerOffsetY - panOffsetY * (internalZoomFactor / 100.0)),
+                    qRound(scaledCanvasWidth),
+                    qRound(scaledCanvasHeight)
+                );
+                
+                cachedCanvasRegion = cachedCanvasRegion.intersected(rect());
+                cachedFrame = grab(cachedCanvasRegion);
                 cachedFrameOffset = QPoint(0, 0);
             }
         });
@@ -2878,10 +2905,56 @@ bool InkCanvas::event(QEvent *event) {
                 lastTouchVelocity = QPointF(0, 0);
                 
                 // Capture current frame for efficient panning
-                // Use devicePixelRatio-aware grab for better performance on low-spec devices
-                cachedFrame = grab();  // Grab widget contents as pixmap
-                cachedFrameOffset = QPoint(0, 0);  // Start with no offset
+                // PERFORMANCE FIX: Only grab the canvas region (not blank areas)
+                qreal scaledCanvasWidth = buffer.width() * (internalZoomFactor / 100.0);
+                qreal scaledCanvasHeight = buffer.height() * (internalZoomFactor / 100.0);
                 
+                qreal centerOffsetX = (scaledCanvasWidth < width()) ? (width() - scaledCanvasWidth) / 2.0 : 0;
+                qreal centerOffsetY = (scaledCanvasHeight < height()) ? (height() - scaledCanvasHeight) / 2.0 : 0;
+                
+                cachedCanvasRegion = QRect(
+                    qRound(centerOffsetX - panOffsetX * (internalZoomFactor / 100.0)),
+                    qRound(centerOffsetY - panOffsetY * (internalZoomFactor / 100.0)),
+                    qRound(scaledCanvasWidth),
+                    qRound(scaledCanvasHeight)
+                );
+                
+                // Clip to widget bounds to avoid grabbing outside
+                cachedCanvasRegion = cachedCanvasRegion.intersected(rect());
+                
+                // Get effective DPI scale (Wayland-aware, respects manual override)
+                qreal dpr = getEffectiveDpiScale();
+                
+                // DEBUG: Print cached region information
+                /*
+                qDebug() << "=== TOUCH GESTURE START - CACHE INFO ===";
+                qDebug() << "Effective DPI Scale (Wayland-aware):" << dpr;
+                qDebug() << "Widget size (logical):" << width() << "x" << height() << "=" << (width() * height()) << "pixels";
+                qDebug() << "Widget size (physical):" << qRound(width() * dpr) << "x" << qRound(height() * dpr) 
+                         << "=" << qRound(width() * dpr * height() * dpr) << "pixels";
+                qDebug() << "Canvas buffer:" << buffer.width() << "x" << buffer.height();
+                qDebug() << "Zoom factor:" << internalZoomFactor << "%";
+                qDebug() << "Cached region (logical):" << cachedCanvasRegion;
+                qDebug() << "Cached region size (logical):" << cachedCanvasRegion.width() << "x" << cachedCanvasRegion.height() 
+                         << "=" << (cachedCanvasRegion.width() * cachedCanvasRegion.height()) << "pixels";
+                */
+                // Grab the canvas region - grab() returns physical pixels
+                cachedFrame = grab(cachedCanvasRegion);
+                cachedFrameOffset = QPoint(0, 0);
+                /*
+                qDebug() << "CachedFrame actual size (physical):" << cachedFrame.width() << "x" << cachedFrame.height()
+                         << "=" << (cachedFrame.width() * cachedFrame.height()) << "pixels";
+                qDebug() << "Expected physical size:" << qRound(cachedCanvasRegion.width() * dpr) << "x" 
+                         << qRound(cachedCanvasRegion.height() * dpr);
+                
+                         
+                // Calculate savings based on physical pixels (what actually matters for GPU)
+                int widgetPhysicalPixels = qRound(width() * dpr * height() * dpr);
+                int cachedPhysicalPixels = cachedFrame.width() * cachedFrame.height();
+                qDebug() << "Physical pixel savings:" << (widgetPhysicalPixels - cachedPhysicalPixels) << "pixels"
+                         << "(" << (100.0 * (1.0 - (qreal)cachedPhysicalPixels / widgetPhysicalPixels)) << "% reduction)";
+                qDebug() << "=========================================";
+                */
                 // Pre-calculate for optimization
                 touchPanStartX = panOffsetX;
                 touchPanStartY = panOffsetY;
