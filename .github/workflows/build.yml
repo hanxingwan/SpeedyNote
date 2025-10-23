@@ -1,0 +1,133 @@
+name: Build and Package SpeedyNote
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-packages:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - distro: debian
+            image: debian:bookworm
+          - distro: fedora  
+            image: fedora:latest
+          - distro: archlinux
+            image: archlinux:latest
+          - distro: alpine
+            image: alpine:latest
+
+    container:
+      image: ${{ matrix.image }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install common dependencies
+      run: |
+        if [ "${{ matrix.distro }}" = "debian" ]; then
+          apt-get update
+          apt-get install -y cmake make pkg-config git sudo
+        elif [ "${{ matrix.distro }}" = "fedora" ]; then
+          dnf install -y cmake make pkg-config git sudo
+        elif [ "${{ matrix.distro }}" = "archlinux" ]; then
+          pacman -Sy --noconfirm cmake make pkgconf git sudo base-devel
+        elif [ "${{ matrix.distro }}" = "alpine" ]; then
+          apk update
+          apk add cmake make pkgconf git sudo
+        fi
+
+    - name: Install distro-specific build dependencies
+      run: |
+        if [ "${{ matrix.distro }}" = "debian" ]; then
+          apt-get install -y \
+            qt6-base-dev \
+            qt6-tools-dev \
+            libpoppler-qt6-dev \
+            libsdl2-dev \
+            libasound2-dev
+        elif [ "${{ matrix.distro }}" = "fedora" ]; then
+          dnf install -y \
+            qt6-qtbase-devel \
+            qt6-qttools-devel \
+            poppler-qt6-devel \
+            SDL2-devel \
+            alsa-lib-devel
+        elif [ "${{ matrix.distro }}" = "archlinux" ]; then
+          pacman -Sy --noconfirm \
+            qt6-base \
+            qt6-tools \
+            poppler-qt6 \
+            sdl2-compat \
+            alsa-lib
+        elif [ "${{ matrix.distro }}" = "alpine" ]; then
+          apk add \
+            qt6-qtbase-dev \
+            qt6-qttools-dev \
+            poppler-qt5-dev \
+            poppler-qt6 \
+            sdl2-dev \
+            alsa-lib-dev
+        fi
+
+    - name: Setup non-root user for ArchLinux
+      if: matrix.distro == 'archlinux'
+      run: |
+        useradd -m builder
+        chown -R builder:builder $GITHUB_WORKSPACE
+        echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+    - name: Build packages
+      run: |
+        if [ "${{ matrix.distro }}" = "archlinux" ]; then
+          # Switch to non-root user for ArchLinux
+          sudo -u builder bash -c "
+            cd $GITHUB_WORKSPACE
+            chmod +x build-package.sh
+            ./build-package.sh --${{ matrix.distro }}
+          "
+        else
+          chmod +x build-package.sh
+          ./build-package.sh --${{ matrix.distro }}
+        fi
+
+    - name: Upload packages
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.distro }}-packages
+        path: |
+          *.deb
+          *.rpm  
+          *.pkg.tar.zst
+          *.apk
+        retention-days: 30
+
+  create-release:
+    needs: build-packages
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: List downloaded artifacts
+      run: find artifacts -type f -name "*" | sort
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          artifacts/**/*.deb
+          artifacts/**/*.rpm
+          artifacts/**/*.pkg.tar.zst
+          artifacts/**/*.apk
+        draft: false
+        prerelease: false
