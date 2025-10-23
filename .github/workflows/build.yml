@@ -17,12 +17,14 @@ jobs:
     - name: Install dependencies
       run: |
         apt-get update
-        apt-get install -y cmake make pkg-config git sudo \
+        apt-get install -y cmake make pkg-config git sudo devscripts \
           qt6-base-dev qt6-tools-dev libpoppler-qt6-dev \
           libsdl2-dev libasound2-dev
 
     - name: Build Debian package
       run: |
+        pwd
+        ls -la
         chmod +x build-package.sh
         ./build-package.sh --deb
 
@@ -43,12 +45,14 @@ jobs:
 
     - name: Install dependencies
       run: |
-        dnf install -y cmake make pkg-config git sudo \
+        dnf install -y cmake make pkg-config git sudo rpm-build rpm-devel \
           qt6-qtbase-devel qt6-qttools-devel poppler-qt6-devel \
           SDL2-devel alsa-lib-devel
 
     - name: Build Fedora package
       run: |
+        pwd
+        ls -la
         chmod +x build-package.sh
         ./build-package.sh --rpm
 
@@ -104,7 +108,7 @@ jobs:
     - name: Install dependencies
       run: |
         apk update
-        apk add cmake make pkgconf git sudo \
+        apk add cmake make pkgconf git sudo alpine-sdk abuild \
           qt6-qtbase-dev qt6-qttools-dev poppler-qt5-dev \
           poppler-qt6 sdl2-dev alsa-lib-dev
 
@@ -118,6 +122,8 @@ jobs:
 
     - name: Build Alpine package
       run: |
+        pwd
+        ls -la
         chmod +x build-package.sh
         ./build-package.sh --apk
 
