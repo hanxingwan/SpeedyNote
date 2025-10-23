@@ -97,45 +97,8 @@ jobs:
         path: "*.pkg.tar.zst"
         retention-days: 30
 
-  build-alpine:
-    runs-on: ubuntu-latest
-    container: alpine:latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Install dependencies
-      run: |
-        apk update
-        apk add cmake make pkgconf git sudo alpine-sdk abuild \
-          qt6-qtbase-dev qt6-qttools-dev poppler-qt5-dev \
-          poppler-qt6 sdl2-dev alsa-lib-dev
-
-    - name: Debug workspace
-      run: |
-        echo "Current directory: $(pwd)"
-        echo "Files in workspace:"
-        ls -la
-        echo "Checking build-package.sh:"
-        ls -la build-package.sh || echo "build-package.sh not found"
-
-    - name: Build Alpine package
-      run: |
-        pwd
-        ls -la
-        chmod +x build-package.sh
-        ./build-package.sh --apk
-
-    - name: Upload Alpine package
-      uses: actions/upload-artifact@v4
-      with:
-        name: alpine-package
-        path: "*.apk"
-        retention-days: 30
-
   create-release:
-    needs: [build-debian, build-fedora, build-archlinux, build-alpine]
+    needs: [build-debian, build-fedora, build-archlinux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
