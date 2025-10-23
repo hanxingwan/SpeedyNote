@@ -118,12 +118,48 @@ jobs:
     - name: List downloaded artifacts
       run: find artifacts -type f -name "*" | sort
 
+    - name: Rename architecture-specific packages
+      run: |
+        # Rename Debian packages
+        for deb_file in artifacts/debian-package-*/*.deb; do
+          if [ -f "$deb_file" ]; then
+            arch=$(echo "$deb_file" | grep -oE 'debian-package-[^/]*' | sed 's/debian-package-//')
+            filename=$(basename "$deb_file")
+            name=$(echo "$filename" | sed 's/_[^_]*\.deb$//')
+            version=$(echo "$filename" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+-[0-9]+')
+            new_name="${name}_${version}_${arch}.deb"
+            cp "$deb_file" "artifacts/$new_name"
+          fi
+        done
+        
+        # Rename Fedora packages
+        for rpm_file in artifacts/fedora-package-*/*.rpm; do
+          if [ -f "$rpm_file" ]; then
+            arch=$(echo "$rpm_file" | grep -oE 'fedora-package-[^/]*' | sed 's/fedora-package-//')
+            filename=$(basename "$rpm_file")
+            name_version=$(echo "$filename" | sed 's/\.rpm$//')
+            new_name="${name_version}.${arch}.rpm"
+            cp "$rpm_file" "artifacts/$new_name"
+          fi
+        done
+        
+        # Copy Arch packages (no need to rename as they're already architecture-specific)
+        for arch_file in artifacts/archlinux-package/*.pkg.tar.zst; do
+          if [ -f "$arch_file" ]; then
+            filename=$(basename "$arch_file")
+            cp "$arch_file" "artifacts/$filename"
+          fi
+        done
+
+    - name: List final artifacts
+      run: find artifacts -maxdepth 1 -type f -name "*" | sort
+
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          artifacts/**/*.deb
-          artifacts/**/*.rpm
-          artifacts/**/*.pkg.tar.zst
+          artifacts/*.deb
+          artifacts/*.rpm
+          artifacts/*.pkg.tar.zst
         draft: false
         prerelease: false
