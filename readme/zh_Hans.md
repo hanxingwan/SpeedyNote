@@ -18,8 +18,8 @@
 
 - 支持加载PDF，在其上做注释，1000页PDF高速加载，很难卡顿
 
-- 支持Windows 7, 8, 10, 11， MacOS，大多数Linux发行版。可轻松打包为`.deb`, `.rpm`,`.pkg.tar.zst`,`.apk`，
-  同时提供Flatpak，支持x86-64和aarch64，几乎所有设备均可运行
+- 支持Windows 7, 8, 10, 11， ~~MacOS~~，大多数Linux发行版。可轻松打包为`.deb`, `.rpm`,`.pkg.tar.zst`,`.apk`，
+  ~~同时提供Flatpak~~，支持x86-64和aarch64，几乎所有设备均可运行
 
 - Markdown即时贴，即使用户没有电磁笔，文字笔记也可以非常便捷高效
 
@@ -32,7 +32,7 @@
 #### Windows
 
 直接安装自解压程序即可。Windows 7/8
-用户请使用Legacy版本 [Release Version 0.4.13 - Legacy Release for Windows 7 / 8 · alpha-liu-01/SpeedyNote · GitHub](https://github.com/alpha-liu-01/SpeedyNote/releases/tag/v0.4.13-1)
+用户请使用Legacy版本 [32-bit Version built with Qt5](https://www.speedynote.org)
 
 #### Mac OS
 
@@ -43,13 +43,19 @@
 
 安装对应系统的`deb`,`rpm` `.pkg.tar.zst` 和 `.apk` 包
 
+对于Debian/Ubuntu等用户，您也可以使用
+```bash
+wget -O- https://apt.speedynote.org/speedynote-release-key.gpg | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/speedynote.gpg && echo "deb [arch=amd64,arm64 signed-by=/etc/apt/trusted.gpg.d/speedynote.gpg] https://apt.speedynote.org stable main" | sudo tee /etc/apt/sources.list.d/speedynote.list && sudo apt update && sudo apt install speedynote
+```
+这一行命令来直接安装SpeedyNote。并在后续直接用`sudo apt update && sudo apt upgrade` 来更新。
+
 # 图片
 
 ---
 
-![main](https://i.imgur.com/2jQjw1b.png)
+![main](https://i.imgur.com/5PY0LhO.png)
 
-![postmarketOS](https://i.imgur.com/uFWtM7z.jpeg)
+![acer](https://i.imgur.com/f7CrRvN.jpeg)
 
 # 已知特性和缺陷
 
@@ -59,11 +65,11 @@
 
 - PDF为只读格式，暂时无法将笔记和PDF本体融为一体
 
-- 在Windows 7上MagicDial的咔声无法正常播放
+- ~~在Windows 7上MagicDial的咔声无法正常播放~~ 已修复
 
 - 每个按钮的提示信息在使用手写笔悬浮的时候可能会正常显示（KDE Plasma）也可能不会（Windows）。先前的一个修复方式似乎会导致经常崩溃，所以这个修复暂时被移除了。
 
-- 在Phosh桌面上似乎会因为设备映射问题经常崩溃。
+- ~~在Phosh桌面上似乎会因为设备映射问题经常崩溃。~~ 可能是因为Phosh的更新自己好了
 
 - ~~Markdown即时贴无法嵌入图片~~ 当前可以直接在画布中插入来自本地或者剪贴板的图片。
 
