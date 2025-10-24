@@ -42,6 +42,7 @@
 #### Linux
 
 安装对应系统的`deb`,`rpm` `.pkg.tar.zst` 和 `.apk` 包
+
 对于Debian/Ubuntu等用户，您也可以使用
 ```bash
 wget -O- https://apt.speedynote.org/speedynote-release-key.gpg | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/speedynote.gpg && echo "deb [arch=amd64,arm64 signed-by=/etc/apt/trusted.gpg.d/speedynote.gpg] https://apt.speedynote.org stable main" | sudo tee /etc/apt/sources.list.d/speedynote.list && sudo apt update && sudo apt install speedynote
@@ -52,9 +53,9 @@ wget -O- https://apt.speedynote.org/speedynote-release-key.gpg | sudo gpg --dear
 
 ---
 
-![main](https://i.imgur.com/2jQjw1b.png)
+![main](https://i.imgur.com/5PY0LhO.png)
 
-![postmarketOS](https://i.imgur.com/uFWtM7z.jpeg)
+![acer](https://i.imgur.com/f7CrRvN.jpeg)
 
 # 已知特性和缺陷
 
