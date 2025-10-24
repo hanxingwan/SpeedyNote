@@ -96,6 +96,43 @@ elseif (UNIX)
 
     # No Windows-specific resources
     set(WIN_RESOURCES "")
+    
+    # Linux CPU architecture optimization
+    # Detect architecture
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64|AMD64")
+        # x86-64 Linux build - optimize for 1st gen Intel Core i (Nehalem) with SSE4.2
+        message(STATUS "🚀 Optimizing for x86-64 Linux (1st gen Intel Core i / Nehalem with SSE4.2)")
+        add_compile_options(
+            -march=nehalem           # Target 1st gen Intel Core i (Nehalem microarchitecture)
+            -mtune=nehalem           # Tune for Nehalem specifically
+            -msse4.2                 # Explicitly enable SSE4.2
+            -mpopcnt                 # Enable POPCNT instruction (part of SSE4.2)
+            -O3                      # Maximum optimization level
+            -ffast-math              # Aggressive floating-point optimizations
+            -funroll-loops           # Unroll loops for better performance
+            -fomit-frame-pointer     # Omit frame pointer for more registers
+            -DNDEBUG                 # Disable debug assertions
+        )
+    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
+        # ARM64 Linux build - optimize for older ARM cores (Cortex-A72/A53 big.LITTLE)
+        message(STATUS "🚀 Optimizing for ARM64 Linux (Cortex-A72/A53 compatible)")
+        add_compile_options(
+            -march=armv8-a+crc+simd  # ARMv8-A baseline with CRC32 and NEON SIMD
+            -mtune=cortex-a72        # Tune for Cortex-A72 (big cores in big.LITTLE)
+            -O3                      # Maximum optimization level
+            -ffast-math              # Aggressive floating-point optimizations
+            -funroll-loops           # Unroll loops for better performance
+            -fomit-frame-pointer     # Omit frame pointer for more registers
+            -DNDEBUG                 # Disable debug assertions
+        )
+    else()
+        # Generic fallback for other architectures
+        message(STATUS "Building for generic Linux (${CMAKE_SYSTEM_PROCESSOR})")
+        add_compile_options(
+            -O3
+            -DNDEBUG
+        )
+    endif()
 endif ()
 
 # Translation files

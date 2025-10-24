@@ -26,9 +26,41 @@ check_project_directory() {
     fi
 }
 
+# Function to detect architecture
+detect_architecture() {
+    local arch=$(uname -m)
+    case $arch in
+        x86_64|amd64)
+            echo "x86-64"
+            ;;
+        aarch64|arm64)
+            echo "ARM64"
+            ;;
+        *)
+            echo "Unknown ($arch)"
+            ;;
+    esac
+}
+
 # Function to build the project
 build_project() {
     echo -e "${YELLOW}Building SpeedyNote...${NC}"
+    
+    # Detect and display architecture
+    local arch_type=$(detect_architecture)
+    echo -e "${CYAN}Detected architecture: ${arch_type}${NC}"
+    
+    case $arch_type in
+        "x86-64")
+            echo -e "${CYAN}Optimization target: 1st gen Intel Core i (Nehalem) with SSE4.2${NC}"
+            ;;
+        "ARM64")
+            echo -e "${CYAN}Optimization target: Cortex-A72/A53 (ARMv8-A with CRC32)${NC}"
+            ;;
+        *)
+            echo -e "${YELLOW}Using generic optimizations${NC}"
+            ;;
+    esac
     
     # Clean and create build directory
     rm -rf build
@@ -43,8 +75,11 @@ build_project() {
     
     cd build
     
-    # Configure and build
+    # Configure and build with optimizations
+    echo -e "${YELLOW}Configuring build with maximum performance optimizations...${NC}"
     cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr ..
+    
+    echo -e "${YELLOW}Compiling with $(nproc) parallel jobs...${NC}"
     make -j$(nproc)
     
     if [[ ! -f "NoteApp" ]]; then
