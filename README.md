@@ -1,11 +1,21 @@
 ﻿# 📝 SpeedyNote
 
+<div align="center">
+<img src="https://i.imgur.com/Q7HPQwK.png" width="300"></img>
+</div>
+<br></br>
+<div align="center">
+<a href="https://hellogithub.com/repository/alpha-liu-01/SpeedyNote" target="_blank"><img src="https://abroad.hellogithub.com/v1/widgets/recommend.svg?rid=e86680d007424ab59d68d5e787ad5c12&claim_uid=e5oCIWstjbEUv9D" alt="Featured｜HelloGitHub" style="width: 250px; height: 54px;" width="250" height="54" /></a>
+</div>
+
+
+---
 _A lightweight, fast, and stylus-optimized note-taking app built for classic tablet PCs, low-resolution screens, and
 vintage hardware._
 
 如果您恰好不懂英文，请移步[中文README](./readme/zh_Hans.md)
 
-<a href="https://hellogithub.com/repository/alpha-liu-01/SpeedyNote" target="_blank"><img src="https://abroad.hellogithub.com/v1/widgets/recommend.svg?rid=e86680d007424ab59d68d5e787ad5c12&claim_uid=e5oCIWstjbEUv9D" alt="Featured｜HelloGitHub" style="width: 250px; height: 54px;" width="250" height="54" /></a>
+
 
 ![cover](https://i.imgur.com/4YMM2Fx.png)
 
@@ -41,6 +51,25 @@ vintage hardware._
 - Windows 7/8/10/11/Ubuntu/Debian/Fedora/RedHat/ArchLinux/AlpineLinux
 - Qt 5 or Qt 6 runtime (bundled in Windows releases)
 - Stylus input (Wacom recommended)
+
+### 💾 Installation
+
+---
+
+#### Windows
+
+Download the installer from [SpeedyNote official site](https://www.speedynote.org) 
+Windows 7 or Windows 8 users may download the 32-bit legacy version instead.  
+
+#### Linux
+
+Download the `deb`,`rpm` `.pkg.tar.zst` or `.apk` packages from [SpeedyNote official site](https://www.speedynote.org) and install them locally, or
+
+For Debian/Ubuntu users, you can get SpeedyNote from `apt.speedynote.org` and run
+```bash
+wget -O- https://apt.speedynote.org/speedynote-release-key.gpg | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/speedynote.gpg && echo "deb [arch=amd64,arm64 signed-by=/etc/apt/trusted.gpg.d/speedynote.gpg] https://apt.speedynote.org stable main" | sudo tee /etc/apt/sources.list.d/speedynote.list && sudo apt update && sudo apt install speedynote
+```
+this command to install SpeedyNote to your computer, and update with `sudo apt update && sudo apt upgrade` commands. 
 
 🛠️ Usage
 
