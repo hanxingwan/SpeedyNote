@@ -1,0 +1,165 @@
+name: Build and Package SpeedyNote
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-debian:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64, armhf]
+    container: debian:bookworm
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        apt-get update
+        apt-get install -y cmake make pkg-config git sudo devscripts \
+          qt6-base-dev qt6-tools-dev libpoppler-qt6-dev \
+          libsdl2-dev libasound2-dev crossbuild-essential-${{ matrix.arch }}
+
+    - name: Build Debian package
+      run: |
+        pwd
+        ls -la
+        chmod +x build-package.sh
+        ./build-package.sh --deb
+
+    - name: Upload Debian package
+      uses: actions/upload-artifact@v4
+      with:
+        name: debian-package-${{ matrix.arch }}
+        path: "*.deb"
+        retention-days: 30
+
+  build-fedora:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [x86_64, aarch64]
+    container: fedora:latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        dnf install -y cmake make pkg-config git sudo rpm-build rpm-devel \
+          qt6-qtbase-devel qt6-qttools-devel poppler-qt6-devel \
+          SDL2-devel alsa-lib-devel
+
+    - name: Build Fedora package
+      run: |
+        pwd
+        ls -la
+        chmod +x build-package.sh
+        ./build-package.sh --rpm
+
+    - name: Upload Fedora package
+      uses: actions/upload-artifact@v4
+      with:
+        name: fedora-package-${{ matrix.arch }}
+        path: "*.rpm"
+        retention-days: 30
+
+  build-archlinux:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        pacman -Sy --noconfirm cmake make pkgconf git sudo base-devel \
+          qt6-base qt6-tools poppler-qt6 sdl2-compat alsa-lib
+
+    - name: Setup non-root user
+      run: |
+        useradd -m builder
+        chown -R builder:builder $GITHUB_WORKSPACE
+        echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+    - name: Build ArchLinux package
+      run: |
+        sudo -u builder bash -c "
+          cd $GITHUB_WORKSPACE
+          chmod +x build-package.sh
+          ./build-package.sh --arch
+        "
+
+    - name: Upload ArchLinux package
+      uses: actions/upload-artifact@v4
+      with:
+        name: archlinux-package
+        path: "*.pkg.tar.zst"
+        retention-days: 30
+
+  create-release:
+    needs: [build-debian, build-fedora, build-archlinux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: List downloaded artifacts
+      run: find artifacts -type f -name "*" | sort
+
+    - name: Rename architecture-specific packages
+      run: |
+        # Rename Debian packages
+        for deb_file in artifacts/debian-package-*/*.deb; do
+          if [ -f "$deb_file" ]; then
+            arch=$(echo "$deb_file" | grep -oE 'debian-package-[^/]*' | sed 's/debian-package-//')
+            filename=$(basename "$deb_file")
+            name=$(echo "$filename" | sed 's/_[^_]*\.deb$//')
+            version=$(echo "$filename" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+-[0-9]+')
+            new_name="${name}_${version}_${arch}.deb"
+            cp "$deb_file" "artifacts/$new_name"
+          fi
+        done
+        
+        # Rename Fedora packages
+        for rpm_file in artifacts/fedora-package-*/*.rpm; do
+          if [ -f "$rpm_file" ]; then
+            arch=$(echo "$rpm_file" | grep -oE 'fedora-package-[^/]*' | sed 's/fedora-package-//')
+            filename=$(basename "$rpm_file")
+            name_version=$(echo "$filename" | sed 's/\.rpm$//')
+            new_name="${name_version}.${arch}.rpm"
+            cp "$rpm_file" "artifacts/$new_name"
+          fi
+        done
+        
+        # Copy Arch packages (no need to rename as they're already architecture-specific)
+        for arch_file in artifacts/archlinux-package/*.pkg.tar.zst; do
+          if [ -f "$arch_file" ]; then
+            filename=$(basename "$arch_file")
+            cp "$arch_file" "artifacts/$filename"
+          fi
+        done
+
+    - name: List final artifacts
+      run: find artifacts -maxdepth 1 -type f -name "*" | sort
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          artifacts/*.deb
+          artifacts/*.rpm
+          artifacts/*.pkg.tar.zst
+        draft: false
+        prerelease: false
