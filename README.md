@@ -7,7 +7,7 @@ vintage hardware._
 
 <a href="https://hellogithub.com/repository/alpha-liu-01/SpeedyNote" target="_blank"><img src="https://abroad.hellogithub.com/v1/widgets/recommend.svg?rid=e86680d007424ab59d68d5e787ad5c12&claim_uid=e5oCIWstjbEUv9D" alt="Featured｜HelloGitHub" style="width: 250px; height: 54px;" width="250" height="54" /></a>
 
-![cover](https://i.imgur.com/U161QSH.png)
+![cover](https://i.imgur.com/4YMM2Fx.png)
 
 ---
 
