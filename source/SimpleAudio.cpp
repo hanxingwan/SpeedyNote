@@ -2,6 +2,7 @@
 #include <QFile>
 #include <QDebug>
 #include <QObject>
+#include <QTimer>
 #include <cmath>
 #include <algorithm>
 
@@ -17,12 +18,43 @@
     #include <QElapsedTimer>
     #include <memory>
     #include <errno.h>
+#elif defined(__APPLE__)
+    #include <AudioToolbox/AudioToolbox.h>
+    #include <CoreAudio/CoreAudioTypes.h>
+    #include <QMutex>
+    #include <QElapsedTimer>
+    
+    // Forward declare callback for macOS AudioQueue
+    static void audioQueueOutputCallback(void *inUserData, AudioQueueRef inAQ, AudioQueueBufferRef inBuffer);
+#endif
+
+#ifdef __APPLE__
+// AudioQueue callback - called when a buffer has finished playing
+static void audioQueueOutputCallback(void *inUserData, AudioQueueRef inAQ, AudioQueueBufferRef inBuffer) {
+    // The buffer has finished playing, we can free it
+    // Note: AudioQueueReset() already frees buffers, so we need to be careful about double-free
+    // We only free if the buffer reference is still valid (not already freed by reset)
+    if (inAQ && inBuffer) {
+        AudioQueueFreeBuffer(inAQ, inBuffer);
+    }
+}
 #endif
 
 class SimpleAudio::SimpleAudioPrivate
 {
 public:
-    SimpleAudioPrivate() : volume(0.4f), audioData(nullptr), audioSize(0), minimumInterval(50) {
+    SimpleAudioPrivate() : 
+#ifdef __APPLE__
+        volume(0.8f),  // macOS AudioQueue needs higher volume
+#else
+        volume(0.4f),
+#endif
+        audioData(nullptr), audioSize(0), 
+#ifdef __APPLE__
+        minimumInterval(10) {  // Very low interval for macOS rapid-fire (can interrupt itself)
+#else
+        minimumInterval(50) {
+#endif
 #ifdef _WIN32
         directSound = nullptr;
         primaryBuffer = nullptr;
@@ -32,6 +64,12 @@ public:
         sampleRate = 44100;
         channels = 1;
         bitsPerSample = 16;
+#elif defined(__APPLE__)
+        audioQueue = nullptr;
+        sampleRate = 44100;
+        channels = 1;
+        bitsPerSample = 16;
+        lastPlayTimer.start();
 #endif
     }
     ~SimpleAudioPrivate() {
@@ -61,6 +99,21 @@ public:
             audioSize = 0;
         }
 #elif defined(__linux__)
+        if (audioData) {
+            delete[] audioData;
+            audioData = nullptr;
+            audioSize = 0;
+        }
+#elif defined(__APPLE__)
+        // Clean up AudioQueue - lock mutex to prevent race with play()
+        playMutex.lock();
+        if (audioQueue) {
+            AudioQueueStop(audioQueue, true);     // Stop immediately
+            AudioQueueDispose(audioQueue, true);  // Dispose queue and free all resources (including buffers)
+            audioQueue = nullptr;
+        }
+        playMutex.unlock();
+        
         if (audioData) {
             delete[] audioData;
             audioData = nullptr;
@@ -205,11 +258,23 @@ public:
     int bitsPerSample;
     size_t dataOffset;
 #endif
+
+#ifdef __APPLE__
+    // AudioQueue objects for macOS
+    AudioQueueRef audioQueue;
+    QMutex playMutex; // Prevent concurrent playback
+    QElapsedTimer lastPlayTimer; // Track last play time for rate limiting
+    
+    // WAV format info
+    int sampleRate;
+    int channels;
+    int bitsPerSample;
+#endif
 };
 
 SimpleAudio::SimpleAudio() : d(new SimpleAudioPrivate())
 {
-#ifdef __linux__
+#if defined(__linux__) || defined(__APPLE__)
     d->lastPlayTimer.start();
 #endif
 }
@@ -356,6 +421,87 @@ bool SimpleAudio::loadWavFile(const QString& filePath)
             d->audioSize = dataSize;
             d->audioData = new char[d->audioSize];
             memcpy(d->audioData, data + d->dataOffset, d->audioSize);
+            return true;
+        }
+        pos += 8 + *reinterpret_cast<const uint32_t*>(data + pos + 4);
+    }
+    
+    qWarning() << "SimpleAudio: Could not find data chunk in WAV file";
+    return false;
+    
+#elif defined(__APPLE__)
+    // Parse WAV header for macOS AudioQueue playback
+    const char* data = fileData.constData();
+    
+    // Find the "fmt " chunk
+    size_t pos = 12;
+    while (pos < fileData.size() - 8) {
+        if (memcmp(data + pos, "fmt ", 4) == 0) {
+            uint32_t chunkSize = *reinterpret_cast<const uint32_t*>(data + pos + 4);
+            if (chunkSize >= 16) {
+                uint16_t audioFormat = *reinterpret_cast<const uint16_t*>(data + pos + 8);
+                if (audioFormat != 1) { // PCM
+                    qWarning() << "SimpleAudio: Only PCM format supported";
+                    return false;
+                }
+                
+                d->channels = *reinterpret_cast<const uint16_t*>(data + pos + 10);
+                d->sampleRate = *reinterpret_cast<const uint32_t*>(data + pos + 12);
+                d->bitsPerSample = *reinterpret_cast<const uint16_t*>(data + pos + 22);
+                
+                if (d->bitsPerSample != 16) {
+                    qWarning() << "SimpleAudio: Only 16-bit samples supported";
+                    return false;
+                }
+                break;
+            }
+        }
+        pos += 8 + *reinterpret_cast<const uint32_t*>(data + pos + 4);
+    }
+    
+    // Find the "data" chunk
+    pos = 12;
+    while (pos < fileData.size() - 8) {
+        if (memcmp(data + pos, "data", 4) == 0) {
+            uint32_t dataSize = *reinterpret_cast<const uint32_t*>(data + pos + 4);
+            size_t dataOffset = pos + 8;
+            d->audioSize = dataSize;
+            d->audioData = new char[d->audioSize];
+            memcpy(d->audioData, data + dataOffset, d->audioSize);
+            
+            // Initialize AudioQueue
+            AudioStreamBasicDescription audioFormat;
+            memset(&audioFormat, 0, sizeof(audioFormat));
+            audioFormat.mSampleRate = d->sampleRate;
+            audioFormat.mFormatID = kAudioFormatLinearPCM;
+            audioFormat.mFormatFlags = kLinearPCMFormatFlagIsSignedInteger | kLinearPCMFormatFlagIsPacked;
+            audioFormat.mBytesPerPacket = d->channels * (d->bitsPerSample / 8);
+            audioFormat.mFramesPerPacket = 1;
+            audioFormat.mBytesPerFrame = d->channels * (d->bitsPerSample / 8);
+            audioFormat.mChannelsPerFrame = d->channels;
+            audioFormat.mBitsPerChannel = d->bitsPerSample;
+            audioFormat.mReserved = 0;
+            
+            // Create AudioQueue with a callback function
+            // Use NULL for run loop to let AudioQueue use its own dedicated thread (faster, no UI blocking)
+            OSStatus status = AudioQueueNewOutput(
+                &audioFormat, 
+                audioQueueOutputCallback,  // Callback function for buffer cleanup
+                nullptr,                   // No user data needed (callback just frees buffer)
+                NULL,                      // NULL = AudioQueue uses its own high-priority thread
+                NULL,                      // NULL run loop mode (not needed with NULL run loop)
+                0,                         // Reserved flags
+                &d->audioQueue
+            );
+            
+            if (status != noErr) {
+                qWarning() << "SimpleAudio: Failed to create AudioQueue, error:" << status;
+                return false;
+            }
+            
+            // Prime the queue for lower latency
+            AudioQueuePrime(d->audioQueue, 0, NULL);
+            
             return true;
         }
         pos += 8 + *reinterpret_cast<const uint32_t*>(data + pos + 4);
@@ -555,6 +701,78 @@ void SimpleAudio::play()
     // Make thread clean up itself when finished (prevents memory leak)
     QObject::connect(thread, &QThread::finished, thread, &QThread::deleteLater);
     thread->start();
+    
+#elif defined(__APPLE__)
+    // Apply rate limiting on macOS (prevent excessive calls)
+    if (d->lastPlayTimer.isValid() && d->lastPlayTimer.elapsed() < d->minimumInterval) {
+        return; // Too soon, skip this play
+    }
+    
+    d->lastPlayTimer.restart();
+    
+    if (!d->audioQueue) {
+        return;
+    }
+    
+    // Lock mutex for thread-safe AudioQueue access
+    // Use blocking lock briefly - we want to allow rapid-fire clicks
+    d->playMutex.lock();
+    
+    // Stop any currently playing audio IMMEDIATELY (like Windows DirectSound)
+    // This allows us to interrupt and restart, enabling rapid-fire clicks
+    AudioQueueStop(d->audioQueue, true);  // true = stop immediately
+    
+    // AudioQueueReset() releases all enqueued buffers WITHOUT calling callbacks
+    // This prevents double-free since callbacks won't fire for interrupted buffers
+    AudioQueueReset(d->audioQueue);
+    
+    // Set volume before playback
+    AudioQueueSetParameter(d->audioQueue, kAudioQueueParam_Volume, d->volume);
+    
+    // Allocate a new buffer for this playback
+    AudioQueueBufferRef buffer = nullptr;
+    OSStatus status = AudioQueueAllocateBuffer(d->audioQueue, d->audioSize, &buffer);
+    if (status != noErr) {
+        qWarning() << "SimpleAudio: Failed to allocate AudioQueue buffer, error:" << status;
+        d->playMutex.unlock();
+        return;
+    }
+    
+    // Copy audio data to buffer
+    memcpy(buffer->mAudioData, d->audioData, d->audioSize);
+    buffer->mAudioDataByteSize = d->audioSize;
+    
+    // Enqueue the buffer - the callback will be called when playback completes normally
+    status = AudioQueueEnqueueBuffer(d->audioQueue, buffer, 0, nullptr);
+    if (status != noErr) {
+        qWarning() << "SimpleAudio: Failed to enqueue AudioQueue buffer, error:" << status;
+        AudioQueueFreeBuffer(d->audioQueue, buffer);
+        d->playMutex.unlock();
+        return;
+    }
+    
+    // Start playback IMMEDIATELY
+    // Use NULL to start immediately without waiting for any specific time
+    status = AudioQueueStart(d->audioQueue, NULL);
+    if (status != noErr) {
+        qWarning() << "SimpleAudio: Failed to start AudioQueue, error:" << status;
+        // CRITICAL: If start fails, stop and reset to ensure callback is not called
+        // This prevents the enqueued buffer from leaking
+        AudioQueueStop(d->audioQueue, true);
+        AudioQueueReset(d->audioQueue);  // This will free the enqueued buffer
+        d->playMutex.unlock();
+        return;
+    }
+    
+    // Unlock immediately - playback has started successfully
+    // The callback will handle buffer cleanup when playback completes
+    d->playMutex.unlock();
+    
+    // Memory safety notes:
+    // 1. AudioQueueReset() frees buffers WITHOUT calling callbacks (no double-free)
+    // 2. Callbacks only fire for buffers that complete normally
+    // 3. If AudioQueueStart() fails, we reset to free the enqueued buffer (no leak)
+    // 4. Mutex protects against race conditions during stop/reset/start sequence
 #endif
 }
 
@@ -579,6 +797,11 @@ void SimpleAudio::setVolume(float volume)
         
         d->soundBuffer->SetVolume(dsVolume);
     }
+#elif defined(__APPLE__)
+    // Apply volume to AudioQueue if available
+    if (d->audioQueue) {
+        AudioQueueSetParameter(d->audioQueue, kAudioQueueParam_Volume, d->volume);
+    }
 #endif
 }
 
@@ -600,6 +823,8 @@ bool SimpleAudio::isAudioAvailable()
         return true;
     }
     return false; // Fallback to system beep will still work
+#elif defined(__APPLE__)
+    return true; // macOS always has CoreAudio
 #else
     return false;
 #endif

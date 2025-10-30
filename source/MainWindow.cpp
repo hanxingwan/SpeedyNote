@@ -6878,8 +6878,8 @@ bool MainWindow::isInstanceRunning()
     // Creation failed, check why
     QSharedMemory::SharedMemoryError error = sharedMemory->error();
     
-#ifdef Q_OS_LINUX
-    // On Linux, handle the alternating crash pattern by being more aggressive with cleanup
+#if defined(Q_OS_LINUX) || defined(Q_OS_MACOS) || defined(Q_OS_MAC)
+    // On Linux and macOS, handle stale shared memory by checking if server is actually responding
     if (error == QSharedMemory::AlreadyExists) {
         // Try to connect to the local server to see if instance is actually running
         QLocalSocket testSocket;
@@ -6888,7 +6888,11 @@ bool MainWindow::isInstanceRunning()
         // Wait briefly for connection - reduced timeout for faster response
         if (!testSocket.waitForConnected(500)) {
             // No server responding, definitely stale shared memory
+            #ifdef Q_OS_MACOS
+            // qDebug() << "Detected stale shared memory on macOS, attempting cleanup...";
+            #else
             // qDebug() << "Detected stale shared memory on Linux, attempting cleanup...";
+            #endif
             
             // Delete current shared memory object and create a fresh one
             delete sharedMemory;
@@ -6904,12 +6908,13 @@ bool MainWindow::isInstanceRunning()
                 
                 // Now try to create again
                 if (sharedMemory->create(1)) {
-                    // qDebug() << "Successfully cleaned up stale shared memory on Linux";
+                    // qDebug() << "Successfully cleaned up stale shared memory";
                     return false; // We're now the first instance
                 }
             }
             
-            // If attach failed, try more aggressive cleanup
+            #ifdef Q_OS_LINUX
+            // If attach failed on Linux, try more aggressive cleanup
             // This handles the case where the segment exists but is corrupted
             delete sharedMemory;
             sharedMemory = nullptr;
@@ -6932,6 +6937,21 @@ bool MainWindow::isInstanceRunning()
             
             // If we still can't create, log the issue
             qWarning() << "Failed to clean up stale shared memory on Linux. Manual cleanup may be required.";
+            #endif
+            
+            #ifdef Q_OS_MACOS
+            // On macOS, if attach/detach didn't work, the memory is truly stale
+            // Just force create by using a new instance
+            delete sharedMemory;
+            sharedMemory = new QSharedMemory("SpeedyNote_SingleInstance");
+            if (sharedMemory->create(1)) {
+                return false;
+            }
+            // If still failing, log but allow app to run anyway (better than locking out)
+            qWarning() << "Failed to clean up stale shared memory on macOS";
+            // Force it to work by assuming we're the only instance
+            return false;
+            #endif
         } else {
             // Server is responding, there's actually another instance running
             testSocket.disconnectFromServer();
@@ -7065,6 +7085,13 @@ void MainWindow::cleanupSharedResources()
     // Use system() instead of QProcess to avoid Qt dependencies in cleanup
     int ret = system("ipcs -m | grep $(whoami) | awk '/SpeedyNote/{print $2}' | xargs -r ipcrm -m 2>/dev/null");
     (void)ret; // Explicitly ignore return value
+#endif
+
+#ifdef Q_OS_MACOS
+    // On macOS, QSharedMemory uses POSIX shared memory which should auto-cleanup
+    // but we can force removal of the underlying file just to be sure
+    // QSharedMemory on macOS creates files in /var/tmp or similar
+    // The removeServer above should handle the local socket cleanup
 #endif
 }
 
