@@ -180,46 +180,45 @@ bundle_custom_libraries() {
     # Bundle poppler-qt6 (custom compiled in /opt/poppler-qt6)
     if [[ -d "/opt/poppler-qt6/lib" ]]; then
         echo -e "${CYAN}  → Copying poppler-qt6 libraries...${NC}"
-        cp /opt/poppler-qt6/lib/libpoppler-qt6.*.dylib "$frameworks_dir/" 2>/dev/null || true
-        echo -e "${GREEN}    • Copied libpoppler-qt6${NC}"
-    fi
-    
-    # Bundle base poppler library from /usr/local/lib (dependency of poppler-qt6)
-    if [[ -f "/usr/local/lib/libpoppler.149.dylib" ]]; then
-        echo -e "${CYAN}  → Copying base poppler library...${NC}"
-        cp /usr/local/lib/libpoppler.149.*.dylib "$frameworks_dir/" 2>/dev/null || true
-        cp /usr/local/lib/libpoppler.149.dylib "$frameworks_dir/" 2>/dev/null || true
-        echo -e "${GREEN}    • Copied libpoppler.149${NC}"
         
-        # Fix poppler library IDs and inter-dependencies
-        echo -e "${CYAN}  → Fixing poppler library paths...${NC}"
+        # Copy all poppler libraries (including versioned ones)
+        cp /opt/poppler-qt6/lib/libpoppler-qt6*.dylib "$frameworks_dir/" 2>/dev/null || true
+        cp /opt/poppler-qt6/lib/libpoppler.*.dylib "$frameworks_dir/" 2>/dev/null || true
+        cp /opt/poppler-qt6/lib/libpoppler-cpp*.dylib "$frameworks_dir/" 2>/dev/null || true
         
-        # Fix libpoppler.149.dylib
-        for lib in "$frameworks_dir"/libpoppler.149*.dylib; do
+        # List what we copied for debugging
+        echo -e "${CYAN}  → Copied libraries:${NC}"
+        ls -1 "$frameworks_dir"/libpoppler*.dylib 2>/dev/null | sed 's/.*\//    /' || echo "    (none found)"
+        
+        # Fix library IDs and dependencies
+        for lib in "$frameworks_dir"/libpoppler*.dylib; do
             if [[ -f "$lib" ]]; then
                 local libname=$(basename "$lib")
-                install_name_tool -id "@executable_path/../Frameworks/$libname" "$lib" 2>/dev/null || true
+                
+                # Step 1: Set the library's own install name
+                install_name_tool -id "@loader_path/$libname" "$lib" 2>/dev/null || true
+                
+                # Step 2: Fix all poppler dependencies within this library
+                # This handles cases like libpoppler-qt6 depending on libpoppler
+                for dep in /opt/poppler-qt6/lib/libpoppler*.dylib; do
+                    if [[ -f "$dep" ]]; then
+                        local depname=$(basename "$dep")
+                        # Change absolute paths
+                        install_name_tool -change "/opt/poppler-qt6/lib/$depname" \
+                            "@loader_path/$depname" "$lib" 2>/dev/null || true
+                        # Change @rpath references
+                        install_name_tool -change "@rpath/$depname" \
+                            "@loader_path/$depname" "$lib" 2>/dev/null || true
+                    fi
+                done
             fi
         done
         
-        # Fix libpoppler-qt6.dylib to reference bundled libpoppler
-        for lib in "$frameworks_dir"/libpoppler-qt6*.dylib; do
+        # Update executable to use bundled poppler libraries
+        for lib in "$frameworks_dir"/libpoppler*.dylib; do
             if [[ -f "$lib" ]]; then
                 local libname=$(basename "$lib")
-                # Change its own ID
-                install_name_tool -id "@executable_path/../Frameworks/$libname" "$lib" 2>/dev/null || true
-                
-                # Fix dependency on libpoppler.149 (multiple possible formats)
-                # @rpath variant (most common)
-                install_name_tool -change "@rpath/libpoppler.149.dylib" \
-                    "@executable_path/../Frameworks/libpoppler.149.dylib" "$lib" 2>/dev/null || true
-                # Absolute path variants
-                install_name_tool -change "/usr/local/lib/libpoppler.149.dylib" \
-                    "@executable_path/../Frameworks/libpoppler.149.dylib" "$lib" 2>/dev/null || true
-                install_name_tool -change "/opt/poppler-qt6/lib/libpoppler.149.dylib" \
-                    "@executable_path/../Frameworks/libpoppler.149.dylib" "$lib" 2>/dev/null || true
-                
-                # Update executable to use bundled poppler-qt6
+                # Fix references from executable
                 install_name_tool -change "@rpath/$libname" \
                     "@executable_path/../Frameworks/$libname" "$executable" 2>/dev/null || true
                 install_name_tool -change "/opt/poppler-qt6/lib/$libname" \
@@ -227,7 +226,7 @@ bundle_custom_libraries() {
             fi
         done
         
-        echo -e "${GREEN}  ✓ poppler libraries bundled and linked${NC}"
+        echo -e "${GREEN}  ✓ poppler-qt6 bundled and relinked${NC}"
     fi
     
     # Bundle SDL2 (from /usr/local/lib)
@@ -311,6 +310,12 @@ create_app_bundle() {
             echo -e "${YELLOW}  ⚠ Icon not found at resources/icons/mainicon.png${NC}"
         fi
         
+        # Extract version from CMakeLists.txt
+        local VERSION=$(grep "project(SpeedyNote VERSION" CMakeLists.txt | sed -n 's/.*VERSION \([0-9.]*\).*/\1/p')
+        if [[ -z "$VERSION" ]]; then
+            VERSION="0.10.5"
+        fi
+        
         # Create Info.plist
         cat > "SpeedyNote.app/Contents/Info.plist" << EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -326,9 +331,9 @@ create_app_bundle() {
     <key>CFBundleDisplayName</key>
     <string>SpeedyNote</string>
     <key>CFBundleVersion</key>
-    <string>1.0</string>
+    <string>${VERSION}</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0</string>
+    <string>${VERSION}</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleIconFile</key>
@@ -443,6 +448,187 @@ EOF
     fi
 }
 
+# Function to create DMG package for distribution
+create_dmg_package() {
+    echo
+    echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
+    echo -e "${BLUE}   DMG Package Creation${NC}"
+    echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
+    echo
+    
+    if [[ ! -d "SpeedyNote.app" ]]; then
+        echo -e "${RED}✗ SpeedyNote.app not found. Please create app bundle first.${NC}"
+        return 1
+    fi
+    
+    echo -e "${YELLOW}Would you like to create a distributable DMG package?${NC}"
+    echo -e "  ${CYAN}1)${NC} Yes, create DMG with Qt@6 dependency installer"
+    echo -e "  ${CYAN}2)${NC} Skip DMG creation"
+    echo
+    read -p "Enter your choice (1-2): " dmg_choice
+    
+    if [[ "$dmg_choice" != "1" ]]; then
+        echo -e "${YELLOW}Skipping DMG creation${NC}"
+        return 0
+    fi
+    
+    echo
+    echo -e "${CYAN}Creating DMG package...${NC}"
+    
+    # Clean up any previous DMG artifacts
+    rm -rf dmg_temp SpeedyNote.dmg SpeedyNote_*.dmg
+    
+    # Create temporary directory for DMG contents
+    mkdir -p dmg_temp
+    
+    # Copy the app bundle
+    echo -e "${CYAN}  • Copying SpeedyNote.app...${NC}"
+    cp -R SpeedyNote.app dmg_temp/
+    
+    # Create dependency installer script
+    echo -e "${CYAN}  • Creating dependency installer...${NC}"
+    cat > dmg_temp/Install_Dependencies.command << 'EOF'
+#!/bin/bash
+
+# SpeedyNote Dependency Installer
+# This script installs required Qt6 libraries via Homebrew
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
+echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
+echo -e "${BLUE}   SpeedyNote Dependency Installer${NC}"
+echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
+echo
+
+# Check if Homebrew is installed
+if ! command -v brew &> /dev/null; then
+    echo -e "${YELLOW}Homebrew not found. Installing Homebrew...${NC}"
+    echo
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    
+    # Add Homebrew to PATH based on architecture
+    if [[ $(uname -m) == "arm64" ]]; then
+        echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zprofile
+        eval "$(/opt/homebrew/bin/brew shellenv)"
+    else
+        echo 'eval "$(/usr/local/bin/brew shellenv)"' >> ~/.zprofile
+        eval "$(/usr/local/bin/brew shellenv)"
+    fi
+fi
+
+echo -e "${GREEN}✓ Homebrew is installed${NC}"
+echo
+
+# Check if Qt6 is installed
+if brew list qt@6 &> /dev/null; then
+    echo -e "${GREEN}✓ Qt@6 is already installed${NC}"
+else
+    echo -e "${CYAN}Installing Qt@6 (this may take a few minutes)...${NC}"
+    brew install qt@6
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✓ Qt@6 installed successfully${NC}"
+    else
+        echo -e "${RED}✗ Failed to install Qt@6${NC}"
+        echo -e "${YELLOW}Please try running: brew install qt@6${NC}"
+        read -p "Press Enter to exit..."
+        exit 1
+    fi
+fi
+
+echo
+echo -e "${GREEN}═══════════════════════════════════════════════${NC}"
+echo -e "${GREEN}   All dependencies installed!${NC}"
+echo -e "${GREEN}═══════════════════════════════════════════════${NC}"
+echo
+echo -e "${CYAN}You can now run SpeedyNote by double-clicking the app.${NC}"
+echo
+read -p "Press Enter to exit..."
+EOF
+    
+    chmod +x dmg_temp/Install_Dependencies.command
+    
+    # Create README
+    echo -e "${CYAN}  • Creating README...${NC}"
+    cat > dmg_temp/README.txt << 'EOF'
+SpeedyNote for macOS
+====================
+
+Thank you for downloading SpeedyNote!
+
+Installation Instructions:
+--------------------------
+
+1. First Time Setup:
+   - Double-click "Install_Dependencies.command" to install Qt@6
+   - Enter your password when prompted (for Homebrew installation)
+   - Wait for the installation to complete
+
+2. Run SpeedyNote:
+   - Drag SpeedyNote.app to your Applications folder (optional)
+   - Double-click SpeedyNote.app to launch
+
+Note: If you see a security warning, go to:
+System Settings > Privacy & Security > Allow apps from: App Store and identified developers
+
+For more information, visit:
+https://github.com/alpha-liu-01/SpeedyNote
+
+Enjoy!
+EOF
+    
+    # Create Applications symlink for easy drag-and-drop install
+    echo -e "${CYAN}  • Creating Applications symlink...${NC}"
+    ln -s /Applications dmg_temp/Applications
+    
+    # Get version from CMakeLists.txt or use default
+    VERSION=$(grep "project(SpeedyNote VERSION" CMakeLists.txt | sed -n 's/.*VERSION \([0-9.]*\).*/\1/p')
+    if [[ -z "$VERSION" ]]; then
+        VERSION="0.10.5"
+    fi
+    
+    DMG_NAME="SpeedyNote_v${VERSION}_macOS.dmg"
+    
+    # Create DMG
+    echo -e "${CYAN}  • Building DMG image...${NC}"
+    hdiutil create -volname "SpeedyNote" \
+                   -srcfolder dmg_temp \
+                   -ov \
+                   -format UDZO \
+                   -fs HFS+ \
+                   "$DMG_NAME"
+    
+    if [[ $? -eq 0 ]]; then
+        # Clean up
+        rm -rf dmg_temp
+        
+        # Get DMG size
+        DMG_SIZE=$(du -sh "$DMG_NAME" | awk '{print $1}')
+        
+        echo
+        echo -e "${GREEN}✓ DMG package created successfully!${NC}"
+        echo
+        echo -e "${CYAN}Package location:${NC} ${YELLOW}$(pwd)/${DMG_NAME}${NC}"
+        echo -e "${CYAN}Package size:${NC} ${YELLOW}${DMG_SIZE}${NC}"
+        echo
+        echo -e "${CYAN}Distribution instructions:${NC}"
+        echo -e "  1. Share ${YELLOW}${DMG_NAME}${NC} with users"
+        echo -e "  2. Users should run ${YELLOW}Install_Dependencies.command${NC} first"
+        echo -e "  3. Users can then drag ${YELLOW}SpeedyNote.app${NC} to Applications"
+        echo
+    else
+        echo -e "${RED}✗ Failed to create DMG${NC}"
+        rm -rf dmg_temp
+        return 1
+    fi
+}
+
 # Main execution
 main() {
     echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
@@ -467,6 +653,11 @@ main() {
     
     # Step 6: Optional app bundle
     create_app_bundle
+    
+    # Step 7: Optional DMG package creation
+    if [[ -d "SpeedyNote.app" ]]; then
+        create_dmg_package
+    fi
     
     echo
     echo -e "${GREEN}═══════════════════════════════════════════════${NC}"
