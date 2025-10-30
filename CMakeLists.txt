@@ -80,6 +80,93 @@ if (WIN32)
     find_package(Poppler REQUIRED)
     find_package(SDL2 REQUIRED CONFIG)
     unset(SDL2main CACHE)
+elseif (APPLE)
+    # macOS-specific configuration
+    # Use Homebrew paths for macOS
+    message(STATUS "🍎 Configuring for macOS with Homebrew dependencies")
+    
+    # Set Homebrew prefix based on architecture
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
+        set(HOMEBREW_PREFIX "/opt/homebrew")
+        message(STATUS "Detected Apple Silicon (ARM64) - using ${HOMEBREW_PREFIX}")
+    else()
+        set(HOMEBREW_PREFIX "/usr/local")
+        message(STATUS "Detected Intel Mac (x86-64) - using ${HOMEBREW_PREFIX}")
+    endif()
+    
+    # Set paths for Homebrew-installed Qt6
+    set(CMAKE_PREFIX_PATH
+        "${HOMEBREW_PREFIX}/opt/qt@6"
+        "${HOMEBREW_PREFIX}/opt/sdl2"
+    )
+    
+    # Find Qt6 from Homebrew
+    find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Concurrent Xml Network)
+    
+    # Find SDL2 from Homebrew via pkg-config
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(SDL2 REQUIRED IMPORTED_TARGET sdl2)
+    
+    # Poppler-Qt6 on macOS doesn't provide a .pc file, so we configure it manually
+    set(POPPLER_PREFIX "/opt/poppler-qt6")
+    message(STATUS "Using Poppler from: ${POPPLER_PREFIX}")
+    
+    # Include directories
+    include_directories(
+        ${CMAKE_CURRENT_BINARY_DIR}
+        "${POPPLER_PREFIX}/include/poppler/qt6"
+        "${HOMEBREW_PREFIX}/include"
+    )
+    
+    # Link directories for Poppler
+    link_directories("${POPPLER_PREFIX}/lib")
+    
+    # Set Poppler libraries manually
+    set(POPPLER_LIBRARIES "poppler-qt6")
+    
+    # No Windows-specific resources
+    set(WIN_RESOURCES "")
+    
+    # macOS CPU architecture optimization
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
+        # Apple Silicon (M1/M2/M3/M4) optimization
+        message(STATUS "🚀 Optimizing for Apple Silicon (ARM64)")
+        add_compile_options(
+            -mcpu=apple-m1           # Target Apple M1 (compatible with M2/M3/M4)
+            -O3                      # Maximum optimization level
+            -ffast-math              # Aggressive floating-point optimizations
+            -funroll-loops           # Unroll loops for better performance
+            -fomit-frame-pointer     # Omit frame pointer for more registers
+            -DNDEBUG                 # Disable debug assertions
+        )
+    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64|AMD64")
+        # Intel Mac optimization - optimize for Nehalem (Core i series)
+        message(STATUS "🚀 Optimizing for Intel Mac (x86-64, Nehalem+)")
+        add_compile_options(
+            -march=nehalem           # Target 1st gen Intel Core i
+            -mtune=nehalem           # Tune for Nehalem
+            -msse4.2                 # Enable SSE4.2
+            -mpopcnt                 # Enable POPCNT instruction
+            -O3                      # Maximum optimization level
+            -ffast-math              # Aggressive floating-point optimizations
+            -funroll-loops           # Unroll loops for better performance
+            -fomit-frame-pointer     # Omit frame pointer for more registers
+            -DNDEBUG                 # Disable debug assertions
+        )
+    else()
+        # Generic fallback
+        message(STATUS "Building for generic macOS (${CMAKE_SYSTEM_PROCESSOR})")
+        add_compile_options(
+            -O3
+            -DNDEBUG
+        )
+    endif()
+    
+    # macOS-specific frameworks
+    find_library(COREAUDIO_FRAMEWORK CoreAudio)
+    find_library(AUDIOTOOLBOX_FRAMEWORK AudioToolbox)
+    find_library(AUDIOUNIT_FRAMEWORK AudioUnit)
+    
 elseif (UNIX)
     # Linux-specific configuration
     # Use system paths for Linux
@@ -248,6 +335,15 @@ if (WIN32)
             dsound  # For DirectSound API
             dxguid  # For DirectSound GUIDs
     )
+elseif (APPLE)
+    target_link_libraries(NoteApp
+            Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Concurrent Qt6::Xml Qt6::Network
+            PkgConfig::SDL2
+            ${POPPLER_LIBRARIES}
+            ${COREAUDIO_FRAMEWORK}
+            ${AUDIOTOOLBOX_FRAMEWORK}
+            ${AUDIOUNIT_FRAMEWORK}
+    )
 elseif (UNIX)
     target_link_libraries(NoteApp
             Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Concurrent Qt6::Xml Qt6::Network
@@ -257,13 +353,34 @@ elseif (UNIX)
     )
 endif ()
 
-# ✅ Set output name for Linux
-if (UNIX)
+# ✅ Set output name for macOS and Linux
+if (APPLE OR UNIX)
     set_target_properties(NoteApp PROPERTIES OUTPUT_NAME NoteApp)
 endif ()
 
+# ✅ Install targets for macOS
+if (APPLE)
+    # Install the main executable
+    install(TARGETS NoteApp DESTINATION bin)
+
+    # Install translation files if they exist
+    if (QM_FILES)
+        install(FILES ${QM_FILES} DESTINATION share/speedynote/translations)
+    endif ()
+    
+    # Also install resource translation files
+    file(GLOB RESOURCE_QM_FILES "resources/translations/*.qm")
+    if (RESOURCE_QM_FILES)
+        install(FILES ${RESOURCE_QM_FILES} DESTINATION share/speedynote/translations)
+    endif ()
+
+    # Install icon for macOS
+    install(FILES resources/icons/mainicon.png
+            DESTINATION share/speedynote/icons)
+endif ()
+
 # ✅ Install targets for Linux/Flatpak
-if (UNIX)
+if (UNIX AND NOT APPLE)
     # Install the main executable
     install(TARGETS NoteApp DESTINATION bin)
 
