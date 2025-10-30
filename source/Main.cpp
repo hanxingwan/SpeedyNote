@@ -272,11 +272,14 @@ int main(int argc, char *argv[]) {
 #ifdef Q_OS_WIN
                 SHChangeNotify(SHCNE_CREATE, SHCNF_PATH, inputFile.toStdWString().c_str(), nullptr);
 #endif
+                SDL_Quit(); // Clean up SDL
                 return 0; // Exit successfully
             } else {
+                SDL_Quit(); // Clean up SDL
                 return 1; // Exit with error code
             }
         }
+        SDL_Quit(); // Clean up SDL
         return 1; // Invalid file extension
     }
 
@@ -293,14 +296,18 @@ int main(int argc, char *argv[]) {
             
             // Send command to existing instance
             if (MainWindow::sendToExistingInstance(command)) {
+                SDL_Quit(); // Clean up SDL before exiting
                 return 0; // Exit successfully, command sent to existing instance
             }
         }
         // If no command to send or sending failed, just exit
+        SDL_Quit(); // Clean up SDL before exiting
         return 0;
     }
 
     // Determine which window to show based on command line arguments
+    int exitCode = 0;
+    
     if (!inputFile.isEmpty()) {
         // If a file is specified, go directly to MainWindow
         // Allocate on heap to avoid destructor issues on exit
@@ -331,13 +338,19 @@ int main(int argc, char *argv[]) {
                 w->show();
             }
         }
-        return app.exec();
+        exitCode = app.exec();
     } else {
         // No file specified - show the launcher window
         // Create the launcher and set it as the shared instance
         LauncherWindow *launcher = new LauncherWindow();
         MainWindow::sharedLauncher = launcher; // Set as shared instance
         launcher->show();
-        return app.exec();
+        exitCode = app.exec();
     }
+    
+    // Clean up SDL before exiting to properly release HID device handles
+    // This is especially important on macOS where HID handles can remain locked
+    SDL_Quit();
+    
+    return exitCode;
 }
