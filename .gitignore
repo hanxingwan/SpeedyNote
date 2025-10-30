@@ -34,9 +34,14 @@
 *.deb
 *.pkg.tar.zst
 *.apk
+*.dmg
 
 # Compressed files
 *.7z
+*.dmg
+
+# DMG packaging temporary files
+dmg_temp/
 
 # Editor
 .vs/
