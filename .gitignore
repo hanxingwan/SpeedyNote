@@ -34,6 +34,7 @@
 *.deb
 *.pkg.tar.zst
 *.apk
+*.dmg
 
 # Compressed files
 *.7z
