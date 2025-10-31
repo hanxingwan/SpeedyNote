@@ -86,6 +86,10 @@ elseif (APPLE)
     # Use Homebrew paths for macOS
     message(STATUS "🍎 Configuring for macOS with Homebrew dependencies")
     
+    # Set minimum macOS version (Qt6 requires 12.0+, but we'll try 12.0 for broader compatibility)
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0" CACHE STRING "Minimum macOS deployment version" FORCE)
+    message(STATUS "Setting minimum macOS version: ${CMAKE_OSX_DEPLOYMENT_TARGET}")
+    
     # Set Homebrew prefix based on architecture
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
         set(HOMEBREW_PREFIX "/opt/homebrew")

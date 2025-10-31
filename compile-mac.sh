@@ -341,7 +341,7 @@ create_app_bundle() {
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>LSMinimumSystemVersion</key>
-    <string>10.14</string>
+    <string>12.0</string>
 </dict>
 </plist>
 EOF
