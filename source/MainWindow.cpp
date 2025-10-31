@@ -2998,9 +2998,14 @@ void MainWindow::updateDialDisplay() {
             // dialIconView->setPixmap(QPixmap(":/resources/reversed_icons/preset_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
             break;
         case DialMode::PanAndPageScroll:
-            dialIconView->setPixmap(QPixmap(":/resources/icons/scroll_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-            QString fullscreenStatus = controlBarVisible ? tr("Etr") : tr("Exit");
-            dialDisplay->setText(QString(tr("\n\nPage %1\n%2 FulScr")).arg(getCurrentPageForCanvas(currentCanvas()) + 1).arg(fullscreenStatus));
+            {
+                dialIconView->setPixmap(QPixmap(":/resources/icons/scroll_reversed.png").scaled(30, 30, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+                QString fullscreenStatus = controlBarVisible ? tr("Etr") : tr("Exit");
+                dialDisplay->setText(QString(tr("\n\nPage %1\n%2 FulScr")).arg(getCurrentPageForCanvas(currentCanvas()) + 1).arg(fullscreenStatus));
+            }
+            break;
+        case None:
+            // No dial mode active, do nothing
             break;
     }
 }
@@ -3440,7 +3445,9 @@ void MainWindow::changeDialMode(DialMode mode) {
             connect(pageDial, &QDial::valueChanged, this, &MainWindow::handleDialPanScroll);
             connect(pageDial, &QDial::sliderReleased, this, &MainWindow::onPanScrollReleased);
             break;
-        
+        case None:
+            // No dial mode active, do nothing
+            break;
     }
 }
 
