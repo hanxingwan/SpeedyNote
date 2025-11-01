@@ -4,22 +4,22 @@
 find_path(POPPLER_INCLUDE_DIR 
     NAMES poppler/qt6/poppler-qt6.h
     PATHS 
-        C:/msys64/mingw64/include 
-        C:/msys64/mingw64/include/poppler
+        C:/msys64/clang64/include 
+        C:/msys64/clang64/include/poppler
 )
 
 # Find Poppler's Qt6 library
 find_library(POPPLER_QT6_LIBRARY 
     NAMES poppler-qt6
     PATHS 
-        C:/msys64/mingw64/lib
+        C:/msys64/clang64/lib
 )
 
 # Find Poppler's Core library
 find_library(POPPLER_CORE_LIBRARY 
     NAMES poppler
     PATHS 
-        C:/msys64/mingw64/lib
+        C:/msys64/clang64/lib
 )
 
 include(FindPackageHandleStandardArgs)

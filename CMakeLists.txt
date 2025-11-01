@@ -5,13 +5,27 @@ project(SpeedyNote VERSION 0.10.5)
 project(NoteApp)
 set(CMAKE_CXX_STANDARD 17)
 
-# Using variable
-set(QT_PATH "C:/Qt/6.9.2/mingw_64" CACHE PATH "Path to Qt installation")
-set(SDL2_ROOT "C:/msys64/mingw64" CACHE PATH "Path to SDL2")
-set(POPPLER_PATH "C:/msys64/mingw64" CACHE PATH "Path to Poppler")
+# ✅ Detect Windows architecture and set appropriate toolchain paths
+if (WIN32)
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|ARM64|aarch64|AARCH64")
+        # ARM64 Windows - use clangarm64 toolchain
+        set(QT_PATH "C:/msys64/clangarm64" CACHE PATH "Path to Qt installation")
+        set(SDL2_ROOT "C:/msys64/clangarm64" CACHE PATH "Path to SDL2")
+        set(POPPLER_PATH "C:/msys64/clangarm64" CACHE PATH "Path to Poppler")
+        message(STATUS "Detected ARM64 Windows - using clangarm64 toolchain")
+    else()
+        # x86_64 Windows - use clang64 toolchain
+        set(QT_PATH "C:/msys64/clang64" CACHE PATH "Path to Qt installation")
+        set(SDL2_ROOT "C:/msys64/clang64" CACHE PATH "Path to SDL2")
+        set(POPPLER_PATH "C:/msys64/clang64" CACHE PATH "Path to Poppler")
+        message(STATUS "Detected x86_64 Windows - using clang64 toolchain")
+    endif()
+endif()
+
 # This is where the "libpoppler-qt6-dev" equivalent in Windows is located. 
-# Go to the MSYS2 terminal to run this commands:
-# pacman -S mingw-w64-x86_64-poppler-qt6
+# Go to the MSYS2 terminal to run these commands:
+# For x86_64: pacman -S mingw-w64-clang-x86_64-poppler-qt6
+# For ARM64:  pacman -S mingw-w64-clang-aarch64-poppler-qt6
 
 # Also, there isn't such thing called PopplerConfig.cmake. 
 #That's why I need to make a FindPoppler.cmake file
@@ -41,35 +55,53 @@ if (WIN32)
     # Prevent SDL2 from redefining main()
     add_compile_definitions(SDL_MAIN_HANDLED)
 
-    # CPU architecture optimization target (can be set via -DCPU_ARCH=old)
-    if(NOT DEFINED CPU_ARCH)
-        set(CPU_ARCH "modern")
-    endif()
-
-    if(CPU_ARCH STREQUAL "old")
-        # Optimizations for older CPUs (SSE3, compatible with Core 2 Duo, Atom Z, ARM64 emulation)
-        message(STATUS "Building for older CPUs (SSE3/SSSE3 compatible - Core 2 Duo era)")
+    # ✅ CPU architecture-specific optimizations
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|ARM64|aarch64|AARCH64")
+        # ✅ ARM64 Windows optimizations (Snapdragon X Elite, 850, etc.)
+        message(STATUS "🚀 Building for ARM64 Windows (Cortex-A75/Snapdragon optimized)")
         add_compile_options(
-            -march=core2            # Enable SSE3, SSSE3 (2006+ CPUs: Core 2 Duo/Conroe)
-            -mtune=generic          # Optimize for broad CPU compatibility
-            -msse3                  # Explicitly enable SSE3
-            -mssse3                 # Explicitly enable SSSE3 (Supplemental SSE3)
-            -O3                     # Maximum optimization level
-            -DNDEBUG                # Disable debug assertions for performance
+            -mcpu=cortex-a75                        # Target Cortex-A75 (Snapdragon 850+)
+            -march=armv8.2-a+fp16+rcpc+dotprod     # ARMv8.2-A with extensions
+            -O3                                     # Maximum optimization
+            -ffast-math                             # Aggressive FP optimizations
+            -ftree-vectorize                        # Enable auto-vectorization
+            -fvectorize                             # Clang vectorization
+            -flto=thin                              # Thin LTO for faster builds
+            -fomit-frame-pointer                    # Free up registers
+            -funroll-loops                          # Unroll loops
+            -DNDEBUG                                # Disable debug assertions
         )
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -flto=thin")
+        
     else()
-        # Optimizations for modern CPUs (AVX2, Haswell and newer)
-        message(STATUS "Building for modern CPUs (AVX2 compatible)")
-        add_compile_options(
-            -march=haswell          # Enable AVX2, FMA, BMI1, BMI2 instructions
-            -mtune=haswell          # Optimize for Haswell+ architectures
-            -mavx2                  # Explicitly enable AVX2
-            -mfma                   # Enable FMA (Fused Multiply-Add)
-            -mbmi                   # Enable BMI1 (Bit Manipulation Instructions)
-            -mbmi2                  # Enable BMI2
-            -O3                     # Maximum optimization level
-            -DNDEBUG                # Disable debug assertions for performance
-        )
+        # ✅ x86_64 Windows optimizations
+        # CPU architecture optimization target (can be set via -DCPU_ARCH=old)
+        if(NOT DEFINED CPU_ARCH)
+            set(CPU_ARCH "modern")
+        endif()
+
+        if(CPU_ARCH STREQUAL "old")
+            # Optimizations for older CPUs (SSE3, compatible with Core 2 Duo, Atom Z)
+            message(STATUS "Building for older x86_64 CPUs (SSE3/SSSE3 compatible - Core 2 Duo era)")
+            add_compile_options(
+                -march=core2            # Enable SSE3, SSSE3 (2006+ CPUs)
+                -mtune=generic          # Optimize for broad CPU compatibility
+                -msse3                  # Explicitly enable SSE3
+                -mssse3                 # Explicitly enable SSSE3
+                -O3                     # Maximum optimization level
+                -DNDEBUG                # Disable debug assertions
+            )
+        else()
+            # Optimizations for modern x86_64 CPUs (1st gen Core i / Nehalem+)
+            message(STATUS "Building for modern x86_64 CPUs (SSE4.2 compatible - Core i series)")
+            add_compile_options(
+                -march=nehalem          # Target 1st gen Intel Core i
+                -msse4.2                # Enable SSE4.2
+                -O3                     # Maximum optimization level
+                -ffast-math             # Aggressive floating-point optimizations
+                -DNDEBUG                # Disable debug assertions
+            )
+        endif()
     endif()
 
     # Windows resource file
@@ -307,7 +339,12 @@ find_program(LRELEASE_EXECUTABLE
         NO_DEFAULT_PATH
 )
 if (WIN32)
-    find_program(LRELEASE_EXECUTABLE lrelease PATHS "C:/Qt/6.9.2/mingw_64/bin")
+    # Find lrelease based on architecture
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|ARM64|aarch64|AARCH64")
+        find_program(LRELEASE_EXECUTABLE lrelease PATHS "C:/msys64/clangarm64/bin")
+    else()
+        find_program(LRELEASE_EXECUTABLE lrelease PATHS "C:/msys64/clang64/bin")
+    endif()
 endif ()
 
 if (LRELEASE_EXECUTABLE)
