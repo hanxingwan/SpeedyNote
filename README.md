@@ -84,7 +84,7 @@ this command to install SpeedyNote to your computer, and update with `sudo apt u
 1. Right click a PDF file in File Explorer (or equivalent)
 2. Click open with and select SpeedyNote
 3. Create an `spn` notebook package in the directory of the PDF file
-4. Next time when you double click the `spr` notebook, all the notes with the PDF background will be loaded.
+4. Next time when you double click the `spn` notebook, all the notes with the PDF background will be loaded.
 5. Start writing/drawing using your stylus
 
 ---
