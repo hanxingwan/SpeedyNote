@@ -1,8 +1,8 @@
-# SpeedyNote Windows ARM64 Build
+# SpeedyNote Windows Build
 
 ### Preparation
 
-- Windows 11 x86-64 or ARM64
+- Windows 10 1809+ x86-64, Windows 11 x86-64 or ARM64
 
 - Official MSYS2 installer
 
