@@ -72,7 +72,7 @@ $requiredDlls = @(
     "SDL2.dll",
     "libpoppler-qt6-3.dll",
     "libbrotlicommon.dll", "libbrotlidec.dll", "libbrotlienc.dll",
-    "libbz2-1.dll", "libcrypto-3.dll", "libssl-3.dll",
+    "libbz2-1.dll", "libcrypto-3.dll", "libssl-3.dll", "libc++.dll", "libunwind.dll"
     "libcurl-4.dll", "libexpat-1.dll", "libfreetype-6.dll",
     "libiconv-2.dll", "libidn2-0.dll", "libintl-8.dll",
     "libjpeg-8.dll", "liblcms2-2.dll", "liblcms2_fast_float-2.dll",
