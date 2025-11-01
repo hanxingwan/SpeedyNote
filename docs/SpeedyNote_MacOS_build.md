@@ -23,7 +23,7 @@ brew install sdl2
 ```
 ##### Additional libraries
 
-Since `poppler-qt6` is not available on `brew`, I compiled it myself and you may find it in our QQ group or on the community page of our site `speedynote.org`. Put this `poppler-qt6`  folder into `/opt/`.
+Since `poppler-qt6` is not available on `brew`, I compiled it myself and you may find it in our QQ group or on the community page of our site `speedynote.org`. Put this `poppler-qt6`  folder into `/opt/`. Or you may run the `build_poppler_qt6.sh` script to build poppler-qt6 from source, and it will be positioned in /opt/ automatically. 
 
 ### Build
 
