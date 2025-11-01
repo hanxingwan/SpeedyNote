@@ -18,7 +18,7 @@
 
 - 支持加载PDF，在其上做注释，1000页PDF高速加载，很难卡顿
 
-- 支持Windows 7, 8, 10, 11， ~~MacOS~~，大多数Linux发行版。可轻松打包为`.deb`, `.rpm`,`.pkg.tar.zst`,`.apk`，
+- 支持Windows 7, 8, 10, 11，MacOS，大多数Linux发行版。可轻松打包为`.deb`, `.rpm`,`.pkg.tar.zst`,`.apk`，
   ~~同时提供Flatpak~~，支持x86-64和aarch64，几乎所有设备均可运行
 
 - Markdown即时贴，即使用户没有电磁笔，文字笔记也可以非常便捷高效
@@ -36,8 +36,7 @@
 
 #### Mac OS
 
-从 [这里](https://github.com/alpha-liu-01/SpeedyNote/releases/download/v0.6.1/SpeedyNote-0.6.1.dmg)
-下载Mac版本的SpeedyNote运行dmg文件夹中的installation script即可完成安装。
+下载Mac版本的SpeedyNote运行dmg文件夹中的补全依赖的脚本后把app拖入应用程序文件夹即可完成安装。
 
 #### Linux
 

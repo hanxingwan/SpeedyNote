@@ -48,7 +48,7 @@ vintage hardware._
 
 ### ✅ Requirements
 
-- Windows 7/8/10/11/Ubuntu/Debian/Fedora/RedHat/ArchLinux/AlpineLinux
+- Windows 7/8/10/11/Mac OS 12+/Ubuntu/Debian/Fedora/RedHat/ArchLinux/AlpineLinux
 - Qt 5 or Qt 6 runtime (bundled in Windows releases)
 - Stylus input (Wacom recommended)
 
@@ -110,7 +110,7 @@ SpeedyNote supports controller input, ideal for tablet users:
 
 #### Windows
 
-[Windows Build Documentation](./docs/SpeedyNote_Windows_Build_en.md)  [Windows Build ARM64 Documentation](./docs/SpeedyNote_Windows_ARM64_Build_en.md)
+[Windows Build Documentation](./docs/SpeedyNote_Windows_Build_en.md)  [macOS build Documentation](./docs/SpeedyNote_MacOS_Build_en.md)
 
 #### Linux
 
