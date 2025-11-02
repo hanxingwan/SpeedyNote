@@ -50,15 +50,11 @@ and then restart your PC.
 In the CMake Tools extension of Visual Studio Code, find the `Cmake: Cmake Path` option and change it to `C:\msys64\clang64\bin\cmake.exe` .
 Add this directory to Path. As always, if you have an arm64 system, replace the paths from clang64 to clangarm64. 
 
-##### Other Dependencies
-
-The `share` folders hold the required font files. I'm not sure if it's a good idea to put them into my repository. You may extract them from a SpeedyNote installation and put them into the SpeedyNote source code root. The `share` folder should be copied to the same folder as where the executable is. 
-
 ---
 
 ### Build
 
-Run `compile.ps1`to build SpeedyNote. The complete build is in `build`.You may want to delete some temporary files that CMake generated. 
+Run `compile.ps1`to build SpeedyNote. The complete build is in `build`.You may want to delete some temporary files that CMake generated. For arm64 builds, you need to run `compile.ps1 -arm64` instead. 
 
 ---
 

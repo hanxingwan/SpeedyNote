@@ -102,6 +102,6 @@ foreach ($dll in $requiredDlls) {
 Write-Host "Copied $copiedCount DLL(s) from $toolchain\bin" -ForegroundColor Green
 
 # Copy share folder
-Copy-Item -Path "..\share" -Destination "..\build\share" -Recurse -Force
+Copy-Item -Path "$toolchainPath\share\poppler" -Destination "..\build\share\poppler" -Recurse -Force
 ./NoteApp.exe
 cd ../
