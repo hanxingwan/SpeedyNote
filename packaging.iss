@@ -1,10 +1,12 @@
 ; SpeedyNote Inno Setup Script
+#define MyAppVersion "0.10.6"
+
 [Setup]
 AppName=SpeedyNote
-AppVersion=0.10.5
+AppVersion={#MyAppVersion}
 DefaultDirName={autopf}\SpeedyNote
 DefaultGroupName=SpeedyNote
-OutputBaseFilename=SpeedyNoteInstaller
+OutputBaseFilename=SpeedyNoteInstaller_Beta_{#MyAppVersion}_amd64
 Compression=lzma
 SolidCompression=yes
 OutputDir=Output
@@ -17,6 +19,44 @@ Name: "es"; MessagesFile: "compiler:Languages\Spanish.isl"
 Name: "zh"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 Name: "fr"; MessagesFile: "compiler:Languages\French.isl"
 
+[CustomMessages]
+; Task Group Descriptions
+en.AdditionalIcons=Additional icons:
+es.AdditionalIcons=Iconos adicionales:
+zh.AdditionalIcons=附加图标：
+fr.AdditionalIcons=Icônes supplémentaires :
+
+en.FileAssociations=File associations:
+es.FileAssociations=Asociaciones de archivos:
+zh.FileAssociations=文件关联：
+fr.FileAssociations=Associations de fichiers :
+
+en.ContextMenuGroup=Context menu:
+es.ContextMenuGroup=Menú contextual:
+zh.ContextMenuGroup=右键菜单：
+fr.ContextMenuGroup=Menu contextuel :
+
+; Task Descriptions
+en.DesktopIconTask=Create a desktop shortcut
+es.DesktopIconTask=Crear un acceso directo en el escritorio
+zh.DesktopIconTask=创建桌面快捷方式
+fr.DesktopIconTask=Créer un raccourci sur le bureau
+
+en.PDFAssociationTask=Associate PDF files with SpeedyNote (adds SpeedyNote to 'Open with' menu)
+es.PDFAssociationTask=Asociar archivos PDF con SpeedyNote (agrega SpeedyNote al menú 'Abrir con')
+zh.PDFAssociationTask=将 PDF 文件与 SpeedyNote 关联（将 SpeedyNote 添加到"打开方式"菜单）
+fr.PDFAssociationTask=Associer les fichiers PDF avec SpeedyNote (ajoute SpeedyNote au menu 'Ouvrir avec')
+
+en.SPNAssociationTask=Associate .spn files with SpeedyNote (SpeedyNote Package files)
+es.SPNAssociationTask=Asociar archivos .spn con SpeedyNote (archivos de paquete de SpeedyNote)
+zh.SPNAssociationTask=将 .spn 文件与 SpeedyNote 关联（SpeedyNote 包文件）
+fr.SPNAssociationTask=Associer les fichiers .spn avec SpeedyNote (fichiers de package SpeedyNote)
+
+en.ContextMenuTask=Add 'SpeedyNote Package' to right-click 'New' menu
+es.ContextMenuTask=Agregar 'Paquete de SpeedyNote' al menú 'Nuevo' del clic derecho
+zh.ContextMenuTask=将"SpeedyNote 包"添加到右键"新建"菜单
+fr.ContextMenuTask=Ajouter 'Package SpeedyNote' au menu 'Nouveau' du clic droit
+
 [Files]
 Source: ".\build\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
 
@@ -26,10 +66,10 @@ Name: "{commondesktop}\SpeedyNote"; Filename: "{app}\NoteApp.exe"; WorkingDir: "
 Name: "{group}\Uninstall SpeedyNote"; Filename: "{uninstallexe}"
 
 [Tasks]
-Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"
-Name: "pdfassociation"; Description: "Associate PDF files with SpeedyNote (adds SpeedyNote to 'Open with' menu)"; GroupDescription: "File associations:"
-Name: "spnassociation"; Description: "Associate .spn files with SpeedyNote (SpeedyNote Package files)"; GroupDescription: "File associations:"
-Name: "contextmenu"; Description: "Add 'SpeedyNote Package' to right-click 'New' menu"; GroupDescription: "Context menu:"
+Name: "desktopicon"; Description: "{cm:DesktopIconTask}"; GroupDescription: "{cm:AdditionalIcons}"
+Name: "pdfassociation"; Description: "{cm:PDFAssociationTask}"; GroupDescription: "{cm:FileAssociations}"
+Name: "spnassociation"; Description: "{cm:SPNAssociationTask}"; GroupDescription: "{cm:FileAssociations}"
+Name: "contextmenu"; Description: "{cm:ContextMenuTask}"; GroupDescription: "{cm:ContextMenuGroup}"
 
 [Registry]
 ; PDF file association entries (only if task is selected)

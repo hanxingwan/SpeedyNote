@@ -1,7 +1,7 @@
 ﻿cmake_minimum_required(VERSION 3.10)
 cmake_policy(SET CMP0074 NEW)
 
-project(SpeedyNote VERSION 0.10.5)
+project(SpeedyNote VERSION 0.10.6)
 project(NoteApp)
 set(CMAKE_CXX_STANDARD 17)
 
@@ -26,31 +26,26 @@ endif()
 # Go to the MSYS2 terminal to run these commands:
 # For x86_64: pacman -S mingw-w64-clang-x86_64-poppler-qt6
 # For ARM64:  pacman -S mingw-w64-clang-aarch64-poppler-qt6
-
-# Also, there isn't such thing called PopplerConfig.cmake. 
-#That's why I need to make a FindPoppler.cmake file
+#
+# Note: We use pkg-config to find Poppler, so no FindPoppler.cmake file is needed!
 
 # ✅ Platform-specific configuration
 if (WIN32)
-    # ✅ Platform-specific configuration
-    
+    # ✅ Set CMake prefix paths for Qt6 and SDL2
     set(CMAKE_PREFIX_PATH
             "${QT_PATH}/lib/cmake"
             "${SDL2_ROOT}/lib/cmake"
     )
-    set(CMAKE_MODULE_PATH "${QT_PATH}/lib/cmake/Poppler")
-    # In my case, this path is C:\Qt\6.9.2\mingw_64\lib\cmake\Poppler. 
-    # This path includes the FindPoppler.cmake file. 
-    # You need to manually put FindPoppler.cmake into this folder.
 
+    # ✅ Use pkg-config to find Poppler (eliminates need for FindPoppler.cmake)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(POPPLER REQUIRED IMPORTED_TARGET poppler-qt6)
+    
+    # Include directories
     include_directories(
-            # "${POPPLER_PATH}/include/poppler"
-            # "${POPPLER_PATH}/include/poppler/cpp" In fact, these 2 paths are poppler and poppler-cpp, which are different from poppler-qt6.
-            "${POPPLER_PATH}/include/poppler/qt6"
-            "${SDL2_ROOT}/include"
             ${CMAKE_CURRENT_BINARY_DIR}
+            "${SDL2_ROOT}/include"
     )
-    link_directories("${POPPLER_PATH}/lib")
 
     # Prevent SDL2 from redefining main()
     add_compile_definitions(SDL_MAIN_HANDLED)
@@ -110,7 +105,7 @@ if (WIN32)
 
     # Find dependencies for Windows
     find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Concurrent Xml Network)
-    find_package(Poppler REQUIRED)
+    # Poppler is already found via pkg-config above
     find_package(SDL2 REQUIRED CONFIG)
     unset(SDL2main CACHE)
 elseif (APPLE)
@@ -373,7 +368,7 @@ if (WIN32)
     target_link_libraries(NoteApp
             Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Concurrent Qt6::Xml Qt6::Network
             SDL2::SDL2
-            ${POPPLER_LIBRARIES}
+            PkgConfig::POPPLER
             dsound  # For DirectSound API
             dxguid  # For DirectSound GUIDs
     )

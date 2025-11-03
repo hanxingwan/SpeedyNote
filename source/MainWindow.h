@@ -194,9 +194,10 @@ public:
     bool isScrollOnTopEnabled() const;
     void setScrollOnTopEnabled(bool enabled);
 
-    bool touchGesturesEnabled = true;
-    bool areTouchGesturesEnabled() const;
-    void setTouchGesturesEnabled(bool enabled);
+    TouchGestureMode touchGestureMode = TouchGestureMode::Full;
+    TouchGestureMode getTouchGestureMode() const;
+    void setTouchGestureMode(TouchGestureMode mode);
+    void cycleTouchGestureMode(); // Cycle through: Disabled -> YAxisOnly -> Full -> Disabled
 
     // Theme settings
     QColor customAccentColor;

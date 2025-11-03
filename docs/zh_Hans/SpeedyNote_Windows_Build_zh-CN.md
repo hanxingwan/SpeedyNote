@@ -23,18 +23,13 @@
 安装这样几个软件包
 
 ```bash
-pacman -S mingw-w64-clang-x86_64-toolchain mingw-w64-x86_64-cmake
+pacman -S mingw-w64-clang-x86_64-toolchain mingw-w64-clang-x86_64-cmake mingw-w64-clang-x86_64-pkgconf
 pacman -S mingw-w64-clang-x86_64-qt6-base mingw-w64-clang-x86_64-qt6-tools
-pacman -S mingw-w64-clang-x86_64-poppler
-pacman -S mingw-w64-clang-x86_64-poppler-qt6
+pacman -S mingw-w64-clang-x86_64-poppler mingw-w64-clang-x86_64-poppler-qt6
 pacman -S mingw-w64-clang-x86_64-SDL2
 ```
-如果你的机器是arm64的，那么你把上边命令中的`x86_64` 更换为`aarch64`。
 
-##### 额外的文件
-
-在你需要在`C:\msys64\clang64\lib\cmake` （对于arm的机器来说是`C:\msys64\clangarm64\lib\cmake` ）中创建一个名为`poppler` 的文件夹，然后你把
- `FindPoppler.cmake` 这个文件放进去。如果你的机器是arm64 CPU的，那么记得把文件内的路径改一下，改成clangarm64. 
+**对于 ARM64 设备：** 将上述命令中的 `x86_64` 替换为 `aarch64`，并在下方路径中使用 `clangarm64` 代替 `clang64`。 
 
 ##### Path
 
