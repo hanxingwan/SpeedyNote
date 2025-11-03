@@ -2148,47 +2148,19 @@ void InkCanvas::saveToFile(int pageNumber) {
         }
         currentImage.save(currentFilePath, "PNG");
         
-        // Save next page (bottom half) by MERGING with existing content
+        // Save next page (bottom half) - DIRECT SAVE like top half
+        // ✅ FIX: Don't merge, just save directly to properly handle erasure/deletion
+        // The buffer already contains the complete state of both pages after loading
         int nextPageNumber = pageNumber + 1;
         QString nextFilePath = saveFolder + QString("/%1_%2.png").arg(notebookId).arg(nextPageNumber, 5, 10, QChar('0'));
         QPixmap nextPageBuffer = buffer.copy(0, singlePageHeight, bufferWidth, singlePageHeight);
-        
-        // Check if bottom half has any non-transparent content
-        QImage nextCheck = nextPageBuffer.toImage();
-        bool hasNewContent = false;
-        for (int y = 0; y < nextCheck.height() && !hasNewContent; ++y) {
-            const QRgb *row = reinterpret_cast<const QRgb*>(nextCheck.scanLine(y));
-            for (int x = 0; x < nextCheck.width() && !hasNewContent; ++x) {
-                if (qAlpha(row[x]) != 0) {
-                    hasNewContent = true;
-                }
-            }
+        QImage nextImage(nextPageBuffer.size(), QImage::Format_ARGB32);
+        nextImage.fill(Qt::transparent);
+        {
+            QPainter painter(&nextImage);
+            painter.drawPixmap(0, 0, nextPageBuffer);
         }
-        
-        if (hasNewContent) {
-            // Load existing next page content and merge with new content
-            QPixmap existingNextPage;
-            if (QFile::exists(nextFilePath)) {
-                existingNextPage.load(nextFilePath);
-            }
-            
-            // Create merged image
-            QImage mergedNextImage(nextPageBuffer.size(), QImage::Format_ARGB32);
-            mergedNextImage.fill(Qt::transparent);
-            {
-                QPainter painter(&mergedNextImage);
-                
-                // Draw existing content first
-                if (!existingNextPage.isNull()) {
-                    painter.drawPixmap(0, 0, existingNextPage);
-                }
-                
-                // Draw new content on top
-                painter.drawPixmap(0, 0, nextPageBuffer);
-            }
-            
-            mergedNextImage.save(nextFilePath, "PNG");
-        }
+        nextImage.save(nextFilePath, "PNG");
         
         // ❌ REMOVED: Cache updates here are redundant since cache gets invalidated after save
         // Cache will be reloaded fresh from disk when needed
@@ -2867,7 +2839,7 @@ void InkCanvas::saveNotebookId() {
 
 
 bool InkCanvas::event(QEvent *event) {
-    if (!touchGesturesEnabled) {
+    if (touchGestureMode == TouchGestureMode::Disabled) {
         return QWidget::event(event);
     }
     
@@ -2985,7 +2957,10 @@ bool InkCanvas::event(QEvent *event) {
                 static int velocitySampleCounter = 0;
                 velocitySampleCounter++;
                 if (elapsed > 0 && velocitySampleCounter % 2 == 0) {
-                    QPointF velocity(delta.x() / elapsed, delta.y() / elapsed);
+                    // ✅ Y-AXIS ONLY MODE: Only track Y-axis velocity
+                    qreal velocityX = (touchGestureMode == TouchGestureMode::YAxisOnly) ? 0 : delta.x() / elapsed;
+                    qreal velocityY = delta.y() / elapsed;
+                    QPointF velocity(velocityX, velocityY);
                     recentVelocities.append(qMakePair(velocity, elapsed));
                     
                     // Keep only last 5 velocity samples for smoothing
@@ -3002,6 +2977,11 @@ bool InkCanvas::event(QEvent *event) {
                 // Calculate new pan positions with sub-pixel precision
                 qreal newPanX = panOffsetX - scaledDeltaX;
                 qreal newPanY = panOffsetY - scaledDeltaY;
+                
+                // ✅ Y-AXIS ONLY MODE: Lock X-axis panning
+                if (touchGestureMode == TouchGestureMode::YAxisOnly) {
+                    newPanX = panOffsetX; // Don't allow X-axis movement
+                }
                 
                 // Clamp pan X to valid range (pan Y is not clamped for pseudo smooth scrolling)
                 qreal scaledCanvasWidth = buffer.width() * (internalZoomFactor / 100.0);
@@ -3030,6 +3010,12 @@ bool InkCanvas::event(QEvent *event) {
                 lastTouchPos = touchPoint.position();
             }
         } else if (activeTouchPoints == 2) {
+            // ✅ Y-AXIS ONLY MODE: Disable pinch-zoom
+            if (touchGestureMode == TouchGestureMode::YAxisOnly) {
+                event->accept();
+                return true;
+            }
+            
             // ✅ SAFETY: Only block spurious 2-finger events during active page switch recovery
             // This prevents false zoom triggers during fast page switches without blocking legitimate pinch-zoom
             
@@ -3180,6 +3166,12 @@ bool InkCanvas::event(QEvent *event) {
                     // Start inertia with the calculated velocity
                     inertiaVelocityX = avgVelocity.x();
                     inertiaVelocityY = avgVelocity.y();
+                    
+                    // ✅ Y-AXIS ONLY MODE: Zero out X-axis inertia velocity
+                    if (touchGestureMode == TouchGestureMode::YAxisOnly) {
+                        inertiaVelocityX = 0;
+                    }
+                    
                     inertiaPanX = panOffsetX;
                     inertiaPanY = panOffsetY;
                     

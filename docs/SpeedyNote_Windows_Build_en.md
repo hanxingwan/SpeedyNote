@@ -23,17 +23,13 @@ Install with default settings.
 Install these packages:
 
 ```bash
-pacman -S mingw-w64-clang-x86_64-toolchain mingw-w64-x86_64-cmake
+pacman -S mingw-w64-clang-x86_64-toolchain mingw-w64-clang-x86_64-cmake mingw-w64-clang-x86_64-pkgconf
 pacman -S mingw-w64-clang-x86_64-qt6-base mingw-w64-clang-x86_64-qt6-tools
-pacman -S mingw-w64-clang-x86_64-poppler
-pacman -S mingw-w64-clang-x86_64-poppler-qt6
+pacman -S mingw-w64-clang-x86_64-poppler mingw-w64-clang-x86_64-poppler-qt6
 pacman -S mingw-w64-clang-x86_64-SDL2
 ```
-If you have an arm64 system and want to compile SpeedyNote arm64, you may replace the `x86_64` with `aarch64` on the commands above.
 
-##### Additional Files
-
-Create a folder called `poppler` in `C:\msys64\clang64\lib\cmake` or `C:\msys64\clangarm64\lib\cmake` based on your PC's architecture and copy the `FindPoppler.cmake` file from the root of the source code to that folder. If you have an arm64 system, replace the paths from clang64 to clangarm64. 
+**For ARM64 systems:** Replace `x86_64` with `aarch64` in the commands above, and use `clangarm64` instead of `clang64` in the paths below. 
 
 ##### Path
 

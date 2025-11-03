@@ -240,7 +240,7 @@ void ControlPanelDialog::createPerformanceTab() {
 
     QLabel *dpiLabel = new QLabel(tr("PDF Rendering DPI:"));
     QComboBox *dpiSelector = new QComboBox();
-    dpiSelector->addItems({"96", "192", "288", "384", "480"});
+    dpiSelector->addItems({"96", "120", "144", "168", "192"});
     dpiSelector->setCurrentText(QString::number(mainWindowRef->getPdfDPI()));
 
     connect(dpiSelector, &QComboBox::currentTextChanged, this, [=](const QString &value) {
@@ -767,7 +767,7 @@ void ControlPanelDialog::createAboutTab() {
     layout->addSpacing(5);
     
     // Version
-    QLabel *versionLabel = new QLabel(tr("Version 0.10.5"), aboutTab);
+    QLabel *versionLabel = new QLabel(tr("Version 0.10.6"), aboutTab);
     versionLabel->setAlignment(Qt::AlignCenter);
     versionLabel->setStyleSheet("font-size: 14px; color: #7f8c8d;");
     layout->addWidget(versionLabel);

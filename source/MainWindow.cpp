@@ -88,7 +88,7 @@ void setupLinuxSignalHandlers() {
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false), localServer(nullptr) {
 
-    setWindowTitle(tr("SpeedyNote Beta 0.10.5"));
+    setWindowTitle(tr("SpeedyNote Beta 0.10.6"));
 
 #ifdef Q_OS_LINUX
     // Setup signal handlers for proper cleanup on Linux
@@ -289,10 +289,11 @@ void MainWindow::setupUi() {
 
     // Touch Gestures Toggle Button
     touchGesturesButton = new QPushButton(this);
-    touchGesturesButton->setToolTip(tr("Toggle Touch Gestures"));
+    touchGesturesButton->setToolTip(tr("Cycle Touch Gestures (Off/Y-Only/Full)"));
     touchGesturesButton->setFixedSize(26, 30);
     touchGesturesButton->setStyleSheet(buttonStyle);
-    touchGesturesButton->setProperty("selected", touchGesturesEnabled); // For toggle state styling
+    touchGesturesButton->setProperty("selected", touchGestureMode != TouchGestureMode::Disabled); // For toggle state styling
+    touchGesturesButton->setProperty("yAxisOnly", touchGestureMode == TouchGestureMode::YAxisOnly); // For Y-only styling
     updateButtonIcon(touchGesturesButton, "hand");
 
     selectFolderButton = new QPushButton(this);
@@ -831,8 +832,9 @@ void MainWindow::setupUi() {
     connect(toggleBookmarksButton, &QPushButton::clicked, this, &MainWindow::toggleBookmarksSidebar);
     connect(toggleBookmarkButton, &QPushButton::clicked, this, &MainWindow::toggleCurrentPageBookmark);
     connect(touchGesturesButton, &QPushButton::clicked, this, [this]() {
-        setTouchGesturesEnabled(!touchGesturesEnabled);
-        touchGesturesButton->setProperty("selected", touchGesturesEnabled);
+        cycleTouchGestureMode();
+        touchGesturesButton->setProperty("selected", touchGestureMode != TouchGestureMode::Disabled);
+        touchGesturesButton->setProperty("yAxisOnly", touchGestureMode == TouchGestureMode::YAxisOnly);
         updateButtonIcon(touchGesturesButton, "hand");
         touchGesturesButton->style()->unpolish(touchGesturesButton);
         touchGesturesButton->style()->polish(touchGesturesButton);
@@ -1756,47 +1758,19 @@ void MainWindow::saveCurrentPageConcurrent() {
             }
             currentImage.save(currentFilePath, "PNG");
             
-            // Save next page (bottom half) by MERGING with existing content
+            // Save next page (bottom half) - DIRECT SAVE like top half
+            // ✅ FIX: Don't merge, just save directly to properly handle erasure/deletion
+            // The buffer already contains the complete state of both pages after loading
             int nextPageNumber = pageNumber + 1;
             QString nextFilePath = saveFolder + QString("/%1_%2.png").arg(notebookId).arg(nextPageNumber, 5, 10, QChar('0'));
             QPixmap nextPageBuffer = bufferCopy.copy(0, singlePageHeight, bufferWidth, singlePageHeight);
-            
-            // Check if bottom half has any non-transparent content
-            QImage nextCheck = nextPageBuffer.toImage();
-            bool hasNewContent = false;
-            for (int y = 0; y < nextCheck.height() && !hasNewContent; ++y) {
-                const QRgb *row = reinterpret_cast<const QRgb*>(nextCheck.scanLine(y));
-                for (int x = 0; x < nextCheck.width() && !hasNewContent; ++x) {
-                    if (qAlpha(row[x]) != 0) {
-                        hasNewContent = true;
-                    }
-                }
+            QImage nextImage(nextPageBuffer.size(), QImage::Format_ARGB32);
+            nextImage.fill(Qt::transparent);
+            {
+                QPainter painter(&nextImage);
+                painter.drawPixmap(0, 0, nextPageBuffer);
             }
-            
-            if (hasNewContent) {
-                // Load existing next page content and merge with new content
-                QPixmap existingNextPage;
-                if (QFile::exists(nextFilePath)) {
-                    existingNextPage.load(nextFilePath);
-                }
-                
-                // Create merged image
-                QImage mergedNextImage(nextPageBuffer.size(), QImage::Format_ARGB32);
-                mergedNextImage.fill(Qt::transparent);
-                {
-                    QPainter painter(&mergedNextImage);
-                    
-                    // Draw existing content first
-                    if (!existingNextPage.isNull()) {
-                        painter.drawPixmap(0, 0, existingNextPage);
-                    }
-                    
-                    // Draw new content on top
-                    painter.drawPixmap(0, 0, nextPageBuffer);
-                }
-                
-                mergedNextImage.save(nextFilePath, "PNG");
-            }
+            nextImage.save(nextFilePath, "PNG");
         } else {
             // Standard single page save
             QString filePath = saveFolder + QString("/%1_%2.png").arg(notebookId).arg(pageNumber, 5, 10, QChar('0'));
@@ -2453,7 +2427,7 @@ void MainWindow::addNewTab() {
     // });
     
     // ✅ Apply touch gesture setting
-    newCanvas->setTouchGesturesEnabled(touchGesturesEnabled);
+    newCanvas->setTouchGestureMode(touchGestureMode);
 
     pageMap[newCanvas] = 0;
 
@@ -3810,6 +3784,18 @@ QString MainWindow::createButtonStyle(bool darkMode) {
             QPushButton[selected="true"]:pressed {
                 background: rgba(0, 0, 0, 50);
             }
+            QPushButton[yAxisOnly="true"] {
+                background: rgba(255, 100, 100, 120);
+                /*border: 1px solid rgba(255, 100, 100, 180);*/
+                padding: 4px;
+                border-radius: 0px;
+            }
+            QPushButton[yAxisOnly="true"]:hover {
+                background: rgba(255, 120, 120, 140);
+            }
+            QPushButton[yAxisOnly="true"]:pressed {
+                background: rgba(200, 50, 50, 100);
+            }
         )";
     } else {
         // Light mode: Use darker colors for better visibility
@@ -3836,6 +3822,18 @@ QString MainWindow::createButtonStyle(bool darkMode) {
             }
             QPushButton[selected="true"]:pressed {
                 background: rgba(0, 0, 0, 140);
+            }
+            QPushButton[yAxisOnly="true"] {
+                background: rgba(255, 60, 60, 100);
+                /*border: 2px solid rgba(255, 60, 60, 150);*/
+                padding: 4px;
+                border-radius: 0px;
+            }
+            QPushButton[yAxisOnly="true"]:hover {
+                background: rgba(255, 80, 80, 120);
+            }
+            QPushButton[yAxisOnly="true"]:pressed {
+                background: rgba(200, 40, 40, 140);
             }
         )";
     }
@@ -4445,23 +4443,38 @@ void MainWindow::setScrollOnTopEnabled(bool enabled) {
     settings.setValue("scrollOnTopEnabled", enabled);
 }
 
-bool MainWindow::areTouchGesturesEnabled() const {
-    return touchGesturesEnabled;
+TouchGestureMode MainWindow::getTouchGestureMode() const {
+    return touchGestureMode;
 }
 
-void MainWindow::setTouchGesturesEnabled(bool enabled) {
-    touchGesturesEnabled = enabled;
+void MainWindow::setTouchGestureMode(TouchGestureMode mode) {
+    touchGestureMode = mode;
     
     // Apply to all canvases
     for (int i = 0; i < canvasStack->count(); ++i) {
         InkCanvas *canvas = qobject_cast<InkCanvas*>(canvasStack->widget(i));
         if (canvas) {
-            canvas->setTouchGesturesEnabled(enabled);
+            canvas->setTouchGestureMode(mode);
         }
     }
     
     QSettings settings("SpeedyNote", "App");
-    settings.setValue("touchGesturesEnabled", enabled);
+    settings.setValue("touchGestureMode", static_cast<int>(mode));
+}
+
+void MainWindow::cycleTouchGestureMode() {
+    // Cycle: Disabled -> YAxisOnly -> Full -> Disabled
+    switch (touchGestureMode) {
+        case TouchGestureMode::Disabled:
+            setTouchGestureMode(TouchGestureMode::YAxisOnly);
+            break;
+        case TouchGestureMode::YAxisOnly:
+            setTouchGestureMode(TouchGestureMode::Full);
+            break;
+        case TouchGestureMode::Full:
+            setTouchGestureMode(TouchGestureMode::Disabled);
+            break;
+    }
 }
 
 void MainWindow::setTemporaryDialMode(DialMode mode) {
@@ -5065,11 +5078,14 @@ void MainWindow::loadUserSettings() {
     scrollOnTopEnabled = settings.value("scrollOnTopEnabled", true).toBool();
     setScrollOnTopEnabled(scrollOnTopEnabled);
 
-    touchGesturesEnabled = settings.value("touchGesturesEnabled", true).toBool();
-    setTouchGesturesEnabled(touchGesturesEnabled);
+    // Load touch gesture mode (default to Full for backwards compatibility)
+    int savedMode = settings.value("touchGestureMode", static_cast<int>(TouchGestureMode::Full)).toInt();
+    touchGestureMode = static_cast<TouchGestureMode>(savedMode);
+    setTouchGestureMode(touchGestureMode);
     
     // Update button visual state to match loaded setting
-    touchGesturesButton->setProperty("selected", touchGesturesEnabled);
+    touchGesturesButton->setProperty("selected", touchGestureMode != TouchGestureMode::Disabled);
+    touchGesturesButton->setProperty("yAxisOnly", touchGestureMode == TouchGestureMode::YAxisOnly);
     updateButtonIcon(touchGesturesButton, "hand");
     touchGesturesButton->style()->unpolish(touchGesturesButton);
     touchGesturesButton->style()->polish(touchGesturesButton);

@@ -30,6 +30,12 @@ class PictureWindowManager;
 class MarkdownWindow;
 class PictureWindow;
 
+enum class TouchGestureMode {
+    Disabled,     // Touch gestures completely off
+    YAxisOnly,    // Only Y-axis panning allowed (X-axis and zoom locked)
+    Full          // Full touch gestures (panning and zoom)
+};
+
 enum class BackgroundStyle {
     None,
     Grid,
@@ -176,8 +182,8 @@ public:
     }
 
     // Touch gesture support
-    void setTouchGesturesEnabled(bool enabled) { touchGesturesEnabled = enabled; }
-    bool areTouchGesturesEnabled() const { return touchGesturesEnabled; }
+    void setTouchGestureMode(TouchGestureMode mode) { touchGestureMode = mode; }
+    TouchGestureMode getTouchGestureMode() const { return touchGestureMode; }
     bool isTouchPanningActive() const { return isTouchPanning; } // Check if actively touch panning
 
     // Rope tool selection actions
@@ -392,7 +398,7 @@ private:
     bool pdfInversionEnabled = false;  // PDF color inversion for dark mode
 
     // Touch gesture support
-    bool touchGesturesEnabled = false;
+    TouchGestureMode touchGestureMode = TouchGestureMode::Disabled;
     QPointF lastTouchPos;
     qreal lastPinchScale = 1.0;
     bool isPanning = false;
