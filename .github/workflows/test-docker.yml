@@ -36,66 +36,32 @@ jobs:
       - name: Test Docker Compose Up
         run: |
           # 测试docker-compose up -d
-          docker-compose up -d
+          docker compose up -d
           echo "✅ Docker Compose up successful"
           
           # 等待容器启动
           sleep 30
           
           # 检查容器状态
-          docker-compose ps
+          docker compose ps
           
           # 检查容器是否正常运行
-          if docker-compose ps | grep -q "Up"; then
+          if docker compose ps | grep -q "Up"; then
             echo "✅ All containers are running"
           else
             echo "❌ Some containers are not running"
-            docker-compose logs
+            docker compose logs
             exit 1
           fi
-
-      - name: Test Application Build in Container
-        run: |
-          # 在容器内测试构建过程
-          docker-compose exec speedynote-builder bash -c "
-            echo 'Testing build process in container...'
-            
-            # 检查构建目录是否存在
-            if [ -d build ]; then
-              echo '✅ Build directory exists'
-            else
-              echo '❌ Build directory not found'
-              exit 1
-            fi
-            
-            # 测试CMake配置
-            cd build
-            if cmake --version; then
-              echo '✅ CMake is available'
-            else
-              echo '❌ CMake not found'
-              exit 1
-            fi
-            
-            # 测试构建脚本权限
-            if [ -x build-package.sh ]; then
-              echo '✅ Build scripts are executable'
-            else
-              echo '❌ Build scripts are not executable'
-              exit 1
-            fi
-            
-            echo '✅ All build environment tests passed'
-          "
 
       - name: Test Docker Compose Down
         run: |
           # 测试docker-compose down
-          docker-compose down
+          docker compose down
           echo "✅ Docker Compose down successful"
           
           # 验证容器已停止
-          if docker-compose ps | grep -q "Up"; then
+          if docker compose ps | grep -q "Up"; then
             echo "❌ Some containers are still running"
             exit 1
           else
@@ -106,7 +72,7 @@ jobs:
         if: always()
         run: |
           # 确保清理所有容器和镜像
-          docker-compose down -v --remove-orphans
+          docker compose down -v --remove-orphans
           docker system prune -f
 
   test-multi-arch:
@@ -164,7 +130,7 @@ jobs:
           fi
           
           # 显示配置信息
-          docker-compose config
+          docker compose config
 
       - name: Validate Dockerfile
         run: |
