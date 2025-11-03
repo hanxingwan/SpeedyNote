@@ -11,7 +11,7 @@ on:
 jobs:
   build-deb:
     name: Build DEB Package
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -43,7 +43,7 @@ jobs:
 
   build-rpm:
     name: Build RPM Package
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     container:
       image: fedora:43
     steps:
@@ -73,7 +73,7 @@ jobs:
   release:
     name: Create Release
     needs: [build-deb, build-rpm]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     if: github.event_name == 'release'
     steps:
       - name: Download DEB package
