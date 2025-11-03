@@ -156,7 +156,7 @@ jobs:
       - name: Validate docker-compose.yml
         run: |
           # 验证docker-compose.yml语法
-          if docker-compose config -q; then
+          if docker compose config -q; then
             echo "✅ docker-compose.yml is valid"
           else
             echo "❌ docker-compose.yml has syntax errors"
