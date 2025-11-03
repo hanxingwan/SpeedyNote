@@ -17,11 +17,7 @@ RUN apt-get update && apt-get install -y \
     libasound2-dev \
     dpkg-dev \
     devscripts \
-    rpm \
-    wget \
-    curl \
-    git \
-    && rm -rf /var/lib/apt/lists/*
+    qemu-user-static
 
 # 创建工作目录
 WORKDIR /app
