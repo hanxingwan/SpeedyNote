@@ -132,7 +132,15 @@ SOFTWARE.
 
 #### Windows
 
-请访问[Windows构建文档](../docs/SpeedyNote_Windows_Build_zh-CN.md)
+请访问[Windows构建文档](../docs/zh_Hans/SpeedyNote_Windows_Build_zh-Hans.md)
+
+
+
+#### Darwin
+
+请访问[macOS构建文档](../docs/zh_Hans/SpeedyNote_Darwin_Build_zh-Hans.md)
+
+
 
 #### Linux
 
