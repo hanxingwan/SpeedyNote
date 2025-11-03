@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install build dependencies
         run: |
@@ -36,7 +36,7 @@ jobs:
           ./build-package.sh --deb
 
       - name: Upload DEB package
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: speedynote-deb-package
           path: "*.deb"
@@ -45,8 +45,11 @@ jobs:
     name: Build RPM Package
     runs-on: ubuntu-latest
     container:
-      image: fedora:43
+      image: fedora:latest
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Install build dependencies
         run: |
           dnf install -y \
@@ -65,7 +68,7 @@ jobs:
           ./build-package.sh --rpm
 
       - name: Upload RPM package
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: speedynote-rpm-package
           path: "*.rpm"
@@ -77,14 +80,16 @@ jobs:
     if: github.event_name == 'release'
     steps:
       - name: Download DEB package
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: speedynote-deb-package
+          path: .
 
       - name: Download RPM package
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: speedynote-rpm-package
+          path: .
 
       - name: Upload packages to release
         uses: softprops/action-gh-release@v1
