@@ -110,7 +110,7 @@ SpeedyNote supports controller input, ideal for tablet users:
 
 #### Windows
 
-[Windows Build Documentation](./docs/SpeedyNote_Windows_Build_en.md)  [macOS build Documentation](./docs/SpeedyNote_MacOS_Build.md)
+[Windows Build Documentation](./docs/SpeedyNote_Windows_Build_en.md)  [macOS build Documentation](./docs/SpeedyNote_MacOS_build.md)
 
 #### Linux
 
