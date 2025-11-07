@@ -295,6 +295,8 @@ void MarkdownWindow::onDeleteClicked() {
 }
 
 void MarkdownWindow::onMarkdownTextChanged() {
+    // Note: This is called on every keystroke, so we don't print debug messages here
+    // to avoid spamming the console. The actual content updates are debounced.
     emit contentChanged();
 }
 

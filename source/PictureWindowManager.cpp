@@ -123,7 +123,8 @@ void PictureWindowManager::removePictureWindow(PictureWindow *window) {
             // Delete all cached clone instances for this page
             for (PictureWindow* cachedWindow : cachedWindows) {
                 if (cachedWindow && cachedWindow != window) {
-                    delete cachedWindow;
+                    // ✅ MEMORY SAFETY: Use deleteLater() for QWidget-derived objects
+                    cachedWindow->deleteLater();
                 }
             }
             // Remove this page from cache - it will be reloaded from disk next time
@@ -261,7 +262,8 @@ void PictureWindowManager::loadWindowsForPage(int pageNumber) {
                 // During inertia scrolling, each clone may have a huge cached pixmap (e.g., 4K image)
                 // This cache must be explicitly released to prevent memory accumulation
                 window->clearRenderCache();
-                delete window;
+                // ✅ MEMORY SAFETY: Use deleteLater() for QWidget-derived objects
+                window->deleteLater();
             }
         }
     }
@@ -531,7 +533,8 @@ void PictureWindowManager::setCombinedWindows(const QList<PictureWindow*> &windo
                 // During inertia scrolling, each clone may have a huge cached pixmap (e.g., 4K image)
                 // This cache must be explicitly released to prevent memory accumulation
                 window->clearRenderCache();
-                delete window;
+                // ✅ MEMORY SAFETY: Use deleteLater() for QWidget-derived objects
+                window->deleteLater();
             }
         }
     }
@@ -755,8 +758,9 @@ void PictureWindowManager::clearCurrentPageWindows() {
             // ✅ CRASH FIX: Also remove from combined temp windows to prevent dangling pointers
             combinedTempWindows.removeAll(window);
             
-            // Delete immediately to avoid timing issues
-            delete window;
+            // ✅ MEMORY SAFETY: Use deleteLater() for QWidget-derived objects
+            // deleteLater() is safer and avoids timing issues with signal/slot connections
+            window->deleteLater();
         }
     }
     currentWindows.clear();
@@ -1084,7 +1088,8 @@ void PictureWindowManager::evictOldCachedPages(int currentPage) {
                 if (window) {
                     // Clear render cache to release pixmap memory
                     window->clearRenderCache();
-                    delete window;
+                    // ✅ MEMORY SAFETY: Use deleteLater() for QWidget-derived objects
+                    window->deleteLater();
                 }
             }
             pageWindows.remove(pageToEvict);

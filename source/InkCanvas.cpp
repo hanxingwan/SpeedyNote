@@ -10,6 +10,8 @@
 #include <QColor>
 #include <QDebug>
 #include <cmath>
+#include <algorithm>
+#include <limits>
 #ifdef Q_OS_WIN
 #include <windows.h>
 #endif
@@ -959,20 +961,8 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
         painter.save(); // Save painter state for PDF text overlay
         painter.resetTransform(); // Reset transform to draw directly in logical widget coordinates
         
-        // Draw selection rectangle if actively selecting
-        if (pdfTextSelecting) {
-            QPen selectionPen(Qt::DashLine);
-            selectionPen.setColor(QColor(0, 120, 215)); // Blue selection rectangle
-            selectionPen.setWidthF(2.0); // Make it more visible
-            painter.setPen(selectionPen);
-            
-            QBrush selectionBrush(QColor(0, 120, 215, 30)); // Semi-transparent blue fill
-            painter.setBrush(selectionBrush);
-            
-            QRectF selectionRect(pdfSelectionStart, pdfSelectionEnd);
-            selectionRect = selectionRect.normalized();
-            painter.drawRect(selectionRect);
-        }
+        // Note: We no longer draw the selection rectangle during dragging
+        // since text selection is row-based, not area-based
         
         // Draw highlights for selected text boxes
         if (!selectedTextBoxes.isEmpty()) {
@@ -3876,6 +3866,23 @@ void InkCanvas::updatePdfTextSelection(const QPointF &start, const QPointF &end,
         return;
     }
 
+    // Check if this is a drag or just a single click
+    // Minimum distance threshold to distinguish between click and drag (in widget coordinates)
+    const qreal minDragDistance = 5.0; // pixels
+    qreal dx = end.x() - start.x();
+    qreal dy = end.y() - start.y();
+    qreal dragDistance = std::sqrt(dx * dx + dy * dy);
+    
+    // If distance is too small, treat it as a single click and don't select anything
+    if (dragDistance < minDragDistance) {
+        selectedTextBoxes.clear();
+        update();
+        return;
+    }
+
+    // Clear previous selection efficiently
+    selectedTextBoxes.clear();
+
     // Check if this is a combined canvas
     bool isCombinedCanvas = false;
     int singlePageHeight = 0;
@@ -3887,117 +3894,175 @@ void InkCanvas::updatePdfTextSelection(const QPointF &start, const QPointF &end,
         singlePageHeight = buffer.height() / 2;
     }
 
-    // Clear previous selection efficiently
-    selectedTextBoxes.clear();
+    // Convert widget coordinates to PDF coordinates for start and end points
+    QPointF startBuffer = mapWidgetToCanvas(start);
+    QPointF endBuffer = mapWidgetToCanvas(end);
     
-    // Create normalized selection rectangle in widget coordinates
-    QRectF widgetSelectionRect(start, end);
-    widgetSelectionRect = widgetSelectionRect.normalized();
+    // Determine base page number
+    int basePage = currentTextPageNumber;
+    if (basePage < 0) basePage = currentCachedPage;
     
-    // Convert widget coordinates to buffer coordinates to determine which page(s) are selected
-    // Widget coordinates are affected by pan and zoom, buffer coordinates are the actual canvas
-    QPointF bufferTopLeft = mapWidgetToCanvas(widgetSelectionRect.topLeft());
-    QPointF bufferBottomRight = mapWidgetToCanvas(widgetSelectionRect.bottomRight());
-    QRectF bufferSelectionRect(bufferTopLeft, bufferBottomRight);
-    bufferSelectionRect = bufferSelectionRect.normalized();
+    // Structure to hold text box info with position for sorting
+    struct TextBoxInfo {
+        Poppler::TextBox* textBox;
+        int pageNumber;
+        QRectF boundingBox; // In PDF coordinates
+        qreal centerY;      // For row-based sorting
+        qreal centerX;      // For left-to-right sorting within rows
+        int originalIndex;  // To preserve order when needed
+    };
     
-    // Reserve space for efficiency if we expect many selections
-    selectedTextBoxes.reserve(qMin(currentPdfTextBoxes.size(), 50));
+    QList<TextBoxInfo> textBoxInfoList;
+    textBoxInfoList.reserve(currentPdfTextBoxes.size());
     
-    int matchCount = 0;
-    
-    if (!isCombinedCanvas) {
-        // Single page mode - use simple coordinate mapping
-        QPointF pdfTopLeft = mapWidgetToPdfCoordinates(widgetSelectionRect.topLeft());
-        QPointF pdfBottomRight = mapWidgetToPdfCoordinates(widgetSelectionRect.bottomRight());
-        QRectF pdfSelectionRect(pdfTopLeft, pdfBottomRight);
-        pdfSelectionRect = pdfSelectionRect.normalized();
+    // Build list of text boxes with position info
+    for (int i = 0; i < currentPdfTextBoxes.size(); ++i) {
+        const Poppler::TextBox* textBox = currentPdfTextBoxes[i];
+        if (!textBox) continue;
         
-        // Find intersecting text boxes
-        for (int i = 0; i < currentPdfTextBoxes.size(); ++i) {
-            const Poppler::TextBox* textBox = currentPdfTextBoxes[i];
-            if (!textBox) continue;
+        int textBoxPage = (i < currentPdfTextBoxPageNumbers.size()) ? currentPdfTextBoxPageNumbers[i] : -1;
+        if (textBoxPage < 0) continue;
+        
+        TextBoxInfo info;
+        info.textBox = const_cast<Poppler::TextBox*>(textBox);
+        info.pageNumber = textBoxPage;
+        info.boundingBox = textBox->boundingBox();
+        info.originalIndex = i;
+        
+        // Calculate position for sorting (in buffer coordinate system for consistency)
+        // For combined canvas, offset bottom page text boxes
+        qreal yOffset = 0;
+        if (isCombinedCanvas && textBoxPage == basePage + 1) {
+            yOffset = singlePageHeight;
+        }
+        
+        // Get page size for coordinate conversion
+        QSizeF pageSize = pdfPageSizeCache.value(textBoxPage, QSizeF());
+        if (pageSize.isEmpty()) continue;
+        
+        // Convert PDF box to buffer coordinates for consistent sorting
+        qreal bufferWidth = isCombinedCanvas ? buffer.width() : buffer.width();
+        qreal bufferHeight = isCombinedCanvas ? singlePageHeight : buffer.height();
+        qreal scaleX = bufferWidth / pageSize.width();
+        qreal scaleY = bufferHeight / pageSize.height();
+        
+        qreal boxCenterX = (info.boundingBox.left() + info.boundingBox.right()) / 2.0 * scaleX;
+        qreal boxCenterY = (info.boundingBox.top() + info.boundingBox.bottom()) / 2.0 * scaleY + yOffset;
+        
+        info.centerX = boxCenterX;
+        info.centerY = boxCenterY;
+        
+        textBoxInfoList.append(info);
+    }
+    
+    if (textBoxInfoList.isEmpty()) {
+        update();
+        return;
+    }
+    
+    // Sort text boxes by reading order: top-to-bottom, then left-to-right
+    // Use a tolerance for "same row" detection (~10 pixels in buffer coordinates)
+    const qreal rowTolerance = 10.0;
+    std::sort(textBoxInfoList.begin(), textBoxInfoList.end(), 
+              [rowTolerance](const TextBoxInfo &a, const TextBoxInfo &b) {
+        // First sort by page number
+        if (a.pageNumber != b.pageNumber) {
+            return a.pageNumber < b.pageNumber;
+        }
+        // Then by row (Y position with tolerance)
+        if (std::abs(a.centerY - b.centerY) > rowTolerance) {
+            return a.centerY < b.centerY;
+        }
+        // Same row: sort left to right
+        return a.centerX < b.centerX;
+    });
+    
+    // Helper lambda to find the closest text box to a point
+    // This checks if the point is inside a text box first, then finds the nearest one
+    auto findClosestTextBox = [&textBoxInfoList, singlePageHeight, isCombinedCanvas, basePage, this]
+                               (const QPointF &point) -> int {
+        int closestIndex = -1;
+        qreal minDist = std::numeric_limits<qreal>::max();
+        
+        for (int i = 0; i < textBoxInfoList.size(); ++i) {
+            const TextBoxInfo &info = textBoxInfoList[i];
             
-            if (textBox->boundingBox().intersects(pdfSelectionRect)) {
-                selectedTextBoxes.append(const_cast<Poppler::TextBox*>(textBox));
-                matchCount++;
+            // Reconstruct the text box bounds in buffer coordinates for accurate checking
+            int textBoxPage = info.pageNumber;
+            QSizeF pageSize = pdfPageSizeCache.value(textBoxPage, QSizeF());
+            if (pageSize.isEmpty()) continue;
+            
+            qreal yOffset = 0;
+            if (isCombinedCanvas && textBoxPage == basePage + 1) {
+                yOffset = singlePageHeight;
+            }
+            
+            qreal bufferWidth = isCombinedCanvas ? buffer.width() : buffer.width();
+            qreal bufferHeight = isCombinedCanvas ? singlePageHeight : buffer.height();
+            qreal scaleX = bufferWidth / pageSize.width();
+            qreal scaleY = bufferHeight / pageSize.height();
+            
+            // Convert PDF bounding box to buffer coordinates
+            QRectF boxInBuffer(
+                info.boundingBox.left() * scaleX,
+                info.boundingBox.top() * scaleY + yOffset,
+                info.boundingBox.width() * scaleX,
+                info.boundingBox.height() * scaleY
+            );
+            
+            qreal dist;
+            
+            // Check if point is inside the text box
+            if (boxInBuffer.contains(point)) {
+                // Point is inside - prioritize this with very small distance
+                // Use horizontal distance within the box for sub-selection priority
+                qreal horizontalPos = (point.x() - boxInBuffer.left()) / boxInBuffer.width();
+                dist = horizontalPos * 0.1; // Very small distance, ordered by horizontal position
+            } else {
+                // Point is outside - calculate distance to nearest edge/corner of the box
+                qreal dx = 0;
+                qreal dy = 0;
+                
+                if (point.x() < boxInBuffer.left()) {
+                    dx = boxInBuffer.left() - point.x();
+                } else if (point.x() > boxInBuffer.right()) {
+                    dx = point.x() - boxInBuffer.right();
+                }
+                
+                if (point.y() < boxInBuffer.top()) {
+                    dy = boxInBuffer.top() - point.y();
+                } else if (point.y() > boxInBuffer.bottom()) {
+                    dy = point.y() - boxInBuffer.bottom();
+                }
+                
+                dist = std::sqrt(dx * dx + dy * dy);
+            }
+            
+            if (dist < minDist) {
+                minDist = dist;
+                closestIndex = i;
             }
         }
-    } else {
-        // Combined canvas mode - handle each page separately
-        // Determine which page(s) the selection spans (using buffer coordinates)
-        bool selectsTopHalf = (bufferSelectionRect.top() < singlePageHeight || bufferSelectionRect.bottom() < singlePageHeight);
-        bool selectsBottomHalf = (bufferSelectionRect.top() >= singlePageHeight || bufferSelectionRect.bottom() >= singlePageHeight);
         
-        // Determine base page number from currentCachedPage or currentTextPageNumber
-        int basePage = currentTextPageNumber;
-        if (basePage < 0) basePage = currentCachedPage;
+        return closestIndex;
+    };
+    
+    // Find the text box closest to start point
+    int startIndex = findClosestTextBox(startBuffer);
+    
+    // Find the text box closest to end point
+    int endIndex = findClosestTextBox(endBuffer);
+    
+    // Select all text boxes between start and end (inclusive) in reading order
+    if (startIndex >= 0 && endIndex >= 0) {
+        // Ensure start comes before end in reading order
+        if (startIndex > endIndex) {
+            std::swap(startIndex, endIndex);
+        }
         
-        // Process each text box
-        for (int i = 0; i < currentPdfTextBoxes.size(); ++i) {
-            const Poppler::TextBox* textBox = currentPdfTextBoxes[i];
-            if (!textBox) continue;
-            
-            int textBoxPage = (i < currentPdfTextBoxPageNumbers.size()) ? currentPdfTextBoxPageNumbers[i] : -1;
-            if (textBoxPage < 0) continue;
-            
-            // Determine if this text box is on the top or bottom page
-            bool isTopPage = (textBoxPage == basePage);
-            bool isBottomPage = (textBoxPage == basePage + 1);
-            
-            // Skip text boxes on pages we're not selecting
-            if (isTopPage && !selectsTopHalf) {
-                continue;
-            }
-            if (isBottomPage && !selectsBottomHalf) {
-                continue;
-            }
-            
-            // Create selection rectangle in buffer space for this page's region
-            QRectF pageRegionBuffer;
-            if (isTopPage) {
-                pageRegionBuffer = QRectF(0, 0, buffer.width(), singlePageHeight);
-            } else if (isBottomPage) {
-                pageRegionBuffer = QRectF(0, singlePageHeight, buffer.width(), singlePageHeight);
-            } else {
-                continue; // Not a page we're displaying
-            }
-            
-            // Clip selection to this page's region in buffer space
-            QRectF clippedBufferRect = bufferSelectionRect.intersected(pageRegionBuffer);
-            if (clippedBufferRect.isEmpty()) {
-                continue;
-            }
-            
-            // For bottom page, shift Y coordinate to be relative to that page's origin
-            if (isBottomPage) {
-                clippedBufferRect.translate(0, -singlePageHeight);
-            }
-            
-            // Now map to PDF coordinates (which expects buffer coordinates relative to page origin)
-            // Get page size for this specific page
-            QSizeF pageSize = pdfPageSizeCache.value(textBoxPage, QSizeF());
-            if (pageSize.isEmpty()) {
-                continue;
-            }
-            
-            // Map buffer coordinates to PDF coordinates (no Y-flip, direct scale like mapWidgetToPdfCoordinates)
-            qreal scaleX = pageSize.width() / buffer.width();
-            qreal scaleY = pageSize.height() / singlePageHeight;
-            
-            qreal pdfLeft = clippedBufferRect.left() * scaleX;
-            qreal pdfTop = clippedBufferRect.top() * scaleY;
-            qreal pdfRight = clippedBufferRect.right() * scaleX;
-            qreal pdfBottom = clippedBufferRect.bottom() * scaleY;
-            
-            QRectF pdfSelectionRect(QPointF(pdfLeft, pdfTop), QPointF(pdfRight, pdfBottom));
-            pdfSelectionRect = pdfSelectionRect.normalized();
-            
-            // Check intersection with this text box
-            if (textBox->boundingBox().intersects(pdfSelectionRect)) {
-                selectedTextBoxes.append(const_cast<Poppler::TextBox*>(textBox));
-                matchCount++;
-            }
+        // Add all text boxes in the range
+        for (int i = startIndex; i <= endIndex; ++i) {
+            selectedTextBoxes.append(textBoxInfoList[i].textBox);
         }
     }
     
@@ -4740,7 +4805,7 @@ void InkCanvas::loadCombinedWindowsForPage(int pageNumber) {
         // Combine both sets of windows and set as current
         if (markdownManager) {
             QList<MarkdownWindow*> combinedMarkdownWindows = topHalfMarkdownWindows + bottomHalfMarkdownWindows;
-            markdownManager->setCombinedWindows(combinedMarkdownWindows);
+            markdownManager->setCombinedWindows(combinedMarkdownWindows, pageNumber, nextPageNumber);
         }
         
         if (pictureManager) {

@@ -144,6 +144,7 @@ public:
     // saveBackgroundMetadata moved to unified JSON metadata section
 
     int getBufferWidth() const { return buffer.width(); }
+    int getBufferHeight() const { return buffer.height(); }
     QPixmap getBuffer() const { return buffer; } // Get buffer for concurrent saving
 
 

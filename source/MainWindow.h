@@ -425,6 +425,7 @@ private:
     void loadPdfOutline();           // Load PDF outline/bookmarks
     void addOutlineItem(const Poppler::OutlineItem& outlineItem, QTreeWidgetItem* parentItem); // Add outline item recursively
     Poppler::Document* getPdfDocument(); // Get PDF document from current canvas
+    void updateOutlineSelection(int pageNumber); // Update outline selection based on current page
     
     // Bookmark sidebar functionality
     void toggleBookmarksSidebar();   // Toggle bookmarks sidebar
