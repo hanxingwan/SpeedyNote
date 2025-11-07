@@ -734,32 +734,27 @@ void MarkdownWindowManager::saveWindowsForPageSeparately(int pageNumber, const Q
         return;
     }
     
-    // ✅ Clone the windows to store in cache
-    // This ensures we have objects with valid parent pointers for serialization
-    // The windows parameter already has page-relative coordinates (adjusted by InkCanvas if needed)
-    QList<MarkdownWindow*> cacheClones;
-    for (MarkdownWindow *window : windows) {
-        MarkdownWindow *clone = new MarkdownWindow(window->getCanvasRect(), canvas);
-        clone->setMarkdownContent(window->getMarkdownContent());
-        cacheClones.append(clone);
-    }
+    // Update page windows map for this specific page
+    // ✅ CRITICAL FIX: INVALIDATE the cache so next load reads fresh data from disk
+    // This method is called after InkCanvas has already adjusted coordinates, so the cache
+    // may have stale combined-mode coordinates that don't match what's on disk
     
-    // Clean up old cache entries
+    // Invalidate cache by deleting old clones and removing from map
     if (pageWindows.contains(pageNumber)) {
+        qDebug() << "  Invalidating cache for page" << pageNumber;
         for (MarkdownWindow *oldWindow : pageWindows[pageNumber]) {
-            oldWindow->deleteLater();
+            // Only delete if it's not in currentWindows (to avoid deleting active windows)
+            if (!currentWindows.contains(oldWindow)) {
+                oldWindow->deleteLater();
+            }
         }
+        pageWindows.remove(pageNumber);
     }
+
+    // Save to disk with the adjusted coordinates from InkCanvas
+    saveWindowData(pageNumber, windows);
     
-    // Update cache with clones
-    pageWindows[pageNumber] = cacheClones;
-    qDebug() << "  Updated cache for page" << pageNumber << "with" << cacheClones.size() << "windows";
-    
-    // ✅ CRITICAL: Save the clones (which have valid parent pointers) instead of the original windows
-    // The original windows from InkCanvas may have been temporarily modified or have invalid state
-    saveWindowData(pageNumber, cacheClones);
-    
-    // Clear dirty flag
+    // ✅ Clear dirty flag after successful save
     dirtyPages.remove(pageNumber);
     qDebug() << "  Cleared dirty flag for page" << pageNumber;
 }
