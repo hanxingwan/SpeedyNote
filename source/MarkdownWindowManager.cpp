@@ -143,7 +143,7 @@ void MarkdownWindowManager::removeMarkdownWindow(MarkdownWindow *window) {
         it.value().removeAll(window);
         
 //         qDebug() << "  Removed window from page" << it.key() << "cache (now has" 
-                 << it.value().size() << "windows)";
+                 // << it.value().size() << "windows)";
     }
     // ✅ CRASH FIX: Also remove from combinedTempWindows to prevent accessing deleted windows
     combinedTempWindows.removeAll(window);
@@ -335,7 +335,7 @@ void MarkdownWindowManager::saveWindowsForPage(int pageNumber) {
                     rect.moveTop(rect.y() - singlePageHeight);
                     clonedWindow->setCanvasRect(rect);
 //                     qDebug() << "    Adjusted window Y from" << window->getCanvasRect().y() 
-                             << "to" << rect.y() << "(page-relative)";
+                             // << "to" << rect.y() << "(page-relative)";
                 }
                 
                 // ✅ BOTH cache and disk store PAGE-RELATIVE coordinates
@@ -343,7 +343,7 @@ void MarkdownWindowManager::saveWindowsForPage(int pageNumber) {
                 pageSpecificWindows.append(clonedWindow);
                 windowsForSaving.append(clonedWindow);
 //                 qDebug() << "    Window" << window << "belongs to page" << pageNumber 
-                         << "(Y=" << window->getCanvasRect().y() << ")";
+                         // << "(Y=" << window->getCanvasRect().y() << ")";
             }
         }
         
@@ -359,7 +359,7 @@ void MarkdownWindowManager::saveWindowsForPage(int pageNumber) {
         // ✅ Update cache with PAGE-RELATIVE coordinates (matching disk format)
         pageWindows[pageNumber] = pageSpecificWindows;
 //         qDebug() << "  Updated cache for page" << pageNumber << "with" 
-                 << pageSpecificWindows.size() << "windows (page-relative coordinates)";
+                 // << pageSpecificWindows.size() << "windows (page-relative coordinates)";
         
         // ✅ Save to disk (clones are now owned by cache, don't delete them)
         windowsToSave = windowsForSaving;
@@ -895,9 +895,9 @@ void MarkdownWindowManager::saveWindowData(int pageNumber, const QList<MarkdownW
 //         qDebug() << "    Serializing window" << i << ":" << window;
 //         qDebug() << "      Content:" << windowData.value("content").toString().left(50) << "...";
 //         qDebug() << "      Canvas rect:" << QRect(windowData.value("canvas_x").toInt(),
-                                                    windowData.value("canvas_y").toInt(),
-                                                    windowData.value("canvas_width").toInt(),
-                                                    windowData.value("canvas_height").toInt());
+                                                    // windowData.value("canvas_y").toInt(),
+                                                    // windowData.value("canvas_width").toInt(),
+                                                    // windowData.value("canvas_height").toInt());
         windowsArray.append(QJsonObject::fromVariantMap(windowData));
     }
     
@@ -958,9 +958,9 @@ QList<MarkdownWindow*> MarkdownWindowManager::loadWindowData(int pageNumber) {
 //         qDebug() << "  Loading window" << i;
 //         qDebug() << "    Content:" << windowData.value("content").toString().left(50) << "...";
 //         qDebug() << "    Canvas rect:" << QRect(windowData.value("canvas_x").toInt(),
-                                                  windowData.value("canvas_y").toInt(),
-                                                  windowData.value("canvas_width").toInt(),
-                                                  windowData.value("canvas_height").toInt());
+                                                  // windowData.value("canvas_y").toInt(),
+                                                  // windowData.value("canvas_width").toInt(),
+                                                  // windowData.value("canvas_height").toInt());
         
         // Create window with default rect (will be updated by deserialize)
         MarkdownWindow *window = new MarkdownWindow(QRect(0, 0, 300, 200), canvas);
