@@ -1535,6 +1535,9 @@ void MainWindow::switchPage(int pageNumber) {
     }
     updateDialDisplay();
     updateBookmarkButtonState(); // Update bookmark button state when switching pages
+    
+    // ✅ Update outline selection to match the new page
+    updateOutlineSelection(pageNumber);
 }
 void MainWindow::switchPageWithDirection(int pageNumber, int direction) {
     InkCanvas *canvas = currentCanvas();
@@ -1600,6 +1603,9 @@ void MainWindow::switchPageWithDirection(int pageNumber, int direction) {
     }
     updateDialDisplay();
     updateBookmarkButtonState(); // Update bookmark button state when switching pages
+    
+    // ✅ Update outline selection to match the new page
+    updateOutlineSelection(pageNumber);
 }
 
 void MainWindow::deleteCurrentPage() {
@@ -2168,6 +2174,8 @@ void MainWindow::switchTab(int index) {
             // Refresh PDF outline if sidebar is visible
             if (outlineSidebarVisible) {
                 loadPdfOutline();
+                // ✅ Update outline selection for the current page after loading
+                updateOutlineSelection(savedPage + 1); // Convert to 1-based page number
             }
             
             // ✅ Refresh bookmarks if sidebar is visible
@@ -6173,6 +6181,13 @@ void MainWindow::toggleOutlineSidebar() {
     // Load PDF outline when showing sidebar for the first time
     if (outlineSidebarVisible) {
         loadPdfOutline();
+        
+        // ✅ Update outline selection to match the current page
+        InkCanvas* canvas = currentCanvas();
+        if (canvas) {
+            int currentPage = getCurrentPageForCanvas(canvas) + 1; // Convert to 1-based
+            updateOutlineSelection(currentPage);
+        }
     }
 }
 
@@ -6255,6 +6270,57 @@ void MainWindow::addOutlineItem(const Poppler::OutlineItem& outlineItem, QTreeWi
         for (const Poppler::OutlineItem& child : children) {
             addOutlineItem(child, item);
         }
+    }
+}
+
+void MainWindow::updateOutlineSelection(int pageNumber) {
+    // ✅ EFFICIENCY: Only update if outline sidebar is visible
+    if (!outlineSidebarVisible || !outlineTree) return;
+    
+    // ✅ MEMORY SAFETY: Use QTreeWidgetItemIterator for safe tree traversal
+    QTreeWidgetItem* bestMatch = nullptr;
+    int bestMatchPage = -1;
+    
+    // Iterate through all items in the tree to find the best match
+    QTreeWidgetItemIterator it(outlineTree);
+    while (*it) {
+        QTreeWidgetItem* item = *it;
+        QVariant pageData = item->data(0, Qt::UserRole);
+        
+        if (pageData.isValid()) {
+            int itemPage = pageData.toInt();
+            
+            // Find the item with the highest page number that's <= current page
+            if (itemPage <= pageNumber && itemPage > bestMatchPage) {
+                bestMatch = item;
+                bestMatchPage = itemPage;
+            }
+        }
+        
+        ++it;
+    }
+    
+    // ✅ Update selection if we found a match
+    if (bestMatch) {
+        // Block signals to prevent triggering navigation when programmatically selecting
+        outlineTree->blockSignals(true);
+        
+        // Clear previous selection and select the new item
+        outlineTree->clearSelection();
+        bestMatch->setSelected(true);
+        
+        // Ensure the item is visible by scrolling to it
+        outlineTree->scrollToItem(bestMatch, QAbstractItemView::EnsureVisible);
+        
+        // ✅ Expand parent items to make the selected item visible
+        QTreeWidgetItem* parent = bestMatch->parent();
+        while (parent) {
+            parent->setExpanded(true);
+            parent = parent->parent();
+        }
+        
+        // Re-enable signals
+        outlineTree->blockSignals(false);
     }
 }
 
