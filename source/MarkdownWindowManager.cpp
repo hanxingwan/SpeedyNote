@@ -160,16 +160,27 @@ void MarkdownWindowManager::clearAllWindows() {
     currentlyFocusedWindow = nullptr;
     windowsAreTransparent = false;
     
+    // ✅ MEMORY SAFETY FIX: Use a set to track which windows we've already deleted
+    // In single-page mode, pageWindows and currentWindows contain the SAME objects,
+    // so we need to avoid double-deletion
+    QSet<MarkdownWindow*> deletedWindows;
+    
     // Clear current windows
     for (MarkdownWindow *window : currentWindows) {
-        window->deleteLater();
+        if (!deletedWindows.contains(window)) {
+            window->deleteLater();
+            deletedWindows.insert(window);
+        }
     }
     currentWindows.clear();
     
     // Clear page windows
     for (auto it = pageWindows.begin(); it != pageWindows.end(); ++it) {
         for (MarkdownWindow *window : it.value()) {
-            window->deleteLater();
+            if (!deletedWindows.contains(window)) {
+                window->deleteLater();
+                deletedWindows.insert(window);
+            }
         }
     }
     pageWindows.clear();
@@ -186,10 +197,15 @@ void MarkdownWindowManager::clearAllCachedWindows() {
     currentlyFocusedWindow = nullptr;
     windowsAreTransparent = false;
 
+    // ✅ MEMORY SAFETY FIX: Use a set to track which windows we've already deleted
+    // Multiple lists may contain the same objects, so we need to avoid double-deletion
+    QSet<MarkdownWindow*> deletedWindows;
+
     // Clear combined temp windows (temporary clones used for pseudo-smooth scrolling)
     for (MarkdownWindow *window : combinedTempWindows) {
-        if (window) {
+        if (window && !deletedWindows.contains(window)) {
             window->deleteLater();
+            deletedWindows.insert(window);
         }
     }
     combinedTempWindows.clear();
@@ -197,8 +213,9 @@ void MarkdownWindowManager::clearAllCachedWindows() {
     // Clear permanent page cache (windows loaded from disk and cached for reuse)
     for (auto it = pageWindows.begin(); it != pageWindows.end(); ++it) {
         for (MarkdownWindow *window : it.value()) {
-            if (window) {
+            if (window && !deletedWindows.contains(window)) {
                 window->deleteLater();
+                deletedWindows.insert(window);
             }
         }
     }
@@ -206,8 +223,9 @@ void MarkdownWindowManager::clearAllCachedWindows() {
 
     // Clear current windows (the visible windows on screen)
     for (MarkdownWindow *window : currentWindows) {
-        if (window) {
+        if (window && !deletedWindows.contains(window)) {
             window->deleteLater();
+            deletedWindows.insert(window);
         }
     }
     currentWindows.clear();
@@ -390,7 +408,8 @@ void MarkdownWindowManager::loadWindowsForPage(int pageNumber) {
 
             // Only delete temporary cloned instances, not permanent cached ones
             if (!isPermanent) {
-                delete window;
+                // ✅ MEMORY SAFETY: Use deleteLater() for QWidget-derived objects
+                window->deleteLater();
             }
         }
     }
@@ -587,7 +606,8 @@ QList<MarkdownWindow*> MarkdownWindowManager::loadWindowsForPageSeparately(int p
                     QList<MarkdownWindow*> oldWindows = pageWindows[pageToRemove];
                     for (MarkdownWindow* oldWindow : oldWindows) {
                         if (oldWindow) {
-                            delete oldWindow;
+                            // ✅ MEMORY SAFETY: Use deleteLater() for QWidget-derived objects
+                            oldWindow->deleteLater();
                         }
                     }
                     pageWindows.remove(pageToRemove);
@@ -661,7 +681,8 @@ void MarkdownWindowManager::setCombinedWindows(const QList<MarkdownWindow*> &win
 
             // Only delete temporary cloned instances, not permanent cached ones
             if (!isPermanent) {
-                delete window;
+                // ✅ MEMORY SAFETY: Use deleteLater() for QWidget-derived objects
+                window->deleteLater();
             }
         }
     }
