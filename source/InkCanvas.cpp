@@ -4805,7 +4805,7 @@ void InkCanvas::loadCombinedWindowsForPage(int pageNumber) {
         // Combine both sets of windows and set as current
         if (markdownManager) {
             QList<MarkdownWindow*> combinedMarkdownWindows = topHalfMarkdownWindows + bottomHalfMarkdownWindows;
-            markdownManager->setCombinedWindows(combinedMarkdownWindows);
+            markdownManager->setCombinedWindows(combinedMarkdownWindows, pageNumber, nextPageNumber);
         }
         
         if (pictureManager) {
