@@ -310,8 +310,10 @@ void MarkdownWindowManager::saveWindowsForPage(int pageNumber) {
                 clonedWindow->setMarkdownContent(window->getMarkdownContent());
                 
                 QRect rect = clonedWindow->getCanvasRect();
-                // If this is the second page in combined mode, adjust Y coordinate to page-relative
-                if (windowPage == combinedSecondPage) {
+                // ✅ CRITICAL FIX: Always adjust if window is in bottom half of canvas
+                // This ensures page-relative coordinates regardless of current view
+                // (combinedFirstPage/combinedSecondPage might have changed during debounce)
+                if (rect.y() >= singlePageHeight) {
                     rect.moveTop(rect.y() - singlePageHeight);
                     clonedWindow->setCanvasRect(rect);
                     qDebug() << "    Adjusted window Y from" << window->getCanvasRect().y() 
@@ -732,19 +734,32 @@ void MarkdownWindowManager::saveWindowsForPageSeparately(int pageNumber, const Q
         return;
     }
     
-    // Update page windows map for this specific page
-    // ✅ CRITICAL FIX: Do NOT update pageWindows cache here with the passed-in windows!
-    // This method is called from saveCombinedWindowsForPage with temporarily adjusted coordinates.
-    // If we update the cache here, it gets corrupted with wrong coordinates.
+    // ✅ Clone the windows to store in cache
+    // This ensures we have objects with valid parent pointers for serialization
+    // The windows parameter already has page-relative coordinates (adjusted by InkCanvas if needed)
+    QList<MarkdownWindow*> cacheClones;
+    for (MarkdownWindow *window : windows) {
+        MarkdownWindow *clone = new MarkdownWindow(window->getCanvasRect(), canvas);
+        clone->setMarkdownContent(window->getMarkdownContent());
+        cacheClones.append(clone);
+    }
     
-    // ✅ SIMPLEST FIX: Don't touch the cache at all - just save to disk!
-    // The cache will naturally get rebuilt when loading from a page that doesn't have cached windows yet.
-    // Trying to invalidate/orphan windows here causes dangling pointer issues.
-
-    // Just save to file - leave cache alone
-    saveWindowData(pageNumber, windows);
+    // Clean up old cache entries
+    if (pageWindows.contains(pageNumber)) {
+        for (MarkdownWindow *oldWindow : pageWindows[pageNumber]) {
+            oldWindow->deleteLater();
+        }
+    }
     
-    // ✅ Clear dirty flag after successful save
+    // Update cache with clones
+    pageWindows[pageNumber] = cacheClones;
+    qDebug() << "  Updated cache for page" << pageNumber << "with" << cacheClones.size() << "windows";
+    
+    // ✅ CRITICAL: Save the clones (which have valid parent pointers) instead of the original windows
+    // The original windows from InkCanvas may have been temporarily modified or have invalid state
+    saveWindowData(pageNumber, cacheClones);
+    
+    // Clear dirty flag
     dirtyPages.remove(pageNumber);
     qDebug() << "  Cleared dirty flag for page" << pageNumber;
 }
