@@ -34,6 +34,29 @@ MarkdownWindowManager::MarkdownWindowManager(InkCanvas *canvas, QObject *parent)
     geometryDebounceTimer->setSingleShot(true);
     geometryDebounceTimer->setInterval(200); // 200ms delay after last move/resize
     connect(geometryDebounceTimer, &QTimer::timeout, this, &MarkdownWindowManager::flushPendingGeometryUpdates);
+    
+    // ✅ PERFORMANCE: Initialize position update throttle timer to avoid lag during scrolling
+    positionUpdateThrottleTimer = new QTimer(this);
+    positionUpdateThrottleTimer->setSingleShot(true);
+    positionUpdateThrottleTimer->setInterval(32); // ~30 FPS max update rate (half of inertia's 60 FPS)
+    hasPendingPositionUpdate = false;
+    connect(positionUpdateThrottleTimer, &QTimer::timeout, this, [this]() {
+        if (hasPendingPositionUpdate) {
+            hasPendingPositionUpdate = false;
+            // Actually update positions - but only for visible windows
+            for (MarkdownWindow *window : currentWindows) {
+                if (window && window->isVisible()) {
+                    window->updateScreenPositionImmediate();
+                }
+            }
+        }
+    });
+    
+    // ✅ PERFORMANCE: Initialize preload timer for adjacent page windows
+    preloadTimer = new QTimer(this);
+    preloadTimer->setSingleShot(true);
+    preloadTimer->setInterval(500); // 500ms delay after page load
+    connect(preloadTimer, &QTimer::timeout, this, &MarkdownWindowManager::preloadAdjacentPages);
 
     // Connect to canvas signals to update window positions when canvas changes
     if (canvas) {
@@ -43,16 +66,18 @@ MarkdownWindowManager::MarkdownWindowManager(InkCanvas *canvas, QObject *parent)
 }
 
 MarkdownWindowManager::~MarkdownWindowManager() {
-    clearAllWindows();
+    // ✅ MEMORY LEAK FIX: Use clearAllCachedWindows() instead of clearAllWindows()
+    // to ensure preloadedWindows, combinedTempWindows, and all other caches are freed
+    clearAllCachedWindows();
 }
 
 MarkdownWindow* MarkdownWindowManager::createMarkdownWindow(const QRect &rect) {
-//     qDebug() << "==========================================";
-//     qDebug() << "MarkdownWindowManager::createMarkdownWindow() - Creating new window";
-//     qDebug() << "  Input screen rect:" << rect;
+//     // qDebug() << "==========================================";
+//     // qDebug() << "MarkdownWindowManager::createMarkdownWindow() - Creating new window";
+//     // qDebug() << "  Input screen rect:" << rect;
     
     if (!canvas) {
-//         qDebug() << "  ERROR: No canvas!";
+//         // qDebug() << "  ERROR: No canvas!";
         return nullptr;
     }
     
@@ -64,7 +89,7 @@ MarkdownWindow* MarkdownWindowManager::createMarkdownWindow(const QRect &rect) {
     
     // Convert screen coordinates to canvas coordinates
     QRect canvasRect = convertScreenToCanvasRect(rect);
-//     qDebug() << "  Converted to canvas rect:" << canvasRect;
+//     // qDebug() << "  Converted to canvas rect:" << canvasRect;
     
     // Apply bounds checking to ensure window is within canvas bounds
     QRect canvasBounds = canvas->getCanvasRect();
@@ -76,11 +101,11 @@ MarkdownWindow* MarkdownWindowManager::createMarkdownWindow(const QRect &rect) {
     canvasRect.setX(qMax(0, qMin(canvasRect.x(), maxX)));
     canvasRect.setY(qMax(0, qMin(canvasRect.y(), maxY)));
     
-//     qDebug() << "  Bounds-checked canvas rect:" << canvasRect << "Canvas bounds:" << canvasBounds;
+//     // qDebug() << "  Bounds-checked canvas rect:" << canvasRect << "Canvas bounds:" << canvasBounds;
     
     // Create new markdown window with canvas coordinates
     MarkdownWindow *window = new MarkdownWindow(canvasRect, canvas);
-//     qDebug() << "  Created window:" << window;
+//     // qDebug() << "  Created window:" << window;
     
     // Connect signals
     connectWindowSignals(window);
@@ -88,7 +113,7 @@ MarkdownWindow* MarkdownWindowManager::createMarkdownWindow(const QRect &rect) {
     // Add to current windows list
     currentWindows.append(window);
     
-//     qDebug() << "  Total windows after creation:" << currentWindows.size();
+//     // qDebug() << "  Total windows after creation:" << currentWindows.size();
     
     // Show the window
     window->show();
@@ -104,7 +129,9 @@ MarkdownWindow* MarkdownWindowManager::createMarkdownWindow(const QRect &rect) {
         // ✅ Mark current page as dirty so the new window will be saved
         int currentPage = canvas->getLastActivePage();
         dirtyPages.insert(currentPage);
-//         qDebug() << "  Marked page" << currentPage << "as dirty due to new window creation";
+        cacheUpdatedPages.remove(currentPage); // Clear cache flag to force re-clone
+        serializedDataCache.remove(currentPage); // Clear serialized data cache
+//         // qDebug() << "  Marked page" << currentPage << "as dirty due to new window creation";
         
         // ✅ CRITICAL FIX: Add the new window to the page cache immediately
         // This ensures that when content updates happen before the first save,
@@ -112,16 +139,16 @@ MarkdownWindow* MarkdownWindowManager::createMarkdownWindow(const QRect &rect) {
         if (pageWindows.contains(currentPage)) {
             // Cache exists, add this window to it
             pageWindows[currentPage].append(window);
-//             qDebug() << "  Added window to existing cache for page" << currentPage;
+//             // qDebug() << "  Added window to existing cache for page" << currentPage;
         } else {
             // No cache yet, create one with this window
             pageWindows[currentPage] = QList<MarkdownWindow*>{window};
-//             qDebug() << "  Created new cache for page" << currentPage;
+//             // qDebug() << "  Created new cache for page" << currentPage;
         }
     }
     
     emit windowCreated(window);
-//     qDebug() << "  Window creation complete";
+//     // qDebug() << "  Window creation complete";
     return window;
 }
 
@@ -142,7 +169,7 @@ void MarkdownWindowManager::removeMarkdownWindow(MarkdownWindow *window) {
         // Remove this specific window from the page's cache list
         it.value().removeAll(window);
         
-//         qDebug() << "  Removed window from page" << it.key() << "cache (now has" 
+//         // qDebug() << "  Removed window from page" << it.key() << "cache (now has" 
                  // << it.value().size() << "windows)";
     }
     // ✅ CRASH FIX: Also remove from combinedTempWindows to prevent accessing deleted windows
@@ -190,10 +217,23 @@ void MarkdownWindowManager::clearAllCachedWindows() {
     // ✅ MEMORY LEAK FIX: Clean up all cached windows
     // This is used during canvas destruction to prevent memory leaks
 
-    // Stop transparency timer
+    // Stop all timers to prevent them from firing after destruction
     if (transparencyTimer) {
         transparencyTimer->stop();
     }
+    if (contentDebounceTimer) {
+        contentDebounceTimer->stop();
+    }
+    if (geometryDebounceTimer) {
+        geometryDebounceTimer->stop();
+    }
+    if (positionUpdateThrottleTimer) {
+        positionUpdateThrottleTimer->stop();
+    }
+    if (preloadTimer) {
+        preloadTimer->stop();
+    }
+    
     currentlyFocusedWindow = nullptr;
     windowsAreTransparent = false;
 
@@ -220,6 +260,23 @@ void MarkdownWindowManager::clearAllCachedWindows() {
         }
     }
     pageWindows.clear();
+    
+    // ✅ Clear preloaded windows cache (cleanup fully-constructed but hidden windows)
+    for (auto it = preloadedWindows.begin(); it != preloadedWindows.end(); ++it) {
+        for (MarkdownWindow *window : it.value()) {
+            if (window && !deletedWindows.contains(window)) {
+                window->deleteLater();
+                deletedWindows.insert(window);
+            }
+        }
+    }
+    preloadedWindows.clear();
+    
+    // ✅ Clear serialized data cache (no objects to delete, just data)
+    serializedDataCache.clear();
+    
+    // ✅ Clear checked pages set
+    checkedPages.clear();
 
     // Clear current windows (the visible windows on screen)
     for (MarkdownWindow *window : currentWindows) {
@@ -229,6 +286,30 @@ void MarkdownWindowManager::clearAllCachedWindows() {
         }
     }
     currentWindows.clear();
+    
+    // ✅ Clear orphaned cache windows (windows awaiting cleanup)
+    for (MarkdownWindow *window : orphanedCacheWindows) {
+        if (window && !deletedWindows.contains(window)) {
+            window->deleteLater();
+            deletedWindows.insert(window);
+        }
+    }
+    orphanedCacheWindows.clear();
+    
+    // ✅ Clear pending update queues to avoid dangling pointers
+    pendingContentUpdates.clear();
+    pendingGeometryUpdates.clear();
+    pendingGeometryOriginalY.clear();
+    
+    // ✅ Clear dirty page tracking
+    dirtyPages.clear();
+    cacheUpdatedPages.clear();
+    
+    // ✅ Reset state flags
+    hasPendingPositionUpdate = false;
+    pendingPreloadTargetPage = -1;
+    combinedFirstPage = -1;
+    combinedSecondPage = -1;
 }
 
 
@@ -261,47 +342,47 @@ void MarkdownWindowManager::clearCurrentPagePermanently(int pageNumber) {
 }
 
 void MarkdownWindowManager::saveWindowsForPage(int pageNumber) {
-//     qDebug() << "==========================================";
-//     qDebug() << "MarkdownWindowManager::saveWindowsForPage(" << pageNumber << ")";
-//     qDebug() << "  Canvas:" << canvas;
-//     qDebug() << "  currentWindows count:" << currentWindows.size();
-//     qDebug() << "  Page dirty:" << dirtyPages.contains(pageNumber);
+//     // qDebug() << "==========================================";
+//     // qDebug() << "MarkdownWindowManager::saveWindowsForPage(" << pageNumber << ")";
+//     // qDebug() << "  Canvas:" << canvas;
+//     // qDebug() << "  currentWindows count:" << currentWindows.size();
+//     // qDebug() << "  Page dirty:" << dirtyPages.contains(pageNumber);
     
     // ✅ Flush any pending content updates before saving
     if (!pendingContentUpdates.isEmpty()) {
-//         qDebug() << "  Flushing" << pendingContentUpdates.size() << "pending content updates before save";
+//         // qDebug() << "  Flushing" << pendingContentUpdates.size() << "pending content updates before save";
         contentDebounceTimer->stop();
         flushPendingContentUpdates(); // Process immediately
     }
     
     // ✅ Flush any pending geometry updates before saving
     if (!pendingGeometryUpdates.isEmpty()) {
-//         qDebug() << "  Flushing" << pendingGeometryUpdates.size() << "pending geometry updates before save";
+//         // qDebug() << "  Flushing" << pendingGeometryUpdates.size() << "pending geometry updates before save";
         geometryDebounceTimer->stop();
         flushPendingGeometryUpdates(); // Process immediately
     }
 
     // ✅ OPTIMIZATION: Only save if this page has been modified
     if (!dirtyPages.contains(pageNumber)) {
-//         qDebug() << "  SKIPPED: Page" << pageNumber << "has not been modified";
+//         // qDebug() << "  SKIPPED: Page" << pageNumber << "has not been modified";
         return;
     }
     
     if (!canvas) {
-//         qDebug() << "  SKIPPED: canvas is null";
+//         // qDebug() << "  SKIPPED: canvas is null";
         return;
     }
     
     // ✅ FIX: Allow saving even if currentWindows is empty (e.g., after deleting all windows)
     // An empty list should be saved to disk to represent "no windows on this page"
     if (currentWindows.isEmpty()) {
-//         qDebug() << "  NOTE: Saving empty window list for page" << pageNumber;
+//         // qDebug() << "  NOTE: Saving empty window list for page" << pageNumber;
     }
     
     // ✅ CRITICAL FIX: During combined mode, identify which windows belong to this page
     // and update both cache and disk correctly
     bool isCombinedMode = !combinedTempWindows.isEmpty();
-//     qDebug() << "  isCombinedMode:" << isCombinedMode;
+//     // qDebug() << "  isCombinedMode:" << isCombinedMode;
     
     QList<MarkdownWindow*> windowsToSave;
     
@@ -309,11 +390,11 @@ void MarkdownWindowManager::saveWindowsForPage(int pageNumber) {
         // Single-page mode: update permanent cache directly
         pageWindows[pageNumber] = currentWindows;
         windowsToSave = currentWindows;
-//         qDebug() << "  Updated pageWindows cache for page" << pageNumber;
+//         // qDebug() << "  Updated pageWindows cache for page" << pageNumber;
     } else {
         // ✅ CRITICAL FIX: Combined mode - rebuild cache from currentWindows by page
         // Filter currentWindows to include only windows that belong to this specific page
-//         qDebug() << "  Combined mode: filtering windows for page" << pageNumber;
+//         // qDebug() << "  Combined mode: filtering windows for page" << pageNumber;
         
         int singlePageHeight = canvas->getBufferHeight() / 2;
         
@@ -334,7 +415,7 @@ void MarkdownWindowManager::saveWindowsForPage(int pageNumber) {
                 if (rect.y() >= singlePageHeight) {
                     rect.moveTop(rect.y() - singlePageHeight);
                     clonedWindow->setCanvasRect(rect);
-//                     qDebug() << "    Adjusted window Y from" << window->getCanvasRect().y() 
+//                     // qDebug() << "    Adjusted window Y from" << window->getCanvasRect().y() 
                              // << "to" << rect.y() << "(page-relative)";
                 }
                 
@@ -342,7 +423,7 @@ void MarkdownWindowManager::saveWindowsForPage(int pageNumber) {
                 // This allows InkCanvas to apply the correct offset when loading
                 pageSpecificWindows.append(clonedWindow);
                 windowsForSaving.append(clonedWindow);
-//                 qDebug() << "    Window" << window << "belongs to page" << pageNumber 
+//                 // qDebug() << "    Window" << window << "belongs to page" << pageNumber 
                          // << "(Y=" << window->getCanvasRect().y() << ")";
             }
         }
@@ -358,7 +439,7 @@ void MarkdownWindowManager::saveWindowsForPage(int pageNumber) {
         
         // ✅ Update cache with PAGE-RELATIVE coordinates (matching disk format)
         pageWindows[pageNumber] = pageSpecificWindows;
-//         qDebug() << "  Updated cache for page" << pageNumber << "with" 
+//         // qDebug() << "  Updated cache for page" << pageNumber << "with" 
                  // << pageSpecificWindows.size() << "windows (page-relative coordinates)";
         
         // ✅ Save to disk (clones are now owned by cache, don't delete them)
@@ -366,28 +447,51 @@ void MarkdownWindowManager::saveWindowsForPage(int pageNumber) {
     }
     
     // Print what we're saving
-//     qDebug() << "  Saving" << windowsToSave.size() << "window(s) to page" << pageNumber;
+//     // qDebug() << "  Saving" << windowsToSave.size() << "window(s) to page" << pageNumber;
     for (int i = 0; i < windowsToSave.size(); i++) {
         MarkdownWindow *w = windowsToSave[i];
-//         qDebug() << "  Window" << i << ":" << w;
-//         qDebug() << "    Content:" << w->getMarkdownContent().left(50) << "...";
-//         qDebug() << "    Canvas rect:" << w->getCanvasRect();
+//         // qDebug() << "  Window" << i << ":" << w;
+//         // qDebug() << "    Content:" << w->getMarkdownContent().left(50) << "...";
+//         // qDebug() << "    Canvas rect:" << w->getCanvasRect();
     }
     
-    // Save to file
-    saveWindowData(pageNumber, windowsToSave);
+    // ✅ PERFORMANCE FIX: Don't write to disk here, just keep page marked as dirty
+    // The autosave timer will call flushDirtyPagesToDisk() to write dirty pages
+    // This prevents blocking disk I/O on every page switch
+//     // qDebug() << "  Cache updated for page" << pageNumber << "(disk write deferred to autosave)";
+}
+
+void MarkdownWindowManager::flushDirtyPagesToDisk() {
+    // ✅ PERFORMANCE: Write all dirty pages to disk at once (called by autosave)
+    // This avoids blocking disk I/O on every page switch
     
-    // ✅ Clear dirty flag after successful save
-    dirtyPages.remove(pageNumber);
-//     qDebug() << "  Cleared dirty flag for page" << pageNumber;
+    if (dirtyPages.isEmpty()) {
+        return; // Nothing to save
+    }
+    
+    // Write each dirty page to disk
+    for (int pageNumber : dirtyPages) {
+        // Get the cached windows for this page
+        if (pageWindows.contains(pageNumber)) {
+            const QList<MarkdownWindow*> &windows = pageWindows[pageNumber];
+            saveWindowData(pageNumber, windows);
+        } else {
+            // Page is dirty but has no cached windows - save empty list
+            saveWindowData(pageNumber, QList<MarkdownWindow*>());
+        }
+    }
+    
+    // Clear all dirty flags after successful disk writes
+    dirtyPages.clear();
+    // Note: Keep cacheUpdatedPages as-is - those pages are still valid in cache
 }
 
 void MarkdownWindowManager::loadWindowsForPage(int pageNumber) {
-//     qDebug() << "==========================================";
-//     qDebug() << "MarkdownWindowManager::loadWindowsForPage(" << pageNumber << ")";
+//     // qDebug() << "==========================================";
+//     // qDebug() << "MarkdownWindowManager::loadWindowsForPage(" << pageNumber << ")";
     
     if (!canvas) {
-//         qDebug() << "  ERROR: No canvas!";
+//         // qDebug() << "  ERROR: No canvas!";
         return;
     }
 
@@ -420,28 +524,28 @@ void MarkdownWindowManager::loadWindowsForPage(int pageNumber) {
 
     // Check if we have windows for this page in memory
     if (pageWindows.contains(pageNumber)) {
-//         qDebug() << "  Found windows in MEMORY cache for page" << pageNumber;
+//         // qDebug() << "  Found windows in MEMORY cache for page" << pageNumber;
         newPageWindows = pageWindows[pageNumber];
-//         qDebug() << "  Cached windows count:" << newPageWindows.size();
+//         // qDebug() << "  Cached windows count:" << newPageWindows.size();
         for (int i = 0; i < newPageWindows.size(); i++) {
             MarkdownWindow *w = newPageWindows[i];
-//             qDebug() << "    Cached window" << i << ":" << w;
-//             qDebug() << "      Content:" << w->getMarkdownContent().left(50) << "...";
-//             qDebug() << "      Canvas rect:" << w->getCanvasRect();
+//             // qDebug() << "    Cached window" << i << ":" << w;
+//             // qDebug() << "      Content:" << w->getMarkdownContent().left(50) << "...";
+//             // qDebug() << "      Canvas rect:" << w->getCanvasRect();
         }
     } else {
-//         qDebug() << "  No cache found, loading windows from DISK for page" << pageNumber;
+//         // qDebug() << "  No cache found, loading windows from DISK for page" << pageNumber;
         // Load from file
         newPageWindows = loadWindowData(pageNumber);
 
         // Update page windows map
         if (!newPageWindows.isEmpty()) {
             pageWindows[pageNumber] = newPageWindows;
-//             qDebug() << "  Updated cache with" << newPageWindows.size() << "windows";
+//             // qDebug() << "  Updated cache with" << newPageWindows.size() << "windows";
         }
     }
 
-//     qDebug() << "  Total windows to display:" << newPageWindows.size();
+//     // qDebug() << "  Total windows to display:" << newPageWindows.size();
 
     // ✅ Reset combined mode flags since we're loading a single page
     combinedFirstPage = -1;
@@ -459,7 +563,7 @@ void MarkdownWindowManager::loadWindowsForPage(int pageNumber) {
     for (MarkdownWindow *window : currentWindows) {
         // Validate that the window is within canvas bounds
         if (!window->isValidForCanvas()) {
-            // qDebug() << "Warning: Markdown window at" << window->getCanvasRect() 
+            // // qDebug() << "Warning: Markdown window at" << window->getCanvasRect() 
             //          << "is outside canvas bounds" << canvas->getCanvasRect();
             // Optionally adjust the window position to fit within bounds
             QRect canvasBounds = canvas->getCanvasRect();
@@ -472,7 +576,7 @@ void MarkdownWindowManager::loadWindowsForPage(int pageNumber) {
             if (newX != windowRect.x() || newY != windowRect.y()) {
                 QRect adjustedRect(newX, newY, windowRect.width(), windowRect.height());
                 window->setCanvasRect(adjustedRect);
-                // qDebug() << "Adjusted window position to" << adjustedRect;
+                // // qDebug() << "Adjusted window position to" << adjustedRect;
             }
         }
         
@@ -491,16 +595,19 @@ void MarkdownWindowManager::loadWindowsForPage(int pageNumber) {
     // Start transparency timer if there are windows
     // When timer expires, windows will remain transparent (or become transparent again)
     if (!currentWindows.isEmpty()) {
-        // qDebug() << "Starting transparency timer for" << currentWindows.size() << "windows";
+        // // qDebug() << "Starting transparency timer for" << currentWindows.size() << "windows";
         transparencyTimer->stop();
         transparencyTimer->start();
     } else {
-        // qDebug() << "No windows to show, not starting timer";
+        // // qDebug() << "No windows to show, not starting timer";
     }
     
     // ✅ Re-enable dirty marking now that loading is complete
     suppressDirtyMarking = false;
-//     qDebug() << "  Loading complete, dirty marking re-enabled";
+//     // qDebug() << "  Loading complete, dirty marking re-enabled";
+    
+    // ✅ PERFORMANCE: Trigger preloading of adjacent pages for instant page switching
+    triggerPreloadAdjacentPages(pageNumber);
 }
 
 void MarkdownWindowManager::deleteWindowsForPage(int pageNumber) {
@@ -541,31 +648,118 @@ QList<MarkdownWindow*> MarkdownWindowManager::getCurrentPageWindows() const {
 QList<MarkdownWindow*> MarkdownWindowManager::loadWindowsForPageSeparately(int pageNumber) {
     if (!canvas) return QList<MarkdownWindow*>();
 
+    // qDebug() << "==========================================";
+    // qDebug() << "MarkdownWindowManager::loadWindowsForPageSeparately(" << pageNumber << ")";
+    // qDebug() << "  Current cache state:";
+    // qDebug() << "    - preloadedWindows pages:" << preloadedWindows.keys();
+    // qDebug() << "    - serializedDataCache pages:" << serializedDataCache.keys();
+    // qDebug() << "    - pageWindows pages:" << pageWindows.keys();
+
     // ✅ Suppress dirty marking during window loading for combined views
     bool wasSuppressed = suppressDirtyMarking;
     suppressDirtyMarking = true;
 
-    // ✅ PSEUDO-SMOOTH SCROLLING: Always create new window instances for combined views
-    // The same notebook page appears at different Y-offsets in adjacent combined pages
-    // (e.g., page 2 appears at bottom of display-page-1 and top of display-page-2)
-    // We need separate window instances for each position, but reuse the cached data
-    
     QList<MarkdownWindow*> windows;
 
-    // Check if we have cached windows for this page that we can clone from
-    if (pageWindows.contains(pageNumber) && !pageWindows[pageNumber].isEmpty()) {
-        // Clone the cached windows to create new instances with same data
+    // ✅ PERFORMANCE: Check preloaded windows cache FIRST for instant page switching!
+    // These are fully-constructed windows with all Qt widgets ready and positioned correctly
+    if (preloadedWindows.contains(pageNumber) && !preloadedWindows[pageNumber].isEmpty()) {
+        // qDebug() << "  ✅ CACHE HIT (INSTANT): Found" << preloadedWindows[pageNumber].size() 
+                 // << "preloaded windows for page" << pageNumber;
+        // qDebug() << "  → Using preloaded windows (0ms delay!)";
+        
+        // ✅ INSTANT PATH: Reuse preloaded windows (0ms delay!)
+        windows = preloadedWindows[pageNumber];
+        preloadedWindows.remove(pageNumber); // Remove from preload cache (will be in currentWindows now)
+        
+        suppressDirtyMarking = wasSuppressed;
+        // qDebug() << "  → Instant load complete!";
+        return windows;
+    }
+
+    // qDebug() << "  ⚠️ CACHE MISS: Page" << pageNumber << "not in preloadedWindows";
+    // qDebug() << "  → Checking serializedDataCache...";
+
+    // ✅ PERFORMANCE FIX: Cache serialized data to avoid disk reads
+    // We can't reuse window objects because InkCanvas modifies their coordinates
+    // Instead, we cache the serialized data and create fresh windows each time
+
+    // Check serialized data cache (avoids disk read but still needs to create widgets)
+    if (serializedDataCache.contains(pageNumber)) {
+        const QList<QVariantMap> &cachedData = serializedDataCache[pageNumber];
+        
+        if (!cachedData.isEmpty()) {
+            // qDebug() << "  ✅ CACHE HIT (SERIALIZED): Found" << cachedData.size() 
+                     // << "serialized windows for page" << pageNumber;
+            // qDebug() << "  → Creating new QTextEdit widgets (~500ms delay)";
+            
+            // ✅ FAST PATH: Create new windows from cached serialized data (no disk read!)
+            for (const QVariantMap &data : cachedData) {
+                MarkdownWindow *window = new MarkdownWindow(QRect(0, 0, 400, 300), canvas);
+                window->deserialize(data);
+                windows.append(window);
+            }
+            // qDebug() << "  → Created" << windows.size() << "windows from serialized cache";
+        } else {
+            // qDebug() << "  ✅ CACHE HIT (EMPTY): Page" << pageNumber << "is known to have 0 windows (no disk I/O needed)";
+        }
+    } 
+    // Check permanent cache (need to serialize from these)
+    else if (pageWindows.contains(pageNumber) && !pageWindows[pageNumber].isEmpty()) {
+        // qDebug() << "  ✅ CACHE HIT (PERMANENT): Found" << pageWindows[pageNumber].size() 
+                 // << "permanent cached windows for page" << pageNumber;
+        // qDebug() << "  → Serializing and creating new instances";
+        
+        // Serialize the cached windows and store data for future reuse
+        QList<QVariantMap> serializedList;
         const QList<MarkdownWindow*> &cachedWindows = pageWindows[pageNumber];
         for (MarkdownWindow *cachedWindow : cachedWindows) {
-            // Serialize the cached window and create a new instance from it
             QVariantMap data = cachedWindow->serialize();
-
+            serializedList.append(data);
+            
             // Create new window instance with same data
             MarkdownWindow *window = new MarkdownWindow(QRect(0, 0, 400, 300), canvas);
             window->deserialize(data);
             windows.append(window);
         }
-    } else {
+        
+        // ✅ Store serialized data in cache for future reuse
+        serializedDataCache[pageNumber] = serializedList;
+        // qDebug() << "  → Added page" << pageNumber << "to serializedDataCache";
+        
+        // ✅ MEMORY MANAGEMENT: Limit serialized cache size
+        const int MAX_CACHED_PAGES = 20; // Serialized data is much lighter than window objects
+        if (serializedDataCache.size() > MAX_CACHED_PAGES) {
+            // Find and remove the entry farthest from current page
+            int pageToRemove = -1;
+            int maxDistance = 0;
+            for (auto it = serializedDataCache.begin(); it != serializedDataCache.end(); ++it) {
+                int distance = qAbs(it.key() - pageNumber);
+                if (distance > maxDistance) {
+                    maxDistance = distance;
+                    pageToRemove = it.key();
+                }
+            }
+            
+            if (pageToRemove >= 0) {
+                // qDebug() << "  → LRU EVICTION: Removed page" << pageToRemove << "from serializedDataCache";
+                serializedDataCache.remove(pageToRemove);
+            }
+        }
+        // qDebug() << "  → Created" << windows.size() << "windows from permanent cache";
+    } 
+    // Check if page has been checked before (to avoid redundant disk I/O for empty pages)
+    else if (checkedPages.contains(pageNumber)) {
+        // qDebug() << "  ✅ CACHE HIT (CHECKED): Page" << pageNumber << "already checked and has 0 windows (no disk I/O needed)";
+        // Page has been checked before and has no windows - return empty list
+    }
+    else {
+        // qDebug() << "  ⚠️ CACHE MISS: Page" << pageNumber << "not in any cache";
+        // qDebug() << "  → Loading from DISK (slowest path)";
+        
+        // Mark page as checked to avoid redundant disk I/O
+        checkedPages.insert(pageNumber);
+        
         // Load windows from file for the first time
         QList<MarkdownWindow*> loadedWindows = loadWindowData(pageNumber);
 
@@ -585,6 +779,7 @@ QList<MarkdownWindow*> MarkdownWindowManager::loadWindowsForPageSeparately(int p
         // Store clones in cache for future use
         if (!permanentCache.isEmpty()) {
             pageWindows[pageNumber] = permanentCache;
+            // qDebug() << "  → Added page" << pageNumber << "to pageWindows cache";
 
             // ✅ MEMORY LEAK FIX: Limit cache size to prevent unbounded growth
             // Keep only the most recent 5 pages in cache
@@ -601,7 +796,9 @@ QList<MarkdownWindow*> MarkdownWindowManager::loadWindowsForPageSeparately(int p
                     }
                 }
 
-                if (pageToRemove >= 0) {
+                if (pageToRemove >= 0 && pageToRemove != pageNumber) {
+                    // qDebug() << "  → LRU EVICTION: Removing page" << pageToRemove << "from pageWindows cache";
+                    
                     // Delete all cached windows for this page
                     QList<MarkdownWindow*> oldWindows = pageWindows[pageToRemove];
                     for (MarkdownWindow* oldWindow : oldWindows) {
@@ -611,12 +808,29 @@ QList<MarkdownWindow*> MarkdownWindowManager::loadWindowsForPageSeparately(int p
                         }
                     }
                     pageWindows.remove(pageToRemove);
+                    
+                    // ✅ Also clean up serialized cache to stay in sync
+                    serializedDataCache.remove(pageToRemove);
+                    // qDebug() << "  → Also removed page" << pageToRemove << "from serializedDataCache";
                 }
             }
         }
 
+        // Serialize and store for future reuse
+        QList<QVariantMap> serializedList;
+        for (MarkdownWindow *window : permanentCache) {
+            serializedList.append(window->serialize());
+        }
+        serializedDataCache[pageNumber] = serializedList;
+        // qDebug() << "  → Added page" << pageNumber << "to serializedDataCache";
+        
+        if (loadedWindows.isEmpty()) {
+            // qDebug() << "  → Page has 0 windows (will skip disk check next time)";
+        }
+        
         // Return the originally loaded windows (these will be Y-adjusted if needed)
         windows = loadedWindows;
+        // qDebug() << "  → Loaded" << windows.size() << "windows from disk";
     }
 
     // Apply bounds checking and setup connections for all windows
@@ -650,6 +864,7 @@ QList<MarkdownWindow*> MarkdownWindowManager::loadWindowsForPageSeparately(int p
     
     // ✅ Restore dirty marking state
     suppressDirtyMarking = wasSuppressed;
+    // qDebug() << "  → Load complete, returning" << windows.size() << "windows";
     
     return windows;
 }
@@ -678,8 +893,9 @@ void MarkdownWindowManager::setCombinedWindows(const QList<MarkdownWindow*> &win
                     break;
                 }
             }
-
+            
             // Only delete temporary cloned instances, not permanent cached ones
+            // (serializedDataCache doesn't contain window objects, so no need to check)
             if (!isPermanent) {
                 // ✅ MEMORY SAFETY: Use deleteLater() for QWidget-derived objects
                 window->deleteLater();
@@ -691,7 +907,7 @@ void MarkdownWindowManager::setCombinedWindows(const QList<MarkdownWindow*> &win
     // ✅ Store which pages are being displayed in combined mode
     combinedFirstPage = firstPage;
     combinedSecondPage = secondPage;
-//     qDebug() << "MarkdownWindowManager::setCombinedWindows() - firstPage:" << firstPage << "secondPage:" << secondPage;
+//     // qDebug() << "MarkdownWindowManager::setCombinedWindows() - firstPage:" << firstPage << "secondPage:" << secondPage;
     
     // Clear the currently focused window since we're switching to combined view
     currentlyFocusedWindow = nullptr;
@@ -726,64 +942,118 @@ void MarkdownWindowManager::setCombinedWindows(const QList<MarkdownWindow*> &win
     
     // ✅ Re-enable dirty marking now that loading is complete
     suppressDirtyMarking = false;
-//     qDebug() << "  Combined loading complete, dirty marking re-enabled";
+//     // qDebug() << "  Combined loading complete, dirty marking re-enabled";
+    
+    // ✅ PERFORMANCE: Trigger preloading of adjacent pages for instant page switching
+    // In combined mode showing pages (firstPage, secondPage), preload:
+    // - firstPage-1 (page before current view)
+    // - secondPage+1 (page after current view)
+    // - secondPage+2 (two pages after current view)
+    if (firstPage >= 0) {
+        triggerPreloadAdjacentPages(firstPage);
+    }
 }
 
 void MarkdownWindowManager::saveWindowsForPageSeparately(int pageNumber, const QList<MarkdownWindow*> &windows) {
     if (!canvas) return;
     
-//     qDebug() << "saveWindowsForPageSeparately(" << pageNumber << ")";
-//     qDebug() << "  Page dirty:" << dirtyPages.contains(pageNumber);
+//     // qDebug() << "saveWindowsForPageSeparately(" << pageNumber << ")";
+//     // qDebug() << "  Page dirty:" << dirtyPages.contains(pageNumber);
     
-    // ✅ Flush any pending content updates before saving
-    if (!pendingContentUpdates.isEmpty()) {
-//         qDebug() << "  Flushing" << pendingContentUpdates.size() << "pending content updates before save";
-        contentDebounceTimer->stop();
-        flushPendingContentUpdates(); // Process immediately
+    // ✅ CRASH FIX: Clear any pending updates for windows not in the passed-in list
+    // The windows passed here are temporary clones that may have replaced permanent ones
+    // We need to avoid accessing deleted windows
+    QSet<MarkdownWindow*> validWindows(windows.begin(), windows.end());
+    
+    // Remove any pending content updates for windows that aren't in the current set
+    for (auto it = pendingContentUpdates.begin(); it != pendingContentUpdates.end(); ) {
+        if (!validWindows.contains(it.key()) && !currentWindows.contains(it.key())) {
+            it = pendingContentUpdates.erase(it);
+        } else {
+            ++it;
+        }
     }
     
-    // ✅ Flush any pending geometry updates before saving
+    // Remove any pending geometry updates for windows that aren't in the current set
+    for (auto it = pendingGeometryUpdates.begin(); it != pendingGeometryUpdates.end(); ) {
+        if (!validWindows.contains(*it) && !currentWindows.contains(*it)) {
+            it = pendingGeometryUpdates.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    
+    // Remove invalid entries from pendingGeometryOriginalY
+    for (auto it = pendingGeometryOriginalY.begin(); it != pendingGeometryOriginalY.end(); ) {
+        if (!validWindows.contains(it.key()) && !currentWindows.contains(it.key())) {
+            it = pendingGeometryOriginalY.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    
+    // Now flush remaining valid updates
+    if (!pendingContentUpdates.isEmpty()) {
+        contentDebounceTimer->stop();
+        flushPendingContentUpdates();
+    }
+    
     if (!pendingGeometryUpdates.isEmpty()) {
-//         qDebug() << "  Flushing" << pendingGeometryUpdates.size() << "pending geometry updates before save";
         geometryDebounceTimer->stop();
-        flushPendingGeometryUpdates(); // Process immediately
+        flushPendingGeometryUpdates();
     }
 
-    // ✅ OPTIMIZATION: Only save if this page has been modified
+    // ✅ CRITICAL PERFORMANCE FIX: Skip if cache already updated for this page
+    // This prevents expensive serialize/clone operations on every page switch
+    if (cacheUpdatedPages.contains(pageNumber)) {
+//         // qDebug() << "  SKIPPED: Cache already updated for page" << pageNumber;
+        return;
+    }
+
+    // ✅ OPTIMIZATION: Only update cache if this page has been modified
     if (!dirtyPages.contains(pageNumber)) {
-//         qDebug() << "  SKIPPED: Page" << pageNumber << "has not been modified";
+//         // qDebug() << "  SKIPPED: Page" << pageNumber << "has not been modified";
         return;
     }
     
-    // Update page windows map for this specific page
-    // ✅ CRITICAL FIX: INVALIDATE the cache so next load reads fresh data from disk
-    // This method is called after InkCanvas has already adjusted coordinates, so the cache
-    // may have stale combined-mode coordinates that don't match what's on disk
+    // ✅ PERFORMANCE FIX: Update cache but don't write to disk
+    // InkCanvas has already adjusted coordinates, so we store these as the new cache
     
-    // Invalidate cache by deleting old clones and removing from map
+    // Delete old clones from cache (but not if they're in currentWindows)
     if (pageWindows.contains(pageNumber)) {
-//         qDebug() << "  Invalidating cache for page" << pageNumber;
+//         // qDebug() << "  Replacing cache for page" << pageNumber;
         for (MarkdownWindow *oldWindow : pageWindows[pageNumber]) {
             // Only delete if it's not in currentWindows (to avoid deleting active windows)
             if (!currentWindows.contains(oldWindow)) {
                 oldWindow->deleteLater();
             }
         }
-        pageWindows.remove(pageNumber);
     }
-
-    // Save to disk with the adjusted coordinates from InkCanvas
-    saveWindowData(pageNumber, windows);
     
-    // ✅ Clear dirty flag after successful save
-    dirtyPages.remove(pageNumber);
-//     qDebug() << "  Cleared dirty flag for page" << pageNumber;
+    // Create clones of the passed-in windows for the cache
+    // (InkCanvas passes us temporary adjusted windows that will be deleted)
+    QList<MarkdownWindow*> cacheWindows;
+    for (MarkdownWindow *window : windows) {
+        QVariantMap data = window->serialize();
+        MarkdownWindow *cloneWindow = new MarkdownWindow(QRect(0, 0, 400, 300), canvas);
+        cloneWindow->deserialize(data);
+        cacheWindows.append(cloneWindow);
+    }
+    
+    // Update cache with clones
+    pageWindows[pageNumber] = cacheWindows;
+    
+    // Mark cache as updated (so we don't clone again until page is modified)
+    cacheUpdatedPages.insert(pageNumber);
+    
+    // Keep page marked as dirty - flushDirtyPagesToDisk() will write to disk later
+//     // qDebug() << "  Cache updated for page" << pageNumber << "(disk write deferred)";
 }
 
 void MarkdownWindowManager::onWindowDeleteRequested(MarkdownWindow *window) {
-//     qDebug() << "==========================================";
-//     qDebug() << "MarkdownWindowManager::onWindowDeleteRequested(" << window << ")";
-//     qDebug() << "  Deleting window with content:" << window->getMarkdownContent().left(50) << "...";
+//     // qDebug() << "==========================================";
+//     // qDebug() << "MarkdownWindowManager::onWindowDeleteRequested(" << window << ")";
+//     // qDebug() << "  Deleting window with content:" << window->getMarkdownContent().left(50) << "...";
     
     // ✅ CRITICAL: Flush any pending updates for this window BEFORE removing it
     // This prevents stale debounced updates from firing after deletion
@@ -791,22 +1061,22 @@ void MarkdownWindowManager::onWindowDeleteRequested(MarkdownWindow *window) {
     bool hadGeometryUpdate = pendingGeometryUpdates.contains(window);
     
     if (hadContentUpdate) {
-//         qDebug() << "  Clearing pending content update for deleted window";
+//         // qDebug() << "  Clearing pending content update for deleted window";
         pendingContentUpdates.remove(window);
     }
     if (hadGeometryUpdate) {
-//         qDebug() << "  Clearing pending geometry update for deleted window";
+//         // qDebug() << "  Clearing pending geometry update for deleted window";
         pendingGeometryUpdates.remove(window);
     }
     
     // ✅ CRITICAL: Restart timers if there are still other pending updates
     // (stopping would lose updates for other windows)
     if (hadContentUpdate && !pendingContentUpdates.isEmpty()) {
-//         qDebug() << "  Restarting content debounce timer for other pending updates";
+//         // qDebug() << "  Restarting content debounce timer for other pending updates";
         contentDebounceTimer->start();
     }
     if (hadGeometryUpdate && !pendingGeometryUpdates.isEmpty()) {
-//         qDebug() << "  Restarting geometry debounce timer for other pending updates";
+//         // qDebug() << "  Restarting geometry debounce timer for other pending updates";
         geometryDebounceTimer->start();
     }
     
@@ -816,13 +1086,13 @@ void MarkdownWindowManager::onWindowDeleteRequested(MarkdownWindow *window) {
     QSet<int> pagesToSave;
     
     if (isCombinedMode) {
-//         qDebug() << "  Combined mode detected: pages" << combinedFirstPage << "and" << combinedSecondPage;
+//         // qDebug() << "  Combined mode detected: pages" << combinedFirstPage << "and" << combinedSecondPage;
         
         // Determine which page the window belongs to based on Y coordinate
         QRect windowRect = window->getCanvasRect();
         int windowPage = getPageNumberFromCanvasY(windowRect.y());
-//         qDebug() << "  Window Y coordinate:" << windowRect.y();
-//         qDebug() << "  Window belongs to page:" << windowPage;
+//         // qDebug() << "  Window Y coordinate:" << windowRect.y();
+//         // qDebug() << "  Window belongs to page:" << windowPage;
         
         // Save the page the window was on
         pagesToSave.insert(windowPage);
@@ -847,7 +1117,7 @@ void MarkdownWindowManager::onWindowDeleteRequested(MarkdownWindow *window) {
             
             if (mainWindow) {
                 int currentPage = mainWindow->getCurrentPageForCanvas(canvas);
-//                 qDebug() << "  Single page mode: page" << currentPage;
+//                 // qDebug() << "  Single page mode: page" << currentPage;
                 pagesToSave.insert(currentPage);
             }
         }
@@ -862,8 +1132,10 @@ void MarkdownWindowManager::onWindowDeleteRequested(MarkdownWindow *window) {
     
     // ✅ Save all affected pages
     for (int pageNum : pagesToSave) {
-//         qDebug() << "  Marking page" << pageNum << "as dirty due to window deletion";
+//         // qDebug() << "  Marking page" << pageNum << "as dirty due to window deletion";
         dirtyPages.insert(pageNum);
+        cacheUpdatedPages.remove(pageNum); // Clear cache flag to force re-clone
+        serializedDataCache.remove(pageNum); // Clear serialized data cache
         saveWindowsForPage(pageNum);
     }
 }
@@ -881,10 +1153,10 @@ QString MarkdownWindowManager::getWindowDataFilePath(int pageNumber) const {
 
 void MarkdownWindowManager::saveWindowData(int pageNumber, const QList<MarkdownWindow*> &windows) {
     QString filePath = getWindowDataFilePath(pageNumber);
-//     qDebug() << "  saveWindowData() - Writing to file:" << filePath;
+//     // qDebug() << "  saveWindowData() - Writing to file:" << filePath;
     
     if (filePath.isEmpty()) {
-//         qDebug() << "  ERROR: filePath is empty!";
+//         // qDebug() << "  ERROR: filePath is empty!";
         return;
     }
     
@@ -892,9 +1164,9 @@ void MarkdownWindowManager::saveWindowData(int pageNumber, const QList<MarkdownW
     for (int i = 0; i < windows.size(); i++) {
         MarkdownWindow *window = windows[i];
         QVariantMap windowData = window->serialize();
-//         qDebug() << "    Serializing window" << i << ":" << window;
-//         qDebug() << "      Content:" << windowData.value("content").toString().left(50) << "...";
-//         qDebug() << "      Canvas rect:" << QRect(windowData.value("canvas_x").toInt(),
+//         // qDebug() << "    Serializing window" << i << ":" << window;
+//         // qDebug() << "      Content:" << windowData.value("content").toString().left(50) << "...";
+//         // qDebug() << "      Canvas rect:" << QRect(windowData.value("canvas_x").toInt(),
                                                     // windowData.value("canvas_y").toInt(),
                                                     // windowData.value("canvas_width").toInt(),
                                                     // windowData.value("canvas_height").toInt());
@@ -907,14 +1179,14 @@ void MarkdownWindowManager::saveWindowData(int pageNumber, const QList<MarkdownW
     if (file.open(QIODevice::WriteOnly)) {
         qint64 bytesWritten = file.write(doc.toJson());
         file.close();
-//         qDebug() << "  SUCCESS: Wrote" << bytesWritten << "bytes to disk";
+//         // qDebug() << "  SUCCESS: Wrote" << bytesWritten << "bytes to disk";
         
         #ifdef Q_OS_WIN
         // Set hidden attribute on Windows
         SetFileAttributesW(reinterpret_cast<const wchar_t *>(filePath.utf16()), FILE_ATTRIBUTE_HIDDEN);
         #endif
     } else {
-//         qDebug() << "  ERROR: Failed to open file for writing:" << file.errorString();
+//         // qDebug() << "  ERROR: Failed to open file for writing:" << file.errorString();
     }
 }
 
@@ -922,24 +1194,24 @@ QList<MarkdownWindow*> MarkdownWindowManager::loadWindowData(int pageNumber) {
     QList<MarkdownWindow*> windows;
     
     QString filePath = getWindowDataFilePath(pageNumber);
-//     qDebug() << "==========================================";
-//     qDebug() << "MarkdownWindowManager::loadWindowData(" << pageNumber << ")";
-//     qDebug() << "  Reading from file:" << filePath;
+//     // qDebug() << "==========================================";
+//     // qDebug() << "MarkdownWindowManager::loadWindowData(" << pageNumber << ")";
+//     // qDebug() << "  Reading from file:" << filePath;
     
     if (filePath.isEmpty() || !QFile::exists(filePath)) {
-//         qDebug() << "  File doesn't exist or path is empty";
+//         // qDebug() << "  File doesn't exist or path is empty";
         return windows;
     }
     
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly)) {
-//         qDebug() << "  ERROR: Failed to open file for reading:" << file.errorString();
+//         // qDebug() << "  ERROR: Failed to open file for reading:" << file.errorString();
         return windows;
     }
     
     QByteArray data = file.readAll();
     file.close();
-//     qDebug() << "  Read" << data.size() << "bytes from disk";
+//     // qDebug() << "  Read" << data.size() << "bytes from disk";
     
     QJsonParseError error;
     QJsonDocument doc = QJsonDocument::fromJson(data, &error);
@@ -949,15 +1221,15 @@ QList<MarkdownWindow*> MarkdownWindowManager::loadWindowData(int pageNumber) {
     }
     
     QJsonArray windowsArray = doc.array();
-//     qDebug() << "  Found" << windowsArray.size() << "windows in file";
+//     // qDebug() << "  Found" << windowsArray.size() << "windows in file";
     
     for (int i = 0; i < windowsArray.size(); i++) {
         QJsonObject windowObj = windowsArray[i].toObject();
         QVariantMap windowData = windowObj.toVariantMap();
         
-//         qDebug() << "  Loading window" << i;
-//         qDebug() << "    Content:" << windowData.value("content").toString().left(50) << "...";
-//         qDebug() << "    Canvas rect:" << QRect(windowData.value("canvas_x").toInt(),
+//         // qDebug() << "  Loading window" << i;
+//         // qDebug() << "    Content:" << windowData.value("content").toString().left(50) << "...";
+//         // qDebug() << "    Canvas rect:" << QRect(windowData.value("canvas_x").toInt(),
                                                   // windowData.value("canvas_y").toInt(),
                                                   // windowData.value("canvas_width").toInt(),
                                                   // windowData.value("canvas_height").toInt());
@@ -966,7 +1238,7 @@ QList<MarkdownWindow*> MarkdownWindowManager::loadWindowData(int pageNumber) {
         MarkdownWindow *window = new MarkdownWindow(QRect(0, 0, 300, 200), canvas);
         window->deserialize(windowData);
         
-//         qDebug() << "    Created window:" << window;
+//         // qDebug() << "    Created window:" << window;
         
         // Connect signals
         connectWindowSignals(window);
@@ -975,7 +1247,7 @@ QList<MarkdownWindow*> MarkdownWindowManager::loadWindowData(int pageNumber) {
         window->show();
     }
     
-//     qDebug() << "  Loaded" << windows.size() << "windows total";
+//     // qDebug() << "  Loaded" << windows.size() << "windows total";
     return windows;
 }
 
@@ -1005,18 +1277,25 @@ QString MarkdownWindowManager::getNotebookId() const {
 
 QRect MarkdownWindowManager::convertScreenToCanvasRect(const QRect &screenRect) const {
     if (!canvas) {
-        // qDebug() << "MarkdownWindowManager::convertScreenToCanvasRect() - No canvas, returning screen rect:" << screenRect;
+        // // qDebug() << "MarkdownWindowManager::convertScreenToCanvasRect() - No canvas, returning screen rect:" << screenRect;
         return screenRect;
     }
     
     // Use the new coordinate conversion methods from InkCanvas
     QRect canvasRect = canvas->mapWidgetToCanvas(screenRect);
-    // qDebug() << "MarkdownWindowManager::convertScreenToCanvasRect() - Screen rect:" << screenRect << "-> Canvas rect:" << canvasRect;
-    // qDebug() << "  Canvas size:" << canvas->getCanvasSize() << "Zoom:" << canvas->getZoomFactor() << "Pan:" << canvas->getPanOffset();
+    // // qDebug() << "MarkdownWindowManager::convertScreenToCanvasRect() - Screen rect:" << screenRect << "-> Canvas rect:" << canvasRect;
+    // // qDebug() << "  Canvas size:" << canvas->getCanvasSize() << "Zoom:" << canvas->getZoomFactor() << "Pan:" << canvas->getPanOffset();
     return canvasRect;
 }
 
 void MarkdownWindowManager::flushPendingContentUpdates() {
+    // ✅ CRASH FIX: Validate windows before accessing them
+    QSet<MarkdownWindow*> validWindows;
+    validWindows.unite(QSet<MarkdownWindow*>(currentWindows.begin(), currentWindows.end()));
+    for (const QList<MarkdownWindow*> &pageList : pageWindows.values()) {
+        validWindows.unite(QSet<MarkdownWindow*>(pageList.begin(), pageList.end()));
+    }
+    
     // Process all pending content updates
     for (auto it = pendingContentUpdates.begin(); it != pendingContentUpdates.end(); ++it) {
         MarkdownWindow *window = it.key();
@@ -1025,11 +1304,16 @@ void MarkdownWindowManager::flushPendingContentUpdates() {
         // Get the page this window belongs to
         if (!canvas) continue;
         
+        // ✅ Skip windows that have been deleted
+        if (!validWindows.contains(window)) {
+            continue;
+        }
+        
         QRect windowRect = window->getCanvasRect();
         int windowPage = getPageNumberFromCanvasY(windowRect.y());
         
-//         qDebug() << "  [Debounced] Updating cache for window" << window << "on page:" << windowPage;
-//         qDebug() << "  Content:" << newContent.left(50) << "...";
+//         // qDebug() << "  [Debounced] Updating cache for window" << window << "on page:" << windowPage;
+//         // qDebug() << "  Content:" << newContent.left(50) << "...";
         
         // Update the permanent cache
         bool cacheUpdated = false;
@@ -1052,7 +1336,7 @@ void MarkdownWindowManager::flushPendingContentUpdates() {
                 if (cachedWindow->getCanvasRect() == searchRect) {
                     // Found matching cached clone - update its content
                     cachedWindow->setMarkdownContent(newContent);
-//                     qDebug() << "  Updated cached clone for page" << windowPage;
+//                     // qDebug() << "  Updated cached clone for page" << windowPage;
                     cacheUpdated = true;
                     break;
                 }
@@ -1062,12 +1346,14 @@ void MarkdownWindowManager::flushPendingContentUpdates() {
         // ✅ CRITICAL FIX: If the cache doesn't exist yet (e.g., freshly created window),
         // we still need to mark the page as dirty so the content gets saved!
         if (!cacheUpdated) {
-//             qDebug() << "  Cache not found for page" << windowPage << "(likely a new window)";
+//             // qDebug() << "  Cache not found for page" << windowPage << "(likely a new window)";
         }
         
         // Always mark the page as dirty when content changes, regardless of cache state
         dirtyPages.insert(windowPage);
-//         qDebug() << "  Marked page" << windowPage << "as dirty";
+        cacheUpdatedPages.remove(windowPage); // Clear cache flag to force re-clone
+        serializedDataCache.remove(windowPage); // Clear serialized data cache
+//         // qDebug() << "  Marked page" << windowPage << "as dirty";
     }
     
     // Clear pending updates
@@ -1078,15 +1364,42 @@ void MarkdownWindowManager::flushPendingGeometryUpdates() {
     // ✅ Use tracked original Y positions to determine which page windows started on
     bool isCombinedMode = (combinedFirstPage >= 0 && combinedSecondPage >= 0);
     
+    // ✅ CRASH FIX: Validate windows before accessing them
+    // Remove any windows that are no longer in currentWindows or any cache
+    QSet<MarkdownWindow*> validWindows;
+    validWindows.unite(QSet<MarkdownWindow*>(currentWindows.begin(), currentWindows.end()));
+    for (const QList<MarkdownWindow*> &pageList : pageWindows.values()) {
+        validWindows.unite(QSet<MarkdownWindow*>(pageList.begin(), pageList.end()));
+    }
+    
+    // Clean up pending updates for invalid windows
+    QSet<MarkdownWindow*> windowsToRemove;
+    for (MarkdownWindow *window : pendingGeometryUpdates) {
+        if (!validWindows.contains(window)) {
+            windowsToRemove.insert(window);
+        }
+    }
+    
+    // Remove invalid windows from all tracking structures
+    for (MarkdownWindow *window : windowsToRemove) {
+        pendingGeometryUpdates.remove(window);
+        pendingGeometryOriginalY.remove(window);
+    }
+    
     // Process all pending geometry updates (move/resize operations)
     for (MarkdownWindow *window : pendingGeometryUpdates) {
         if (!canvas) continue;
         
+        // Double-check window is still valid
+        if (!validWindows.contains(window)) {
+            continue; // Skip this window, it's been deleted
+        }
+        
         QRect windowRect = window->getCanvasRect();
         int newPage = getPageNumberFromCanvasY(windowRect.y());
         
-//         qDebug() << "  [Debounced] Processing geometry change for window" << window << "on page:" << newPage;
-//         qDebug() << "  New geometry:" << windowRect;
+//         // qDebug() << "  [Debounced] Processing geometry change for window" << window << "on page:" << newPage;
+//         // qDebug() << "  New geometry:" << windowRect;
         
         // ✅ CRITICAL FIX: Check if the window moved to a different page
         // If so, we need to remove it from the old page cache and add it to the new page cache
@@ -1096,7 +1409,7 @@ void MarkdownWindowManager::flushPendingGeometryUpdates() {
         if (isCombinedMode && pendingGeometryOriginalY.contains(window)) {
             int originalY = pendingGeometryOriginalY[window];
             oldPage = getPageNumberFromCanvasY(originalY);
-//             qDebug() << "  Original position: Y=" << originalY << "(page" << oldPage << ")";
+//             // qDebug() << "  Original position: Y=" << originalY << "(page" << oldPage << ")";
         } else {
             // Single page mode or no tracked position: check cache
             for (auto it = pageWindows.begin(); it != pageWindows.end(); ++it) {
@@ -1108,12 +1421,14 @@ void MarkdownWindowManager::flushPendingGeometryUpdates() {
         }
         
         if (oldPage != -1 && oldPage != newPage) {
-//             qDebug() << "  Window moved from page" << oldPage << "to page" << newPage;
+//             // qDebug() << "  Window moved from page" << oldPage << "to page" << newPage;
             
             // Remove from old page cache
             pageWindows[oldPage].removeAll(window);
             dirtyPages.insert(oldPage);
-//             qDebug() << "  Removed from page" << oldPage << "cache and marked dirty";
+            cacheUpdatedPages.remove(oldPage); // Clear cache flag to force re-clone
+            serializedDataCache.remove(oldPage); // Clear serialized data cache
+//             // qDebug() << "  Removed from page" << oldPage << "cache and marked dirty";
             
             // Add to new page cache
             if (pageWindows.contains(newPage)) {
@@ -1122,11 +1437,15 @@ void MarkdownWindowManager::flushPendingGeometryUpdates() {
                 pageWindows[newPage] = QList<MarkdownWindow*>{window};
             }
             dirtyPages.insert(newPage);
-//             qDebug() << "  Added to page" << newPage << "cache and marked dirty";
+            cacheUpdatedPages.remove(newPage); // Clear cache flag to force re-clone
+            serializedDataCache.remove(newPage); // Clear serialized data cache
+//             // qDebug() << "  Added to page" << newPage << "cache and marked dirty";
         } else {
             // Same page, just update geometry
             dirtyPages.insert(newPage);
-//             qDebug() << "  Marked page" << newPage << "as dirty";
+            cacheUpdatedPages.remove(newPage); // Clear cache flag to force re-clone
+            serializedDataCache.remove(newPage); // Clear serialized data cache
+//             // qDebug() << "  Marked page" << newPage << "as dirty";
             
             // Update permanent cache
             updatePermanentCacheForWindow(window, newPage);
@@ -1139,16 +1458,20 @@ void MarkdownWindowManager::flushPendingGeometryUpdates() {
 }
 
 void MarkdownWindowManager::updateAllWindowPositions() {
-    // Update positions of all current windows
-    for (MarkdownWindow *window : currentWindows) {
-        if (window) {
-            window->updateScreenPositionImmediate();
-        }
+    // ✅ PERFORMANCE: Throttle position updates to avoid lag during inertia scrolling
+    // Instead of updating immediately on every pan change (60 FPS during inertia),
+    // queue the update and use a timer to limit to ~30 FPS
+    hasPendingPositionUpdate = true;
+    
+    // If timer is not running, start it
+    if (!positionUpdateThrottleTimer->isActive()) {
+        positionUpdateThrottleTimer->start();
     }
+    // If timer is already running, it will process the pending update when it fires
 }
 
 void MarkdownWindowManager::resetTransparencyTimer() {
-    // qDebug() << "MarkdownWindowManager::resetTransparencyTimer() called";
+    // // qDebug() << "MarkdownWindowManager::resetTransparencyTimer() called";
     transparencyTimer->stop();
     
     // DON'T make all windows opaque here - only the interacted window should be opaque
@@ -1156,15 +1479,15 @@ void MarkdownWindowManager::resetTransparencyTimer() {
     
     // Start the timer again
     transparencyTimer->start();
-    // qDebug() << "Transparency timer started for 10 seconds";
+    // // qDebug() << "Transparency timer started for 10 seconds";
 }
 
 void MarkdownWindowManager::setWindowsTransparent(bool transparent) {
     if (windowsAreTransparent == transparent) return;
     
-    // qDebug() << "MarkdownWindowManager::setWindowsTransparent(" << transparent << ")";
-    // qDebug() << "Current windows count:" << currentWindows.size();
-    // qDebug() << "Currently focused window:" << currentlyFocusedWindow;
+    // // qDebug() << "MarkdownWindowManager::setWindowsTransparent(" << transparent << ")";
+    // // qDebug() << "Current windows count:" << currentWindows.size();
+    // // qDebug() << "Currently focused window:" << currentlyFocusedWindow;
     
     windowsAreTransparent = transparent;
     
@@ -1175,15 +1498,15 @@ void MarkdownWindowManager::setWindowsTransparent(bool transparent) {
         if (transparent) {
             // When making transparent, only make non-focused windows transparent
             if (window != currentlyFocusedWindow) {
-                // qDebug() << "Setting unfocused window" << window << "transparent: true";
+                // // qDebug() << "Setting unfocused window" << window << "transparent: true";
                 window->setTransparent(true);
             } else {
-                // qDebug() << "Keeping focused window" << window << "opaque";
+                // // qDebug() << "Keeping focused window" << window << "opaque";
                 window->setTransparent(false);
             }
         } else {
             // When making opaque, make all windows opaque
-            // qDebug() << "Setting window" << window << "transparent: false";
+            // // qDebug() << "Setting window" << window << "transparent: false";
             window->setTransparent(false);
         }
     }
@@ -1212,11 +1535,11 @@ void MarkdownWindowManager::setWindowsFrameOnlyMode(bool enabled) {
 }
 
 void MarkdownWindowManager::onWindowFocusChanged(MarkdownWindow *window, bool focused) {
-    // qDebug() << "MarkdownWindowManager::onWindowFocusChanged(" << window << ", " << focused << ")";
+    // // qDebug() << "MarkdownWindowManager::onWindowFocusChanged(" << window << ", " << focused << ")";
     
     if (focused) {
         // A window gained focus - make only this window opaque and reset timer
-        // qDebug() << "Window gained focus, setting as currently focused";
+        // // qDebug() << "Window gained focus, setting as currently focused";
         currentlyFocusedWindow = window;
         
         // Make only this window opaque
@@ -1229,9 +1552,9 @@ void MarkdownWindowManager::onWindowFocusChanged(MarkdownWindow *window, bool fo
         resetTransparencyTimer();
     } else {
         // A window lost focus
-        // qDebug() << "Window lost focus";
+        // // qDebug() << "Window lost focus";
         if (currentlyFocusedWindow == window) {
-            // qDebug() << "Clearing currently focused window";
+            // // qDebug() << "Clearing currently focused window";
             currentlyFocusedWindow = nullptr;
         }
         
@@ -1239,7 +1562,7 @@ void MarkdownWindowManager::onWindowFocusChanged(MarkdownWindow *window, bool fo
         bool anyWindowFocused = false;
         for (MarkdownWindow *w : currentWindows) {
             if (w->isEditorFocused()) {
-                // qDebug() << "Found another focused window:" << w;
+                // // qDebug() << "Found another focused window:" << w;
                 anyWindowFocused = true;
                 currentlyFocusedWindow = w;
                 // Make the newly focused window opaque
@@ -1251,11 +1574,11 @@ void MarkdownWindowManager::onWindowFocusChanged(MarkdownWindow *window, bool fo
         }
         
         if (!anyWindowFocused) {
-            // qDebug() << "No window has focus, starting transparency timer";
+            // // qDebug() << "No window has focus, starting transparency timer";
             // No window has focus, start transparency timer
             resetTransparencyTimer();
         } else {
-            // qDebug() << "Another window still has focus, resetting timer";
+            // // qDebug() << "Another window still has focus, resetting timer";
             // Another window has focus, reset timer
             resetTransparencyTimer();
         }
@@ -1264,7 +1587,7 @@ void MarkdownWindowManager::onWindowFocusChanged(MarkdownWindow *window, bool fo
 
 void MarkdownWindowManager::onWindowContentChanged(MarkdownWindow *window) {
     // Note: Called on every keystroke - debug output is minimized to reduce spam
-    // qDebug() << "MarkdownWindowManager::onWindowContentChanged(" << window << ")";
+    // // qDebug() << "MarkdownWindowManager::onWindowContentChanged(" << window << ")";
     
     // Content changed, make this window the focused one and reset transparency timer
     currentlyFocusedWindow = window;
@@ -1280,7 +1603,7 @@ void MarkdownWindowManager::onWindowContentChanged(MarkdownWindow *window) {
 }
 
 void MarkdownWindowManager::onTransparencyTimerTimeout() {
-    // qDebug() << "MarkdownWindowManager::onTransparencyTimerTimeout() - Timer expired!";
+    // // qDebug() << "MarkdownWindowManager::onTransparencyTimerTimeout() - Timer expired!";
     // Make all windows except the focused one semi-transparent
     setWindowsTransparent(true);
 }
@@ -1346,7 +1669,7 @@ void MarkdownWindowManager::updatePermanentCacheForWindow(MarkdownWindow *modifi
 }
 
 void MarkdownWindowManager::connectWindowSignals(MarkdownWindow *window) {
-    // qDebug() << "MarkdownWindowManager::connectWindowSignals() - Connecting signals for window" << window;
+    // // qDebug() << "MarkdownWindowManager::connectWindowSignals() - Connecting signals for window" << window;
     
     // Connect existing signals
     connect(window, &MarkdownWindow::deleteRequested, this, &MarkdownWindowManager::onWindowDeleteRequested);
@@ -1376,7 +1699,7 @@ void MarkdownWindowManager::connectWindowSignals(MarkdownWindow *window) {
     });
     connect(window, &MarkdownWindow::windowMoved, this, [this, window](MarkdownWindow*) {
         // Note: Called on every pixel of movement during dragging - minimize debug output
-        // qDebug() << "windowMoved signal triggered for window:" << window;
+        // // qDebug() << "windowMoved signal triggered for window:" << window;
         
         // Window was moved, make it temporarily opaque and reset transparency timer
         // DON'T set currentlyFocusedWindow - moving doesn't mean editing
@@ -1412,7 +1735,7 @@ void MarkdownWindowManager::connectWindowSignals(MarkdownWindow *window) {
     });
     connect(window, &MarkdownWindow::windowResized, this, [this, window](MarkdownWindow*) {
         // Note: Called on every pixel of resize during dragging - minimize debug output
-        // qDebug() << "windowResized signal triggered for window:" << window;
+        // // qDebug() << "windowResized signal triggered for window:" << window;
         
         // Window was resized, make it temporarily opaque and reset transparency timer
         // DON'T set currentlyFocusedWindow - resizing doesn't mean editing
@@ -1444,10 +1767,10 @@ void MarkdownWindowManager::connectWindowSignals(MarkdownWindow *window) {
                 geometryDebounceTimer->stop();
                 geometryDebounceTimer->start();
             } else {
-//                 qDebug() << "==========================================";
-//                 qDebug() << "windowResized signal triggered for window:" << window;
-//                 qDebug() << "  New canvas rect:" << window->getCanvasRect();
-//                 qDebug() << "  Skipping dirty marking (loading operation)";
+//                 // qDebug() << "==========================================";
+//                 // qDebug() << "windowResized signal triggered for window:" << window;
+//                 // qDebug() << "  New canvas rect:" << window->getCanvasRect();
+//                 // qDebug() << "  Skipping dirty marking (loading operation)";
             }
         }
     });
@@ -1456,7 +1779,7 @@ void MarkdownWindowManager::connectWindowSignals(MarkdownWindow *window) {
     connect(window, &MarkdownWindow::focusChanged, this, &MarkdownWindowManager::onWindowFocusChanged);
     connect(window, &MarkdownWindow::editorFocusChanged, this, &MarkdownWindowManager::onWindowFocusChanged);
     connect(window, &MarkdownWindow::windowInteracted, this, [this, window](MarkdownWindow*) {
-        // qDebug() << "Window interacted:" << window;
+        // // qDebug() << "Window interacted:" << window;
         
         // Window was clicked/interacted with, make it temporarily opaque and reset transparency timer
         // DON'T set currentlyFocusedWindow - clicking window border/header doesn't mean editing
@@ -1472,5 +1795,202 @@ void MarkdownWindowManager::connectWindowSignals(MarkdownWindow *window) {
         resetTransparencyTimer();
     });
     
-    // qDebug() << "All signals connected for window" << window;
+    // // qDebug() << "All signals connected for window" << window;
+}
+
+void MarkdownWindowManager::triggerPreloadAdjacentPages(int targetPage) {
+    // ✅ PERFORMANCE: Start delayed preloading of adjacent pages for instant page switching
+    // Similar to how canvas preloads adjacent note/PDF pages
+    
+    if (!canvas) return;
+    
+    // qDebug() << "==========================================";
+    // qDebug() << "MarkdownWindowManager::triggerPreloadAdjacentPages(" << targetPage << ")";
+    // qDebug() << "  → Scheduling preload of adjacent pages in 500ms...";
+    
+    // Stop any existing preload timer
+    if (preloadTimer && preloadTimer->isActive()) {
+        // qDebug() << "  → Canceling previous preload timer";
+        preloadTimer->stop();
+    }
+    
+    // Store target page for validation when timer fires
+    pendingPreloadTargetPage = targetPage;
+    
+    // Start delayed preload (500ms delay allows page to settle after switching)
+    preloadTimer->start();
+}
+
+void MarkdownWindowManager::preloadAdjacentPages() {
+    // ✅ PERFORMANCE: Preload windows for adjacent pages (n-1, n+1, n+2) in background
+    // This creates fully-constructed windows with all Qt widgets ready
+    // When user switches to these pages, we just show the preloaded windows = instant!
+    
+    if (!canvas) return;
+    
+    int targetPage = pendingPreloadTargetPage;
+    if (targetPage < 0) return;
+    
+    // qDebug() << "==========================================";
+    // qDebug() << "MarkdownWindowManager::preloadAdjacentPages()";
+    // qDebug() << "  Target page:" << targetPage;
+    // qDebug() << "  Combined mode: first=" << combinedFirstPage << ", second=" << combinedSecondPage;
+    // qDebug() << "  Current cache state BEFORE preload:";
+    // qDebug() << "    - preloadedWindows pages:" << preloadedWindows.keys();
+    // qDebug() << "    - serializedDataCache pages:" << serializedDataCache.keys();
+    // qDebug() << "    - pageWindows pages:" << pageWindows.keys();
+    
+    // Calculate adjacent pages to preload (n-1, n+1, n+2 refer to SINGLE pages)
+    int prevPage = targetPage - 1;
+    int nextPage = targetPage + 1;
+    int nextNextPage = targetPage + 2;
+    
+    // qDebug() << "  Pages to consider for preload: [" << prevPage << "," << nextPage << "," << nextNextPage << "]";
+    
+    // List of pages to preload
+    QList<int> pagesToPreload;
+    if (prevPage >= 0) {
+        pagesToPreload.append(prevPage);
+    }
+    pagesToPreload.append(nextPage);
+    pagesToPreload.append(nextNextPage);
+    
+    // qDebug() << "  Pages that will be checked:" << pagesToPreload;
+    
+    // Preload each page that's not already preloaded or currently displayed
+    int preloadedCount = 0;
+    int skippedCount = 0;
+    
+    for (int pageNum : pagesToPreload) {
+        // qDebug() << "  → Processing page" << pageNum << "for preload...";
+        
+        // Skip if already preloaded
+        if (preloadedWindows.contains(pageNum)) {
+            // qDebug() << "    ⊗ SKIP: Already in preloadedWindows cache";
+            skippedCount++;
+            continue;
+        }
+        
+        // Skip if it's the current page (already visible in currentWindows)
+        bool isCurrentPage = (pageNum == targetPage);
+        if (isCurrentPage) {
+            // qDebug() << "    ⊗ SKIP: This is the current page (already loaded)";
+            skippedCount++;
+            continue;
+        }
+        
+        // ✅ IMPORTANT: Also skip if page is currently visible in combined mode
+        bool isInCombinedView = (combinedFirstPage >= 0 && combinedSecondPage >= 0 &&
+                                  (pageNum == combinedFirstPage || pageNum == combinedSecondPage));
+        if (isInCombinedView) {
+            // qDebug() << "    ⊗ SKIP: Page is currently visible in combined mode";
+            skippedCount++;
+            continue;
+        }
+        
+        // ✅ Check if we have serialized data for this page
+        // If not, skip preloading (avoid disk I/O during preload)
+        if (!serializedDataCache.contains(pageNum) && !pageWindows.contains(pageNum)) {
+            // qDebug() << "    ⊗ SKIP: No cached data available (would require disk I/O)";
+            skippedCount++;
+            continue; // No data available, would require disk I/O
+        }
+        
+        // ✅ Create fully-constructed windows from serialized data
+        QList<MarkdownWindow*> windows;
+        
+        if (serializedDataCache.contains(pageNum) && !serializedDataCache[pageNum].isEmpty()) {
+            // qDebug() << "    ✓ PRELOADING: Page" << pageNum << "...";
+            // qDebug() << "      → Building from serializedDataCache...";
+            // Build from serialized cache
+            const QList<QVariantMap> &cachedData = serializedDataCache[pageNum];
+            for (const QVariantMap &data : cachedData) {
+                MarkdownWindow *window = new MarkdownWindow(QRect(0, 0, 400, 300), canvas);
+                window->deserialize(data);
+                window->hide(); // Keep hidden until needed
+                windows.append(window);
+            }
+            // qDebug() << "      → Created" << windows.size() << "windows from serializedDataCache";
+        } else if (pageWindows.contains(pageNum) && !pageWindows[pageNum].isEmpty()) {
+            // qDebug() << "    ✓ PRELOADING: Page" << pageNum << "...";
+            // qDebug() << "      → Building from pageWindows cache...";
+            // Build from permanent cache (serialize first if needed)
+            QList<QVariantMap> serializedList;
+            const QList<MarkdownWindow*> &cachedWindows = pageWindows[pageNum];
+            for (MarkdownWindow *cachedWindow : cachedWindows) {
+                QVariantMap data = cachedWindow->serialize();
+                serializedList.append(data);
+                
+                // Create new window instance
+                MarkdownWindow *window = new MarkdownWindow(QRect(0, 0, 400, 300), canvas);
+                window->deserialize(data);
+                window->hide(); // Keep hidden until needed
+                windows.append(window);
+            }
+            
+            // Cache the serialized data for future use
+            if (!serializedDataCache.contains(pageNum)) {
+                serializedDataCache[pageNum] = serializedList;
+                // qDebug() << "      → Added page" << pageNum << "to serializedDataCache";
+            }
+            // qDebug() << "      → Created" << windows.size() << "windows from pageWindows";
+        } else {
+            // Page has 0 windows (empty serialized data)
+            // qDebug() << "    ⊗ SKIP: Page" << pageNum << "has 0 windows (empty serialized data - nothing to preload)";
+            skippedCount++;
+            continue;
+        }
+        
+        // Store preloaded windows
+        if (!windows.isEmpty()) {
+            preloadedWindows[pageNum] = windows;
+            preloadedCount++;
+            // qDebug() << "      ✓ SUCCESS: Added page" << pageNum << "to preloadedWindows cache with" 
+                     // << windows.size() << "windows";
+        }
+    }
+    
+    // qDebug() << "  → Preload summary: Preloaded" << preloadedCount << "pages, skipped" << skippedCount << "pages";
+    
+    // ✅ MEMORY MANAGEMENT: Limit preload cache size (LRU eviction)
+    // Keep only the 10 pages closest to current page
+    const int MAX_PRELOADED_PAGES = 10;
+    if (preloadedWindows.size() > MAX_PRELOADED_PAGES) {
+        // qDebug() << "  → LRU EVICTION: preloadedWindows size (" << preloadedWindows.size() 
+                 // << ") exceeds max (" << MAX_PRELOADED_PAGES << ")";
+        
+        // Find and remove pages farthest from current page
+        while (preloadedWindows.size() > MAX_PRELOADED_PAGES) {
+            int pageToRemove = -1;
+            int maxDistance = 0;
+            for (auto it = preloadedWindows.begin(); it != preloadedWindows.end(); ++it) {
+                int distance = qAbs(it.key() - targetPage);
+                if (distance > maxDistance) {
+                    maxDistance = distance;
+                    pageToRemove = it.key();
+                }
+            }
+            
+            if (pageToRemove >= 0) {
+                // qDebug() << "    → Evicting page" << pageToRemove << "(distance =" << qAbs(pageToRemove - targetPage) << ")";
+                
+                // Delete the windows before removing from cache
+                QList<MarkdownWindow*> windowsToDelete = preloadedWindows[pageToRemove];
+                for (MarkdownWindow *window : windowsToDelete) {
+                    if (window) {
+                        window->deleteLater();
+                    }
+                }
+                preloadedWindows.remove(pageToRemove);
+            } else {
+                break; // Safety check
+            }
+        }
+    }
+    
+    // qDebug() << "  Final cache state AFTER preload:";
+    // qDebug() << "    - preloadedWindows pages:" << preloadedWindows.keys();
+    // qDebug() << "    - serializedDataCache pages:" << serializedDataCache.keys();
+    // qDebug() << "    - pageWindows pages:" << pageWindows.keys();
+    // qDebug() << "  → Preload complete!";
 }

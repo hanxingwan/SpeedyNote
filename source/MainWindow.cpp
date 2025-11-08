@@ -5290,7 +5290,8 @@ void MainWindow::handleTouchGestureEnd() {
 }
 
 void MainWindow::handleTouchPanningChanged(bool active) {
-    // ✅ PERFORMANCE: Control window frame-only mode for touch panning
+    // ✅ PERFORMANCE: Control window frame-only mode for touch panning AND inertia scrolling
+    // Frame-only mode shows only the 4 corner vertices, dramatically improving scroll performance
     InkCanvas* canvas = currentCanvas();
     if (!canvas) return;
     
@@ -5299,6 +5300,7 @@ void MainWindow::handleTouchPanningChanged(bool active) {
     
     if (active) {
         // Touch panning started - enable frame-only mode for performance
+        // This stays enabled during inertia scrolling (until velocity drops to zero)
         if (markdownMgr) {
             markdownMgr->setWindowsFrameOnlyMode(true);
         }
@@ -5306,7 +5308,7 @@ void MainWindow::handleTouchPanningChanged(bool active) {
             pictureMgr->setWindowsFrameOnlyMode(true);
         }
     } else {
-        // Touch panning ended - restore full window display
+        // Touch panning AND inertia scrolling ended - restore full window display
         if (markdownMgr) {
             markdownMgr->setWindowsFrameOnlyMode(false);
         }
@@ -6790,6 +6792,15 @@ void MainWindow::closeEvent(QCloseEvent *event) {
                     
                     // ✅ COMBINED MODE FIX: Use combined-aware save for markdown/picture windows
                     canvas->saveCombinedWindowsForPage(pageNumber);
+                }
+                
+                // ✅ PERFORMANCE FIX: Flush all dirty markdown/picture pages to disk
+                // This ensures any pages modified during page switches are saved
+                if (canvas->getMarkdownManager()) {
+                    canvas->getMarkdownManager()->flushDirtyPagesToDisk();
+                }
+                if (canvas->getPictureManager()) {
+                    canvas->getPictureManager()->flushDirtyPagesToDisk();
                 }
                 
                 // ✅ Save last accessed page for each canvas

@@ -3166,7 +3166,9 @@ bool InkCanvas::event(QEvent *event) {
                     inertiaPanY = panOffsetY;
                     
                     // Keep the cached frame for inertia animation
-                    // Don't clear isTouchPanning yet - inertia will use it
+                    // ✅ IMPORTANT: Don't clear isTouchPanning yet - inertia will use it
+                    // This keeps markdown/picture windows in frame-only mode during inertia
+                    // for optimal performance (touchPanningChanged signal stays true)
                     inertiaTimer->start();
                 } else {
                     // No significant velocity, end immediately
@@ -3287,6 +3289,17 @@ void InkCanvas::onAutoSaveTimeout() {
         
         // Note: Timer is single-shot, so it won't fire again until the next stroke
         // This prevents continuous disk writes while idle
+    }
+    
+    // ✅ PERFORMANCE FIX: Also flush dirty markdown/picture windows to disk
+    // This allows page switches to skip disk writes while still ensuring autosave works
+    if (!saveFolder.isEmpty()) {
+        if (markdownManager) {
+            markdownManager->flushDirtyPagesToDisk();
+        }
+        if (pictureManager) {
+            pictureManager->flushDirtyPagesToDisk();
+        }
     }
 }
 
@@ -4752,8 +4765,25 @@ void InkCanvas::loadCombinedWindowsForPage(int pageNumber) {
     }
     
     if (isCombinedCanvas) {
-        // For combined canvas, we need to load and merge windows from both current and next page
+        // ✅ PERFORMANCE: Check if we're already viewing these pages - skip reload if so
         int nextPageNumber = pageNumber + 1;
+        bool alreadyLoaded = false;
+        
+        if (markdownManager) {
+            // Check if markdown manager is already displaying these exact pages
+            int mdFirst = markdownManager->getCombinedFirstPage();
+            int mdSecond = markdownManager->getCombinedSecondPage();
+            if (mdFirst == pageNumber && mdSecond == nextPageNumber) {
+                alreadyLoaded = true;
+            }
+        }
+        
+        if (alreadyLoaded) {
+            // Already displaying these exact pages, no need to reload
+            return;
+        }
+        
+        // For combined canvas, we need to load and merge windows from both current and next page
         
         
         // For combined canvas showing pages N and N+1:

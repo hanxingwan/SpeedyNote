@@ -21,6 +21,23 @@
 PictureWindowManager::PictureWindowManager(InkCanvas *canvas, QObject *parent)
     : QObject(parent), canvas(canvas), selectionMode(false), isDestroying(false)
 {
+    // ✅ PERFORMANCE: Initialize position update throttle timer to avoid lag during scrolling
+    positionUpdateThrottleTimer = new QTimer(this);
+    positionUpdateThrottleTimer->setSingleShot(true);
+    positionUpdateThrottleTimer->setInterval(32); // ~30 FPS max update rate
+    hasPendingPositionUpdate = false;
+    connect(positionUpdateThrottleTimer, &QTimer::timeout, this, [this]() {
+        if (hasPendingPositionUpdate) {
+            hasPendingPositionUpdate = false;
+            // Actually update positions - but only for visible windows
+            for (PictureWindow *window : currentWindows) {
+                if (window && window->isVisible()) {
+                    window->updateScreenPositionImmediate();
+                }
+            }
+        }
+    });
+    
     // Connect to canvas signals to update window positions when canvas changes
     if (canvas) {
         connect(canvas, &InkCanvas::panChanged, this, &PictureWindowManager::updateAllWindowPositions);
@@ -88,6 +105,8 @@ PictureWindow* PictureWindowManager::createPictureWindow(const QRect &rect, cons
     // Mark canvas as edited since we created a new picture window
     if (canvas) {
         canvas->setEdited(true);
+        int currentPage = canvas->getLastActivePage();
+        cacheUpdatedPages.remove(currentPage); // Clear cache flag to force re-clone
         canvas->update(); // Trigger repaint to show the new picture
     }
     
@@ -237,8 +256,22 @@ void PictureWindowManager::saveWindowsForPage(int pageNumber) {
         pageWindows[pageNumber] = currentWindows;
     }
     
-    // Save to file (even if empty - this clears the file for cleared pages)
-    savePictureData(pageNumber, currentWindows);
+    // ✅ PERFORMANCE FIX: Don't write to disk here, just update cache
+    // The autosave timer will call flushDirtyPagesToDisk() to write dirty pages
+    // This prevents blocking disk I/O on every page switch
+}
+
+void PictureWindowManager::flushDirtyPagesToDisk() {
+    // ✅ PERFORMANCE: Write all cached pages to disk (called by autosave)
+    // This avoids blocking disk I/O on every page switch
+    
+    // For picture windows, we write all cached pages to disk
+    // (Pictures are less frequently modified than markdown, so this is acceptable)
+    for (auto it = pageWindows.begin(); it != pageWindows.end(); ++it) {
+        int pageNumber = it.key();
+        const QList<PictureWindow*> &windows = it.value();
+        savePictureData(pageNumber, windows);
+    }
 }
 
 void PictureWindowManager::loadWindowsForPage(int pageNumber) {
@@ -560,16 +593,43 @@ void PictureWindowManager::setCombinedWindows(const QList<PictureWindow*> &windo
 void PictureWindowManager::saveWindowsForPageSeparately(int pageNumber, const QList<PictureWindow*> &windows) {
     if (!canvas) return;
     
-    // ✅ CRITICAL FIX: Do NOT update pageWindows cache here with the passed-in windows!
-    // This method is called from saveCombinedWindowsForPage with temporarily adjusted coordinates.
-    // If we update the cache here, it gets corrupted with wrong coordinates.
+    // ✅ CRITICAL PERFORMANCE FIX: Skip if cache already updated for this page
+    // This prevents expensive serialize/clone operations on every page switch
+    if (cacheUpdatedPages.contains(pageNumber)) {
+        return; // Cache already up-to-date
+    }
     
-    // ✅ SIMPLEST FIX: Don't touch the cache at all - just save to disk!
-    // The cache will naturally get rebuilt when loading from a page that doesn't have cached windows yet.
-    // Trying to invalidate/orphan windows here causes dangling pointer issues.
-
-    // Just save to file - leave cache alone
-    savePictureData(pageNumber, windows);
+    // ✅ PERFORMANCE FIX: Update cache but don't write to disk
+    // InkCanvas has already adjusted coordinates, so we store these as the new cache
+    
+    // Delete old clones from cache (but not if they're in currentWindows)
+    if (pageWindows.contains(pageNumber)) {
+        for (PictureWindow *oldWindow : pageWindows[pageNumber]) {
+            // Only delete if it's not in currentWindows (to avoid deleting active windows)
+            if (!currentWindows.contains(oldWindow)) {
+                oldWindow->clearRenderCache(); // Free cached pixmaps
+                oldWindow->deleteLater();
+            }
+        }
+    }
+    
+    // Create clones of the passed-in windows for the cache
+    // (InkCanvas passes us temporary adjusted windows that will be deleted)
+    QList<PictureWindow*> cacheWindows;
+    for (PictureWindow *window : windows) {
+        QVariantMap data = window->serialize();
+        PictureWindow *cloneWindow = new PictureWindow(QRect(0, 0, 400, 300), window->getImagePath(), canvas);
+        cloneWindow->deserialize(data);
+        cacheWindows.append(cloneWindow);
+    }
+    
+    // Update cache with clones
+    pageWindows[pageNumber] = cacheWindows;
+    
+    // Mark cache as updated (so we don't clone again until picture is modified)
+    cacheUpdatedPages.insert(pageNumber);
+    
+    // flushDirtyPagesToDisk() will write all cached pages to disk later
 }
 
 void PictureWindowManager::exitAllEditModes() {
@@ -773,6 +833,7 @@ void PictureWindowManager::clearCurrentPageWindows() {
     
     // Mark canvas as edited since we cleared pictures
     canvas->setEdited(true);
+    cacheUpdatedPages.remove(currentPage); // Clear cache flag to force re-clone
     
     canvas->update(); // Trigger repaint to remove all pictures
     
@@ -786,6 +847,8 @@ void PictureWindowManager::onWindowDeleteRequested(PictureWindow *window) {
     // Mark canvas as edited since we deleted a picture window
     if (canvas) {
         canvas->setEdited(true);
+        int currentPage = canvas->getLastActivePage();
+        cacheUpdatedPages.remove(currentPage); // Clear cache flag to force re-clone
     }
     
     // Save current state
@@ -984,9 +1047,9 @@ void PictureWindowManager::connectWindowSignals(PictureWindow *window) {
         // The canvas handles its own updates more efficiently during movement
         if (canvas) {
             canvas->setEdited(true);
-            
-            // Get current page and save windows
             int currentPage = canvas->getLastActivePage();
+            cacheUpdatedPages.remove(currentPage); // Clear cache flag to force re-clone
+            
             // ✅ USER MODIFICATION FIX: Update permanent cache even during combined mode
             updatePermanentCacheForWindow(window, currentPage);
 
@@ -998,9 +1061,9 @@ void PictureWindowManager::connectWindowSignals(PictureWindow *window) {
         // The canvas handles its own updates more efficiently during resize
         if (canvas) {
             canvas->setEdited(true);
-            
-            // Get current page and save windows
             int currentPage = canvas->getLastActivePage();
+            cacheUpdatedPages.remove(currentPage); // Clear cache flag to force re-clone
+            
             // ✅ USER MODIFICATION FIX: Update permanent cache even during combined mode
             updatePermanentCacheForWindow(window, currentPage);
             saveWindowsForPage(currentPage);
@@ -1024,12 +1087,16 @@ void PictureWindowManager::connectWindowSignals(PictureWindow *window) {
 }
 
 void PictureWindowManager::updateAllWindowPositions() {
-    // Update positions of all current windows
-    for (PictureWindow *window : currentWindows) {
-        if (window) {
-            window->updateScreenPositionImmediate();
-        }
+    // ✅ PERFORMANCE: Throttle position updates to avoid lag during inertia scrolling
+    // Instead of updating immediately on every pan change (60 FPS during inertia),
+    // queue the update and use a timer to limit to ~30 FPS
+    hasPendingPositionUpdate = true;
+    
+    // If timer is not running, start it
+    if (!positionUpdateThrottleTimer->isActive()) {
+        positionUpdateThrottleTimer->start();
     }
+    // If timer is already running, it will process the pending update when it fires
 }
 
 QRect PictureWindowManager::convertScreenToCanvasRect(const QRect &screenRect) const {
