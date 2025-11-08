@@ -4,6 +4,7 @@
 #include <QObject>
 #include <QList>
 #include <QMap>
+#include <QSet>
 #include <QRect>
 #include <QVariantMap>
 #include <QPainter>
@@ -24,7 +25,8 @@ public:
     void clearAllWindows();
 
     // Page management
-    void saveWindowsForPage(int pageNumber);
+    void saveWindowsForPage(int pageNumber); // Updates cache only, no disk writes
+    void flushDirtyPagesToDisk(); // Write all dirty pages to disk (called by autosave)
     void loadWindowsForPage(int pageNumber);
     void deleteWindowsForPage(int pageNumber);
     void hideAllWindows();
@@ -87,10 +89,15 @@ private:
     QList<PictureWindow*> currentWindows;
     QMap<int, QList<PictureWindow*>> pageWindows;
     QList<int> pageAccessOrder; // ✅ LRU tracking: most recently accessed pages at the end
+    QSet<int> cacheUpdatedPages; // ✅ Pages whose cache has been updated (to avoid redundant cloning)
     QList<PictureWindow*> combinedTempWindows; // ✅ Track temporary combined windows for cleanup
     QList<PictureWindow*> orphanedCacheWindows; // ✅ Track orphaned cache windows awaiting cleanup
     bool selectionMode;
     bool isDestroying; // ✅ Flag to prevent operations during destruction
+    
+    // ✅ PERFORMANCE: Throttle position updates during pan/zoom to avoid lag
+    QTimer *positionUpdateThrottleTimer; // Throttles position updates during scrolling
+    bool hasPendingPositionUpdate; // Flag to track if an update is pending
 };
 
 #endif // PICTUREWINDOWMANAGER_H
