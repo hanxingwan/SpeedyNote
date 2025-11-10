@@ -30,7 +30,7 @@ jobs:
         shell: bash
         run: |
           ./build_poppler_qt6.sh
-          ./compile-mac.sh
+          yes | ./compile-mac.sh
 
       - name: Upload DMG package
         uses: actions/upload-artifact@v4
