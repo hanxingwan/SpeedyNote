@@ -18,7 +18,12 @@ if ($arm64) {
 }
 
 # ✅ Detect MSYS2 installation path
-$possiblePaths = @(
+# Check if MSYS2 path is set by environment variable (GitHub Actions)
+$possiblePaths = @()
+if ($env:MSYS) {
+    $possiblePaths += $env:MSYS
+}
+$possiblePaths += @(
     "C:\msys64",
     "$env:RUNNER_TEMP\..\msys64",
     "D:\a\_temp\msys64",
@@ -35,11 +40,11 @@ foreach ($path in $possiblePaths) {
 }
 
 if (-not $msys2Root) {
-    Write-Host "❌ Could not find MSYS2 installation. Checked:" -ForegroundColor Red
+    Write-Host "❌ Could not find MSYS2 installation with $toolchain toolchain. Checked:" -ForegroundColor Red
     foreach ($path in $possiblePaths) {
-        Write-Host "  - $path" -ForegroundColor Yellow
+        Write-Host "  - $path\$toolchain\bin" -ForegroundColor Yellow
     }
-    Write-Host "Please ensure MSYS2 is installed or set MSYS2_ROOT environment variable" -ForegroundColor Red
+    Write-Host "Please ensure MSYS2 is installed with the $toolchain environment" -ForegroundColor Red
     exit 1
 }
 
@@ -53,9 +58,15 @@ if (Test-Path ".\build" -PathType Container) {
 }
 
 # ✅ Compile .ts → .qm files
-& "$toolchainPath\bin\lrelease-qt6.exe" ./resources/translations/app_zh.ts ./resources/translations/app_fr.ts ./resources/translations/app_es.ts
-
-Copy-Item -Path ".\resources\translations\*.qm" -Destination ".\build" -Force
+$lreleaseExe = "$toolchainPath\bin\lrelease-qt6.exe"
+if (Test-Path $lreleaseExe) {
+    Write-Host "Compiling translation files..." -ForegroundColor Cyan
+    & $lreleaseExe ./resources/translations/app_zh.ts ./resources/translations/app_fr.ts ./resources/translations/app_es.ts
+    Copy-Item -Path ".\resources\translations\*.qm" -Destination ".\build" -Force
+} else {
+    Write-Host "⚠️  Warning: lrelease-qt6.exe not found at $lreleaseExe" -ForegroundColor Yellow
+    Write-Host "   Skipping translation compilation. Install mingw-w64-$toolchain-qt6-tools if needed." -ForegroundColor Yellow
+}
 
 cd .\build
 
