@@ -135,9 +135,53 @@ jobs:
             ${{ matrix.msys_prefix }}-SDL2
 
       - name: Build
-        shell: pwsh
+        shell: msys2 {0}
         run: |
-          ./compile.ps1 ${{ matrix.build_args }}
+          # Set up environment for the build
+          export MSYSTEM=${{ matrix.msystem }}
+          export PATH="/${{ matrix.msystem }}/bin:$PATH"
+          
+          # Create build directory
+          rm -rf build
+          mkdir -p build
+          
+          # Compile translations if lrelease exists
+          if command -v lrelease-qt6 &> /dev/null; then
+            echo "Compiling translation files..."
+            lrelease-qt6 ./resources/translations/app_zh.ts ./resources/translations/app_fr.ts ./resources/translations/app_es.ts
+            cp ./resources/translations/*.qm ./build/ 2>/dev/null || true
+          else
+            echo "Warning: lrelease-qt6 not found, skipping translations"
+          fi
+          
+          cd build
+          
+          # Configure CMake
+          cmake -G "MinGW Makefiles" \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_MAKE_PROGRAM=mingw32-make \
+            -DCMAKE_BUILD_TYPE=Release \
+            ${{ matrix.arch == 'arm64' && '-DCMAKE_SYSTEM_PROCESSOR=arm64' || '-DCPU_ARCH=modern' }} \
+            ..
+          
+          # Build
+          cmake --build . --config Release -- -j$(nproc)
+          
+          # Deploy Qt runtime
+          windeployqt6 NoteApp.exe
+          
+          # Copy required DLLs
+          echo "Copying required DLLs..."
+          for dll in libpoppler-*.dll libdeflate.dll libiconv-2.dll libnettle-8.dll Qt6Core.dll libexpat-1.dll libicuin*.dll libicuuc*.dll libfreetype-6.dll libfontconfig-1.dll libglib-2.0-0.dll libintl-8.dll libpng16-16.dll libjpeg-8.dll libtiff-*.dll libopenjp2-*.dll liblcms2-2.dll libcrypto-3*.dll libssl-3*.dll libzstd.dll zlib1.dll libbz2-1.dll liblzma-5.dll libpoppler-qt6-*.dll SDL2.dll libharfbuzz-0.dll libgraphite2.dll libbrotlidec.dll libbrotlicommon.dll libpcre2-16-0.dll; do
+            cp "/${{ matrix.msystem }}/bin/$dll" . 2>/dev/null || true
+          done
+          
+          # Copy share folder
+          mkdir -p share
+          cp -r "/${{ matrix.msystem }}/share/poppler" ./share/ 2>/dev/null || true
+          
+          cd ..
 
       - name: Upload EXE
         uses: actions/upload-artifact@v4
