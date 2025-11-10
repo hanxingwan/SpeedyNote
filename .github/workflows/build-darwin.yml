@@ -32,8 +32,8 @@ jobs:
           ./build_poppler_qt6.sh
           ./compile-mac.sh << EOF
           y
-          3
           2
+          1
           EOF
 
       - name: Upload DMG package
