@@ -127,24 +127,10 @@ InkCanvas::InkCanvas(QWidget *parent)
     autoSaveTimer->setSingleShot(true);
     autoSaveTimer->setInterval(autoSaveInterval);
     connect(autoSaveTimer, &QTimer::timeout, this, &InkCanvas::onAutoSaveTimeout);
-    
-    // Initialize async save/load watchers
-    pageSaveWatcher = new QFutureWatcher<void>(this);
-    pageLoadWatcher = new QFutureWatcher<void>(this);
 }
 
 InkCanvas::~InkCanvas() {
-    // ✅ Wait for any pending async operations to complete
-    if (pageSaveWatcher && !pageSaveWatcher->isFinished()) {
-        pageSaveWatcher->cancel();
-        pageSaveWatcher->waitForFinished();
-    }
-    if (pageLoadWatcher && !pageLoadWatcher->isFinished()) {
-        pageLoadWatcher->cancel();
-        pageLoadWatcher->waitForFinished();
-    }
-    
-    // ✅ Auto-save if the canvas has been edited (synchronous to ensure completion before destruction)
+    // ✅ Auto-save if the canvas has been edited
     if (edited && !saveFolder.isEmpty()) {
         // Save the current page using existing logic
         saveToFile(lastActivePage);
@@ -554,9 +540,9 @@ void InkCanvas::loadPdfPage(int pageNumber) {
     }
     
     if (isCached) {
-        // ✅ ASYNC FIX: Don't call loadPage() here - it's synchronous and blocks!
-        // The caller (switchPage/switchPageWithDirection) will call loadPageAsync()
-        // Just display the PDF immediately and return
+        loadPage(pageNumber);  // Load annotations
+        // ✅ MEMORY OPTIMIZATION: Don't load text boxes until user attempts selection
+        // loadPdfTextBoxes(pageNumber); // Load text boxes for PDF text selection
         update();
         
         // Check and cache adjacent pages after delay
@@ -577,8 +563,9 @@ void InkCanvas::loadPdfPage(int pageNumber) {
         }
     }
     
-    // ✅ ASYNC FIX: Don't call loadPage() here - it's synchronous and blocks!
-    // The caller (switchPage/switchPageWithDirection) will call loadPageAsync()
+    loadPage(pageNumber);  // Load existing canvas annotations
+    // ✅ MEMORY OPTIMIZATION: Don't load text boxes until user attempts selection
+    // loadPdfTextBoxes(pageNumber); // Load text boxes for PDF text selection
     update();
     
     // Cache adjacent pages after delay
@@ -2195,128 +2182,6 @@ void InkCanvas::saveToFile(int pageNumber) {
     syncSpnPackage();
 }
 
-void InkCanvas::saveToFileAsync(int pageNumber) {
-    // ✅ ASYNC SAVE: Run save operation in background thread for smooth page switches
-    if (saveFolder.isEmpty()) {
-        return;
-    }
-    
-    if (!edited) {
-        return;
-    }
-    
-    // Cancel any pending save operation
-    if (pageSaveWatcher && !pageSaveWatcher->isFinished()) {
-        pageSaveWatcher->cancel();
-        pageSaveWatcher->waitForFinished();
-    }
-    
-    // Capture data needed for save (copy to avoid threading issues)
-    QString saveFolderCopy = saveFolder;
-    QString notebookIdCopy = notebookId;
-    bool isSpnPackageCopy = isSpnPackage;
-    QString actualPackagePathCopy = actualPackagePath;
-    
-    // Create a deep copy of the buffer for thread-safe saving
-    QPixmap bufferCopy = buffer.copy();
-    QPixmap backgroundImageCopy = backgroundImage.copy();
-    
-    // Capture markdown/picture window data before async operation
-    QList<QVariantMap> markdownData;
-    QList<QVariantMap> pictureData;
-    
-    if (markdownManager) {
-        auto windows = markdownManager->getCurrentPageWindows();
-        for (MarkdownWindow *window : windows) {
-            markdownData.append(window->serialize());
-        }
-    }
-    if (pictureManager) {
-        auto windows = pictureManager->getCurrentPageWindows();
-        for (PictureWindow *window : windows) {
-            pictureData.append(window->serialize());
-        }
-    }
-    
-    pendingSavePageNumber = pageNumber;
-    
-    // Run save in background thread
-    QFuture<void> future = QtConcurrent::run([=]() {
-        // Check if this is a combined canvas (double height due to combined pages)
-        bool isCombinedCanvas = false;
-        int singlePageHeight = bufferCopy.height();
-        
-        // If we have a background image (PDF) and buffer is roughly double its height, it's combined
-        if (!backgroundImageCopy.isNull() && bufferCopy.height() >= backgroundImageCopy.height() * 1.8) {
-            isCombinedCanvas = true;
-            singlePageHeight = backgroundImageCopy.height() / 2; // Each PDF page in the combined image
-        } else if (bufferCopy.height() > 1400) { // Fallback heuristic for tall buffers (handles 720p+)
-            isCombinedCanvas = true;
-            singlePageHeight = bufferCopy.height() / 2;
-        }
-        
-        if (isCombinedCanvas) {
-            // Split the combined canvas and save both halves
-            int bufferWidth = bufferCopy.width();
-            
-            // Save current page (top half)
-            QString currentFilePath = saveFolderCopy + QString("/%1_%2.png").arg(notebookIdCopy).arg(pageNumber, 5, 10, QChar('0'));
-            QPixmap currentPageBuffer = bufferCopy.copy(0, 0, bufferWidth, singlePageHeight);
-            QImage currentImage(currentPageBuffer.size(), QImage::Format_ARGB32);
-            currentImage.fill(Qt::transparent);
-            {
-                QPainter painter(&currentImage);
-                painter.drawPixmap(0, 0, currentPageBuffer);
-            }
-            currentImage.save(currentFilePath, "PNG");
-            
-            // Save next page (bottom half)
-            int nextPageNumber = pageNumber + 1;
-            QString nextFilePath = saveFolderCopy + QString("/%1_%2.png").arg(notebookIdCopy).arg(nextPageNumber, 5, 10, QChar('0'));
-            QPixmap nextPageBuffer = bufferCopy.copy(0, singlePageHeight, bufferWidth, singlePageHeight);
-            QImage nextImage(nextPageBuffer.size(), QImage::Format_ARGB32);
-            nextImage.fill(Qt::transparent);
-            {
-                QPainter painter(&nextImage);
-                painter.drawPixmap(0, 0, nextPageBuffer);
-            }
-            nextImage.save(nextFilePath, "PNG");
-        } else {
-            // Standard single page save
-            QString filePath = saveFolderCopy + QString("/%1_%2.png").arg(notebookIdCopy).arg(pageNumber, 5, 10, QChar('0'));
-            QImage image(bufferCopy.size(), QImage::Format_ARGB32);
-            image.fill(Qt::transparent);
-            QPainter painter(&image);
-            painter.drawPixmap(0, 0, bufferCopy);
-            image.save(filePath, "PNG");
-        }
-    });
-    
-    pageSaveWatcher->setFuture(future);
-    
-    // Connect to handle completion (update edited flag and invalidate cache)
-    connect(pageSaveWatcher, &QFutureWatcher<void>::finished, this, [this, pageNumber]() {
-        if (pendingSavePageNumber == pageNumber) {
-            edited = false;
-            pendingSavePageNumber = -1;
-            
-            // Invalidate cache for the saved pages
-            invalidateBothPagesCache(pageNumber);
-            
-            // Trigger windows save (also async via debounce)
-            if (markdownManager) {
-                markdownManager->flushDirtyPagesToDisk();
-            }
-            if (pictureManager) {
-                pictureManager->flushDirtyPagesToDisk();
-            }
-            
-            // Sync to .spn package if needed
-            syncSpnPackage();
-        }
-    }, Qt::UniqueConnection);
-}
-
 void InkCanvas::saveAnnotated(int pageNumber) {
     if (saveFolder.isEmpty()) return;
 
@@ -2653,255 +2518,6 @@ void InkCanvas::loadPage(int pageNumber) {
     });
 }
 
-void InkCanvas::loadPageAsync(int pageNumber) {
-    // ✅ ASYNC LOAD: Prioritize PDF loading, then load canvas strokes in background
-    if (saveFolder.isEmpty()) return;
-    
-    // Cancel any pending load operation
-    if (pageLoadWatcher && !pageLoadWatcher->isFinished()) {
-        pageLoadWatcher->cancel();
-        pageLoadWatcher->waitForFinished();
-    }
-    
-    isLoadingPage = true;
-    pendingLoadPageNumber = pageNumber;
-    
-    // Hide windows immediately for clean transition
-    if (markdownManager) {
-        markdownManager->hideAllWindows();
-    }
-    if (pictureManager) {
-        pictureManager->hideAllWindows();
-    }
-    
-    // Update current note page tracker
-    currentCachedNotePage = pageNumber;
-    
-    // ✅ STEP 1: Load PDF immediately (already cached or very fast)
-    if (isPdfLoaded && pdfDocument && pageNumber >= 0 && pageNumber < pdfDocument->numPages()) {
-        QMutexLocker locker(&pdfCacheMutex);
-        if (pdfCache.contains(pageNumber)) {
-            backgroundImage = *pdfCache.object(pageNumber);
-            
-            // Check if next page is also cached to determine proper combined size
-            QPixmap nextPagePdf;
-            bool hasNextPage = false;
-            if (pdfCache.contains(pageNumber + 1)) {
-                nextPagePdf = *pdfCache.object(pageNumber + 1);
-                hasNextPage = true;
-            }
-            
-            // Initialize buffer to proper combined canvas size
-            int combinedWidth = hasNextPage ? qMax(backgroundImage.width(), nextPagePdf.width()) : backgroundImage.width();
-            int combinedHeight = backgroundImage.height() + (hasNextPage ? nextPagePdf.height() : backgroundImage.height());
-            
-            buffer = QPixmap(combinedWidth, combinedHeight);
-            buffer.fill(Qt::transparent);
-            
-            // Trigger immediate repaint to show PDF
-            update();
-        }
-    } else {
-        // No PDF - initialize empty buffer
-        initializeBuffer();
-        update();
-    }
-    
-    // ✅ STEP 2: Check if canvas strokes are already in cache (fast path)
-    bool needsBackgroundLoad = false;
-    {
-        QMutexLocker locker(&noteCacheMutex);
-        needsBackgroundLoad = !noteCache.contains(pageNumber) || !noteCache.contains(pageNumber + 1);
-    }
-    
-    if (!needsBackgroundLoad) {
-        // ✅ FAST PATH: Canvas strokes are already cached, apply them immediately
-        QPixmap currentPageCanvas;
-        QPixmap nextPageCanvas;
-        bool currentExists = false;
-        bool nextExists = false;
-        
-        {
-            QMutexLocker locker(&noteCacheMutex);
-            if (noteCache.contains(pageNumber)) {
-                currentPageCanvas = *noteCache.object(pageNumber);
-                currentExists = true;
-                noteCacheAccessOrder.removeAll(pageNumber);
-                noteCacheAccessOrder.append(pageNumber);
-            }
-            if (noteCache.contains(pageNumber + 1)) {
-                nextPageCanvas = *noteCache.object(pageNumber + 1);
-                nextExists = true;
-                noteCacheAccessOrder.removeAll(pageNumber + 1);
-                noteCacheAccessOrder.append(pageNumber + 1);
-            }
-        }
-        
-        // Apply cached strokes immediately (no disk I/O needed)
-        if (currentExists || nextExists) {
-            int combinedWidth = qMax(currentExists ? currentPageCanvas.width() : 0, 
-                                     nextExists ? nextPageCanvas.width() : 0);
-            int combinedHeight = (currentExists ? currentPageCanvas.height() : 0) + 
-                                (nextExists ? nextPageCanvas.height() : 0);
-            
-            if (currentExists && !nextExists) {
-                combinedHeight = currentPageCanvas.height() * 2;
-                combinedWidth = currentPageCanvas.width();
-            } else if (!currentExists && nextExists) {
-                combinedHeight = nextPageCanvas.height() * 2;
-                combinedWidth = nextPageCanvas.width();
-            }
-            
-            QPixmap combinedBuffer(combinedWidth, combinedHeight);
-            combinedBuffer.fill(Qt::transparent);
-            
-            QPainter painter(&combinedBuffer);
-            if (currentExists) {
-                painter.drawPixmap(0, 0, currentPageCanvas);
-            }
-            if (nextExists) {
-                int yOffset = currentExists ? currentPageCanvas.height() : nextPageCanvas.height();
-                painter.drawPixmap(0, yOffset, nextPageCanvas);
-            }
-            painter.end();
-            
-            // Merge onto buffer
-            QPainter bufferPainter(&buffer);
-            bufferPainter.drawPixmap(0, 0, combinedBuffer);
-            bufferPainter.end();
-            
-            update();
-        }
-        
-        // Load windows and finish
-        isLoadingPage = false;
-        pendingLoadPageNumber = -1;
-        edited = false;
-        
-        if (autoSaveTimer && autoSaveTimer->isActive()) {
-            autoSaveTimer->stop();
-        }
-        
-        QTimer::singleShot(0, this, [this, pageNumber]() {
-            loadCombinedWindowsForPage(pageNumber);
-        });
-        
-        checkAndCacheAdjacentPages(pageNumber);
-        checkAndCacheAdjacentNotePages(pageNumber);
-        
-        return; // Early exit - no background loading needed
-    }
-    
-    // ✅ SLOW PATH: Canvas strokes need to be loaded from disk in background (LOW PRIORITY)
-    // Schedule with a delay to ensure PDF scrolling stays smooth
-    QString saveFolderCopy = saveFolder;
-    QString notebookIdCopy = notebookId;
-    
-    QTimer::singleShot(100, this, [this, pageNumber, saveFolderCopy, notebookIdCopy]() {
-        if (pendingLoadPageNumber != pageNumber) {
-            return; // User switched pages again, skip this load
-        }
-        
-        QFuture<void> future = QtConcurrent::run([this, pageNumber, saveFolderCopy, notebookIdCopy]() {
-            // Load pages from disk into cache (SLOW - disk I/O)
-            loadSingleNotePageToCache(pageNumber);
-            loadSingleNotePageToCache(pageNumber + 1);
-            
-            // Load both pages from cache
-            QPixmap currentPageCanvas;
-            QPixmap nextPageCanvas;
-            bool currentExists = false;
-            bool nextExists = false;
-            
-            {
-                QMutexLocker locker(&noteCacheMutex);
-                if (noteCache.contains(pageNumber)) {
-                    currentPageCanvas = *noteCache.object(pageNumber);
-                    currentExists = true;
-                    // Update LRU
-                    noteCacheAccessOrder.removeAll(pageNumber);
-                    noteCacheAccessOrder.append(pageNumber);
-                }
-                if (noteCache.contains(pageNumber + 1)) {
-                    nextPageCanvas = *noteCache.object(pageNumber + 1);
-                    nextExists = true;
-                    // Update LRU
-                    noteCacheAccessOrder.removeAll(pageNumber + 1);
-                    noteCacheAccessOrder.append(pageNumber + 1);
-            }
-        }
-            
-            // Combine the pages
-            if (currentExists || nextExists) {
-                int combinedWidth = qMax(currentExists ? currentPageCanvas.width() : 0, 
-                                         nextExists ? nextPageCanvas.width() : 0);
-                int combinedHeight = (currentExists ? currentPageCanvas.height() : 0) + 
-                                    (nextExists ? nextPageCanvas.height() : 0);
-                
-                // If only one page exists, double the height
-                if (currentExists && !nextExists) {
-                    combinedHeight = currentPageCanvas.height() * 2;
-                    combinedWidth = currentPageCanvas.width();
-                } else if (!currentExists && nextExists) {
-                    combinedHeight = nextPageCanvas.height() * 2;
-                    combinedWidth = nextPageCanvas.width();
-                }
-                
-                QPixmap combinedBuffer(combinedWidth, combinedHeight);
-                combinedBuffer.fill(Qt::transparent);
-                
-                QPainter painter(&combinedBuffer);
-                if (currentExists) {
-                    painter.drawPixmap(0, 0, currentPageCanvas);
-                }
-                if (nextExists) {
-                    int yOffset = currentExists ? currentPageCanvas.height() : nextPageCanvas.height();
-                    painter.drawPixmap(0, yOffset, nextPageCanvas);
-                }
-                painter.end();
-                
-                // Store result to be applied in main thread
-                QMetaObject::invokeMethod(this, [this, combinedBuffer, pageNumber]() {
-                    if (pendingLoadPageNumber == pageNumber) {
-                        // Merge canvas strokes onto the PDF background
-                        QPainter painter(&buffer);
-                        painter.drawPixmap(0, 0, combinedBuffer);
-                        painter.end();
-                        
-                        // Trigger repaint
-                        update();
-                    }
-                }, Qt::QueuedConnection);
-            }
-        });
-        
-        pageLoadWatcher->setFuture(future);
-        
-        // Connect to handle completion
-        connect(pageLoadWatcher, &QFutureWatcher<void>::finished, this, [this, pageNumber]() {
-            if (pendingLoadPageNumber == pageNumber) {
-                isLoadingPage = false;
-                pendingLoadPageNumber = -1;
-                edited = false;
-                
-                // Stop auto-save timer for new page
-                if (autoSaveTimer && autoSaveTimer->isActive()) {
-                    autoSaveTimer->stop();
-                }
-                
-                // Load windows asynchronously
-                QTimer::singleShot(0, this, [this, pageNumber]() {
-                    loadCombinedWindowsForPage(pageNumber);
-                });
-                
-                // Start preloading adjacent pages
-                checkAndCacheAdjacentPages(pageNumber);
-                checkAndCacheAdjacentNotePages(pageNumber);
-            }
-        }, Qt::UniqueConnection);
-    }); // Close QTimer::singleShot lambda
-}
-
 void InkCanvas::deletePage(int pageNumber) {
     if (saveFolder.isEmpty()) {
         return;
@@ -2936,13 +2552,11 @@ void InkCanvas::deletePage(int pageNumber) {
         pictureManager->deleteWindowsForPage(pageNumber);
     }
 
-    // ✅ ASYNC: Reload the page after deletion
     if (pdfDocument){
         loadPdfPage(pageNumber);
-        loadPageAsync(pageNumber); // Load canvas strokes asynchronously
     }
     else{
-        loadPageAsync(pageNumber); // Load canvas strokes asynchronously
+        loadPage(pageNumber);
     }
 
 }

@@ -71,11 +71,9 @@ public:
     void adjustAllToolThicknesses(qreal zoomRatio); // Adjust all tool thicknesses for zoom changes
     void setTool(ToolType tool);
     void setSaveFolder(const QString &folderPath); // Function to set save folder
-    void saveToFile(int pageNumber); // Function to save canvas to file (synchronous - for final save)
-    void saveToFileAsync(int pageNumber); // Async version for page switches
+    void saveToFile(int pageNumber); // Function to save canvas to file
     void saveCurrentPage();  // ✅ New function (see below)
-    void loadPage(int pageNumber); // Synchronous load (for compatibility)
-    void loadPageAsync(int pageNumber); // Async load for smooth page switches
+    void loadPage(int pageNumber);
     void deletePage(int pageNumber);
     void clearCurrentPage(); // Clear all content (drawing + pictures) from current page
     void setBackground(const QString &filePath, int pageNumber);
@@ -477,13 +475,6 @@ private:
     int currentCachedNotePage = -1; // Currently displayed note page for cache management
     int pendingNoteCacheTargetPage = -1; // Target page for pending note cache operation (to validate timer relevance)
     QList<QFutureWatcher<void>*> activeNoteWatchers; // Track active note cache watchers for cleanup
-    
-    // ✅ Async save/load infrastructure for smooth page switching
-    QFutureWatcher<void>* pageSaveWatcher = nullptr; // Track active page save operation
-    QFutureWatcher<void>* pageLoadWatcher = nullptr; // Track active page load operation
-    int pendingSavePageNumber = -1; // Page number for pending save
-    int pendingLoadPageNumber = -1; // Page number for pending load
-    bool isLoadingPage = false; // True when a page load is in progress
     
     // Markdown integration
     MarkdownWindowManager* markdownManager = nullptr;
