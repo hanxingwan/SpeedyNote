@@ -17,10 +17,36 @@ if ($arm64) {
     Write-Host "🚀 Building for x86_64 Windows" -ForegroundColor $archColor
 }
 
-$toolchainPath = "C:\msys64\$toolchain"
+# ✅ Detect MSYS2 installation path
+$possiblePaths = @(
+    "C:\msys64",
+    "$env:RUNNER_TEMP\..\msys64",
+    "D:\a\_temp\msys64",
+    "$env:SystemDrive\msys64"
+)
+
+$msys2Root = $null
+foreach ($path in $possiblePaths) {
+    if (Test-Path "$path\$toolchain\bin") {
+        $msys2Root = $path
+        Write-Host "✅ Found MSYS2 at: $msys2Root" -ForegroundColor Green
+        break
+    }
+}
+
+if (-not $msys2Root) {
+    Write-Host "❌ Could not find MSYS2 installation. Checked:" -ForegroundColor Red
+    foreach ($path in $possiblePaths) {
+        Write-Host "  - $path" -ForegroundColor Yellow
+    }
+    Write-Host "Please ensure MSYS2 is installed or set MSYS2_ROOT environment variable" -ForegroundColor Red
+    exit 1
+}
+
+$toolchainPath = "$msys2Root\$toolchain"
 
 if (Test-Path ".\build" -PathType Container) {
-    rm -rf build
+    rm -r build
     mkdir build
 } else {
     mkdir build

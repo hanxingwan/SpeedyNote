@@ -101,9 +101,14 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        arch: [x86_64, aarch64]
-    container:
-      image: ${{ matrix.container_image }}
+        arch: [x86_64, arm64]
+        include:
+          - arch: x86_64
+            msys_prefix: mingw-w64-clang-x86_64
+            build_args: ""
+          - arch: arm64
+            msys_prefix: mingw-w64-clang-aarch64
+            build_args: "-arm64"
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -111,36 +116,35 @@ jobs:
       - name: Setup MSYS2
         uses: msys2/setup-msys2@v2
         with:
+          msystem: CLANG64
           update: true
           install: >
-            mingw-w64-clang-x86_64-toolchain
-            mingw-w64-clang-x86_64-cmake
-            mingw-w64-clang-x86_64-pkgconf
-            mingw-w64-clang-x86_64-qt6-base
-            mingw-w64-clang-x86_64-qt6-tools
-            mingw-w64-clang-x86_64-poppler
-            mingw-w64-clang-x86_64-poppler-qt6
-            mingw-w64-clang-x86_64-SDL2
+            ${{ matrix.msys_prefix }}-toolchain
+            ${{ matrix.msys_prefix }}-cmake
+            ${{ matrix.msys_prefix }}-pkgconf
+            ${{ matrix.msys_prefix }}-qt6-base
+            ${{ matrix.msys_prefix }}-qt6-tools
+            ${{ matrix.msys_prefix }}-poppler
+            ${{ matrix.msys_prefix }}-poppler-qt6
+            ${{ matrix.msys_prefix }}-SDL2
 
       - name: Build
         shell: pwsh
         run: |
-          ./compile.ps1
+          ./compile.ps1 ${{ matrix.build_args }}
 
       - name: Upload EXE
         uses: actions/upload-artifact@v4
         with:
           name: speedynote-windows-package-${{ matrix.arch }}
-          path: "*.exe"
+          path: "build/*.exe"
 
   build-dmg:
     name: Build macOS DMG
     runs-on: macos-latest
     strategy:
       matrix:
-        arch: [x86_64, aarch64]
-    container:
-      image: ${{ matrix.container_image }}
+        arch: [x86_64, arm64]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -150,7 +154,6 @@ jobs:
           brew install qt@6
           brew install poppler
           brew install sdl2
-
 
       - name: Build
         shell: bash
@@ -166,7 +169,7 @@ jobs:
 
   release:
     name: Create Release
-    needs: [build-deb, build-rpm]
+    needs: [build-deb, build-rpm, build-exe]
     runs-on: ubuntu-latest
     if: github.event_name == 'release'
     steps:
@@ -182,10 +185,16 @@ jobs:
           pattern: speedynote-rpm-package-*
           path: .
 
-      - name: Download EXE
+      - name: Download EXE packages
         uses: actions/download-artifact@v4
         with:
           pattern: speedynote-windows-package-*
+          path: .
+
+      - name: Download DMG packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: speedynote-macos-package-*
           path: .
 
       - name: Upload packages to release
