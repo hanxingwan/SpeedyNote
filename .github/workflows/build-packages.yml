@@ -8,6 +8,11 @@ on:
   release:
     types: [ created ]
 
+# Prevent duplicate builds on PR pushes
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-deb:
     name: Build DEB Package
@@ -102,18 +107,16 @@ jobs:
     if: github.event_name != 'push'
     strategy:
       matrix:
-        arch: [x86_64]
-        # Temporarily disabled ARM64 build until toolchain is stable
-        # arch: [x86_64, arm64]
+        arch: [x86_64, arm64]
         include:
           - arch: x86_64
             msys_prefix: mingw-w64-clang-x86_64
             msystem: CLANG64
             build_args: ""
-          # - arch: arm64
-          #   msys_prefix: mingw-w64-clang-aarch64
-          #   msystem: CLANGARM64
-          #   build_args: "-arm64"
+          - arch: arm64
+            msys_prefix: mingw-w64-clang-aarch64
+            msystem: CLANGARM64
+            build_args: "-arm64"
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
