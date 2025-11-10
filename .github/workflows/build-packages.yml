@@ -97,11 +97,11 @@ jobs:
           path: "*.rpm"
 
   build-exe:
-    name: Build Windows AMD64 EXE
+    name: Build Windows EXE
     runs-on: windows-latest
     strategy:
       matrix:
-        arch: [x86_64]
+        arch: [x86_64, aarch64]
     container:
       image: ${{ matrix.container_image }}
     steps:
@@ -133,6 +133,36 @@ jobs:
           name: speedynote-windows-package-${{ matrix.arch }}
           path: "*.exe"
 
+  build-dmg:
+    name: Build macOS DMG
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        arch: [x86_64, aarch64]
+    container:
+      image: ${{ matrix.container_image }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Homebrew
+        run: |
+          brew install qt@6
+          brew install poppler
+          brew install sdl2
+
+
+      - name: Build
+        shell: bash
+        run: |
+          ./compile-mac.sh
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: speedynote-macos-package-${{ matrix.arch }}
+          path: "*.dmg"
+
   release:
     name: Create Release
     needs: [build-deb, build-rpm]
@@ -163,5 +193,7 @@ jobs:
           files: |
             *.deb
             *.rpm
+            *.exe
+            *.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
