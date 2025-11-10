@@ -1,4 +1,4 @@
-name: Build SpeedyNote Packages
+name: Build SpeedyNote DMG Packages
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: ['*']
   release:
-    types: [created]
+    types: [ created ]
 
 jobs:
   build-dmg:
@@ -24,11 +24,12 @@ jobs:
           brew install qt@6
           brew install poppler
           brew install sdl2
-          brew install --build-bottle muzimuzhi/texstudio-beta/poppler-qt6
+          brew install create-dmg
 
       - name: Build
         shell: bash
         run: |
+          ./build_poppler_qt6.sh
           ./compile-mac.sh
 
       - name: Upload DMG package
@@ -52,6 +53,6 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            ./artifacts/**/*.dmg
+            **/*.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

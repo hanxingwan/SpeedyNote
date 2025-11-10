@@ -1,4 +1,4 @@
-name: Build SpeedyNote Packages
+name: Build SpeedyNote EXE Packages
 
 on:
   push:
