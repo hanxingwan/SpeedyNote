@@ -155,6 +155,7 @@ jobs:
       - name: Build
         shell: bash
         run: |
+          ./build_poppler_qt6.sh
           ./compile-mac.sh
 
       - name: Upload DMG
