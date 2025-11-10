@@ -110,7 +110,7 @@ jobs:
             runner: windows-latest
           - arch: arm64
             msys_prefix: mingw-w64-clang-x86_64
-            msystem: CLANGARM64
+            msystem: CLANG64
             build_args: "-arm64"
             runner: windows-arm64
     steps:
