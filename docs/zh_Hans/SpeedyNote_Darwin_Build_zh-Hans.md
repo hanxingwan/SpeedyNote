@@ -1,9 +1,9 @@
-# SpeedyNote Mac OS 构建指南
+# SpeedyNote macOS 构建指南
 
 
 ### 准备工作
 
-- Macintosh (Mac OS 13+(?)), ARM64 或 x86-64
+- Macintosh (macOS 13+(?)), ARM64 或 x86-64
 
 ---
 

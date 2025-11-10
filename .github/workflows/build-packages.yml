@@ -2,9 +2,9 @@ name: Build SpeedyNote Packages
 
 on:
   push:
-    branches: [ main, master ]
+    branches: ['main']
   pull_request:
-    branches: [ main, master ]
+    branches: ['main']
   release:
     types: [ created ]
 
@@ -96,6 +96,74 @@ jobs:
           name: speedynote-rpm-package-${{ matrix.arch }}
           path: "*.rpm"
 
+  build-exe:
+    name: Build Windows EXE
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        arch: [x86_64, aarch64]
+    container:
+      image: ${{ matrix.container_image }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          update: true
+          install: >
+            mingw-w64-clang-x86_64-toolchain
+            mingw-w64-clang-x86_64-cmake
+            mingw-w64-clang-x86_64-pkgconf
+            mingw-w64-clang-x86_64-qt6-base
+            mingw-w64-clang-x86_64-qt6-tools
+            mingw-w64-clang-x86_64-poppler
+            mingw-w64-clang-x86_64-poppler-qt6
+            mingw-w64-clang-x86_64-SDL2
+
+      - name: Build
+        shell: pwsh
+        run: |
+          ./compile.ps1
+
+      - name: Upload EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: speedynote-windows-package-${{ matrix.arch }}
+          path: "*.exe"
+
+  build-dmg:
+    name: Build macOS DMG
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        arch: [x86_64, aarch64]
+    container:
+      image: ${{ matrix.container_image }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Homebrew
+        run: |
+          brew install qt@6
+          brew install poppler
+          brew install sdl2
+
+
+      - name: Build
+        shell: bash
+        run: |
+          ./build_poppler_qt6.sh
+          ./compile-mac.sh
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: speedynote-macos-package-${{ matrix.arch }}
+          path: "*.dmg"
+
   release:
     name: Create Release
     needs: [build-deb, build-rpm]
@@ -114,11 +182,19 @@ jobs:
           pattern: speedynote-rpm-package-*
           path: .
 
+      - name: Download EXE
+        uses: actions/download-artifact@v4
+        with:
+          pattern: speedynote-windows-package-*
+          path: .
+
       - name: Upload packages to release
         uses: softprops/action-gh-release@v1
         with:
           files: |
             *.deb
             *.rpm
+            *.exe
+            *.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
