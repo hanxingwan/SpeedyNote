@@ -99,15 +99,18 @@ jobs:
   build-exe:
     name: Build Windows EXE
     runs-on: windows-latest
+    if: github.event_name != 'push'
     strategy:
       matrix:
         arch: [x86_64, arm64]
         include:
           - arch: x86_64
             msys_prefix: mingw-w64-clang-x86_64
+            msystem: CLANG64
             build_args: ""
           - arch: arm64
             msys_prefix: mingw-w64-clang-aarch64
+            msystem: CLANGARM64
             build_args: "-arm64"
     steps:
       - name: Checkout code
@@ -116,10 +119,12 @@ jobs:
       - name: Setup MSYS2
         uses: msys2/setup-msys2@v2
         with:
-          msystem: CLANG64
+          msystem: ${{ matrix.msystem }}
           update: true
           install: >
-            ${{ matrix.msys_prefix }}-toolchain
+            ${{ matrix.msys_prefix }}-clang
+            ${{ matrix.msys_prefix }}-lld
+            ${{ matrix.msys_prefix }}-make
             ${{ matrix.msys_prefix }}-cmake
             ${{ matrix.msys_prefix }}-pkgconf
             ${{ matrix.msys_prefix }}-qt6-base
@@ -143,6 +148,7 @@ jobs:
   build-dmg:
     name: Build macOS DMG
     runs-on: macos-latest
+    if: github.event_name != 'push'
     strategy:
       matrix:
         arch: [x86_64, arm64]
