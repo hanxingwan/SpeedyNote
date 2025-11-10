@@ -1474,18 +1474,21 @@ void MainWindow::switchPage(int pageNumber) {
     InkCanvas *canvas = currentCanvas();
     if (!canvas) return;
 
+    // ✅ ASYNC SAVE: Trigger async save instead of blocking
     if (currentCanvas()->isEdited()){
-        saveCurrentPageConcurrent(); // Use concurrent saving for smoother page flipping
+        canvas->saveToFileAsync(getCurrentPageForCanvas(currentCanvas()));
     }
 
     int oldPage = getCurrentPageForCanvas(currentCanvas()) + 1; // Convert to 1-based for comparison
     int newPage = pageNumber - 1;
     pageMap[canvas] = newPage;  // ✅ Save the page for this tab
 
+    // ✅ ASYNC LOAD: Load PDF immediately (already async), then canvas strokes
     if (canvas->isPdfLoadedFunc() && pageNumber - 1 < canvas->getTotalPdfPages()) {
         canvas->loadPdfPage(newPage);
+        canvas->loadPageAsync(newPage);
     } else {
-        canvas->loadPage(newPage);
+        canvas->loadPageAsync(newPage);
     }
 
     canvas->setLastActivePage(newPage);
@@ -1543,17 +1546,20 @@ void MainWindow::switchPageWithDirection(int pageNumber, int direction) {
     InkCanvas *canvas = currentCanvas();
     if (!canvas) return;
 
+    // ✅ ASYNC SAVE: Trigger async save instead of blocking
     if (currentCanvas()->isEdited()){
-        saveCurrentPageConcurrent(); // Use concurrent saving for smoother page flipping
+        canvas->saveToFileAsync(getCurrentPageForCanvas(currentCanvas()));
     }
 
     int newPage = pageNumber - 1;
     pageMap[canvas] = newPage;  // ✅ Save the page for this tab
 
+    // ✅ ASYNC LOAD: Load PDF immediately (already async), then canvas strokes
     if (canvas->isPdfLoadedFunc() && pageNumber - 1 < canvas->getTotalPdfPages()) {
         canvas->loadPdfPage(newPage);
+        canvas->loadPageAsync(newPage);
     } else {
-        canvas->loadPage(newPage);
+        canvas->loadPageAsync(newPage);
     }
 
     canvas->setLastActivePage(newPage);
@@ -2022,9 +2028,10 @@ void MainWindow::loadPdf() {
     if (!filePath.isEmpty()) {
         currentCanvas()->loadPdf(filePath);
         
-        // ✅ Load the current page to display the PDF immediately
+        // ✅ ASYNC: Load the current page to display the PDF immediately
         int currentPage = getCurrentPageForCanvas(currentCanvas());
         currentCanvas()->loadPdfPage(currentPage);
+        currentCanvas()->loadPageAsync(currentPage); // Load canvas strokes asynchronously
 
         updateTabLabel(); // ✅ Update the tab name after assigning a PDF
         updateZoom(); // ✅ Update zoom and pan range after PDF is loaded
@@ -5060,7 +5067,9 @@ void MainWindow::setPdfDPI(int dpi) {
         if (currentCanvas()) {
             currentCanvas()->setPDFRenderDPI(dpi);
             currentCanvas()->clearPdfCache();
-            currentCanvas()->loadPdfPage(getCurrentPageForCanvas(currentCanvas()));  // Optional: add this if needed
+            int currentPage = getCurrentPageForCanvas(currentCanvas());
+            currentCanvas()->loadPdfPage(currentPage);  // Load PDF immediately
+            currentCanvas()->loadPageAsync(currentPage); // ✅ ASYNC: Load canvas strokes in background
             updateZoom();
             updatePanRange();
         }
@@ -7408,12 +7417,8 @@ void MainWindow::loadMouseDialMappings() {
 
 void MainWindow::onAutoScrollRequested(int direction)
 {
-    // If there's a pending concurrent save, wait for it to complete before autoscrolling
-    // This ensures that content is saved before switching pages
-    if (concurrentSaveFuture.isValid() && !concurrentSaveFuture.isFinished()) {
-        // Wait for the save to complete (this should be very fast since it's just file I/O)
-        concurrentSaveFuture.waitForFinished();
-    }
+    // ✅ ASYNC: No longer need to wait - async save is already running in background
+    // The page switch will happen instantly, save continues in parallel
     
     if (direction > 0) {
         goToNextPage();
@@ -7424,10 +7429,10 @@ void MainWindow::onAutoScrollRequested(int direction)
 
 void MainWindow::onEarlySaveRequested()
 {
-    // Proactive save triggered when approaching autoscroll threshold
-    // This ensures content is saved before the actual page switch happens
+    // ✅ ASYNC: Proactive save triggered when approaching autoscroll threshold
+    // Start async save early so it completes in the background while user scrolls
     InkCanvas *canvas = currentCanvas();
     if (canvas && canvas->isEdited()) {
-        saveCurrentPageConcurrent();
+        canvas->saveToFileAsync(getCurrentPageForCanvas(canvas));
     }
 }
