@@ -128,6 +128,7 @@ jobs:
             ${{ matrix.msys_prefix }}-make
             ${{ matrix.msys_prefix }}-cmake
             ${{ matrix.msys_prefix }}-pkgconf
+            ${{ matrix.msys_prefix }}-pkg-config
             ${{ matrix.msys_prefix }}-qt6-base
             ${{ matrix.msys_prefix }}-qt6-tools
             ${{ matrix.msys_prefix }}-qt6-translations
