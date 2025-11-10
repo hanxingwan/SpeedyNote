@@ -1,0 +1,54 @@
+name: Build SpeedyNote Packages
+
+on:
+  push:
+    branches: ['*']
+  pull_request:
+    branches: ['*']
+  release:
+    types: [ created ]
+
+jobs:
+  build-dmg:
+    name: Build macOS DMG
+    runs-on: macos-latest
+    strategy:
+      matrix:
+      arch: [x86_64, arm64]
+      steps:
+        - name: Checkout code
+          uses: actions/checkout@v4
+
+        - name: Setup Homebrew
+          run: |
+            brew install qt@6
+            brew install poppler
+            brew install sdl2
+            brew install --build-bottle  muzimuzhi/texstudio-beta/poppler-qt6
+
+        - name: Build
+          shell: bash
+          run: |
+            ./compile-mac.sh
+
+        - name: Upload RPM package
+          uses: actions/upload-artifact@v4
+          with:
+            name: speedynote-dmg-package-${{ matrix.arch }}
+            path: "*.dmg"
+
+  release:
+    name: Create Release
+    needs: [build-deb, build-rpm, build-exe]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    steps:
+
+      - name: Upload 
+      - name: Upload packages to release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            **/*.dmg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
