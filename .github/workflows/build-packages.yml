@@ -108,6 +108,11 @@ jobs:
     strategy:
       matrix:
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+        # arch: [x86_64]
+        # Temporarily disabled ARM64 build until toolchain is stable
+>>>>>>> parent of 14fd08b (stop it from interrupting the build)
 =======
         # arch: [x86_64]
         # Temporarily disabled ARM64 build until toolchain is stable
@@ -151,16 +156,21 @@ jobs:
           # Set up environment for the build
           export MSYSTEM=${{ matrix.msystem }}
           export PATH="/${{ matrix.msystem }}/bin:$PATH"
+<<<<<<< HEAD
           
 <<<<<<< HEAD
           # MSYS2 directories are lowercase, but MSYSTEM env var is uppercase
           $msysDir = "${{ matrix.msystem }}".ToLower()
           Write-Host "Using MSYS2 environment: ${{ matrix.msystem }} (path: $msysDir)" -ForegroundColor Cyan
+=======
+>>>>>>> parent of 14fd08b (stop it from interrupting the build)
           
-          Write-Host "::group::Prepare build directory" -ForegroundColor Cyan
-          if (Test-Path "build") { Remove-Item -Path "build" -Recurse -Force }
-          New-Item -ItemType Directory -Path "build" | Out-Null
+          echo "::group::Prepare build directory"
+          # Create build directory
+          rm -rf build
+          mkdir -p build
           
+<<<<<<< HEAD
           # Compile translations
           $lreleaseExe = "D:\a\_temp\msys64\$msysDir\bin\lrelease-qt6.exe"
           if (Test-Path $lreleaseExe) {
@@ -194,6 +204,20 @@ jobs:
           # Setup environment - add MSYS2 to PATH
           $env:PATH = "D:\a\_temp\msys64\$msysDir\bin;$env:PATH"
 =======
+=======
+          # Compile translations if lrelease exists
+          if command -v lrelease-qt6 &> /dev/null; then
+            echo "Compiling translation files..."
+            lrelease-qt6 ./resources/translations/app_zh.ts ./resources/translations/app_fr.ts ./resources/translations/app_es.ts
+            cp ./resources/translations/*.qm ./build/ 2>/dev/null || true
+          else
+            echo "Warning: lrelease-qt6 not found, skipping translations"
+          fi
+          echo "::endgroup::"
+          
+          cd build
+          
+>>>>>>> parent of 14fd08b (stop it from interrupting the build)
           echo "::group::Configure CMake"
           # Configure CMake
           cmake -G "MinGW Makefiles" \
@@ -204,6 +228,9 @@ jobs:
             ${{ matrix.arch == 'arm64' && '-DCMAKE_SYSTEM_PROCESSOR=arm64' || '-DCPU_ARCH=modern' }} \
             ..
           echo "::endgroup::"
+<<<<<<< HEAD
+>>>>>>> parent of 14fd08b (stop it from interrupting the build)
+=======
 >>>>>>> parent of 14fd08b (stop it from interrupting the build)
           
           echo "::group::Build project"
@@ -212,6 +239,7 @@ jobs:
           cmake --build . --config Release -- -j2
           echo "::endgroup::"
           
+<<<<<<< HEAD
 <<<<<<< HEAD
           if ("${{ matrix.arch }}" -eq "arm64") {
             $cmakeArgs += "-DCMAKE_SYSTEM_PROCESSOR=arm64"
@@ -237,10 +265,15 @@ jobs:
           Write-Host "::group::Copy dependencies" -ForegroundColor Cyan
           $sourceDir = "D:\a\_temp\msys64\$msysDir\bin"
 =======
+=======
+>>>>>>> parent of 14fd08b (stop it from interrupting the build)
           echo "::group::Deploy Qt runtime"
           # Deploy Qt runtime
           windeployqt6 NoteApp.exe
           echo "::endgroup::"
+<<<<<<< HEAD
+>>>>>>> parent of 14fd08b (stop it from interrupting the build)
+=======
 >>>>>>> parent of 14fd08b (stop it from interrupting the build)
           
           echo "::group::Copy dependencies"
@@ -252,6 +285,7 @@ jobs:
           
           # Copy share folder
 <<<<<<< HEAD
+<<<<<<< HEAD
           $shareSource = "D:\a\_temp\msys64\$msysDir\share\poppler"
           if (Test-Path $shareSource) {
             New-Item -ItemType Directory -Path "share" -Force | Out-Null
@@ -259,6 +293,11 @@ jobs:
             Write-Host "Copied Poppler data files" -ForegroundColor Green
           }
           Write-Host "::endgroup::"
+=======
+          mkdir -p share
+          cp -r "/${{ matrix.msystem }}/share/poppler" ./share/ 2>/dev/null || true
+          echo "::endgroup::"
+>>>>>>> parent of 14fd08b (stop it from interrupting the build)
 =======
           mkdir -p share
           cp -r "/${{ matrix.msystem }}/share/poppler" ./share/ 2>/dev/null || true
