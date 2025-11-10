@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: ['*']
   release:
-    types: [ created ]
+    types: [created]
 
 jobs:
   build-dmg:
@@ -15,27 +15,27 @@ jobs:
     strategy:
       matrix:
         arch: [x86_64, arm64]
-        steps:
-          - name: Checkout code
-            uses: actions/checkout@v4
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-          - name: Setup Homebrew
-            run: |
-              brew install qt@6
-              brew install poppler
-              brew install sdl2
-              brew install --build-bottle  muzimuzhi/texstudio-beta/poppler-qt6
+      - name: Setup Homebrew
+        run: |
+          brew install qt@6
+          brew install poppler
+          brew install sdl2
+          brew install --build-bottle muzimuzhi/texstudio-beta/poppler-qt6
 
-          - name: Build
-            shell: bash
-            run: |
-              ./compile-mac.sh
+      - name: Build
+        shell: bash
+        run: |
+          ./compile-mac.sh
 
-          - name: Upload RPM package
-            uses: actions/upload-artifact@v4
-            with:
-              name: speedynote-dmg-package-${{ matrix.arch }}
-              path: "*.dmg"
+      - name: Upload DMG package
+        uses: actions/upload-artifact@v4
+        with:
+          name: speedynote-dmg-package-${{ matrix.arch }}
+          path: "*.dmg"
 
   release:
     name: Create Release
@@ -43,12 +43,15 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'release'
     steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
 
-      - name: Upload 
       - name: Upload packages to release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            **/*.dmg
+            ./artifacts/**/*.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
