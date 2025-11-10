@@ -14,28 +14,28 @@ jobs:
     runs-on: macos-latest
     strategy:
       matrix:
-      arch: [x86_64, arm64]
-      steps:
-        - name: Checkout code
-          uses: actions/checkout@v4
+        arch: [x86_64, arm64]
+        steps:
+          - name: Checkout code
+            uses: actions/checkout@v4
 
-        - name: Setup Homebrew
-          run: |
-            brew install qt@6
-            brew install poppler
-            brew install sdl2
-            brew install --build-bottle  muzimuzhi/texstudio-beta/poppler-qt6
+          - name: Setup Homebrew
+            run: |
+              brew install qt@6
+              brew install poppler
+              brew install sdl2
+              brew install --build-bottle  muzimuzhi/texstudio-beta/poppler-qt6
 
-        - name: Build
-          shell: bash
-          run: |
-            ./compile-mac.sh
+          - name: Build
+            shell: bash
+            run: |
+              ./compile-mac.sh
 
-        - name: Upload RPM package
-          uses: actions/upload-artifact@v4
-          with:
-            name: speedynote-dmg-package-${{ matrix.arch }}
-            path: "*.dmg"
+          - name: Upload RPM package
+            uses: actions/upload-artifact@v4
+            with:
+              name: speedynote-dmg-package-${{ matrix.arch }}
+              path: "*.dmg"
 
   release:
     name: Create Release
