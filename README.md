@@ -48,7 +48,7 @@ vintage hardware._
 
 ### ✅ Requirements
 
-- Windows 7/8/10/11/Mac OS 12+/Ubuntu/Debian/Fedora/RedHat/ArchLinux/AlpineLinux
+- Windows 7/8/10/11/macOS 12+/Ubuntu/Debian/Fedora/RedHat/ArchLinux/AlpineLinux
 - Qt 5 or Qt 6 runtime (bundled in Windows releases)
 - Stylus input (Wacom recommended)
 

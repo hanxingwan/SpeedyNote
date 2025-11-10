@@ -19,8 +19,12 @@ if ($arm64) {
 
 $toolchainPath = "C:\msys64\$toolchain"
 
-rm -r build
-mkdir build
+if (Test-Path ".\build" -PathType Container) {
+    rm -rf build
+    mkdir build
+} else {
+    mkdir build
+}
 
 # ✅ Compile .ts → .qm files
 & "$toolchainPath\bin\lrelease-qt6.exe" ./resources/translations/app_zh.ts ./resources/translations/app_fr.ts ./resources/translations/app_es.ts
