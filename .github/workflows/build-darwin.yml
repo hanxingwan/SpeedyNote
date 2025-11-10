@@ -33,6 +33,7 @@ jobs:
           ./compile-mac.sh << EOF
           y
           3
+          2
           EOF
 
       - name: Upload DMG package
