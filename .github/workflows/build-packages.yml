@@ -2,9 +2,9 @@ name: Build SpeedyNote Packages
 
 on:
   push:
-    branches: [ main, master, test ]
+    branches: *
   pull_request:
-    branches: [ main, master, test ]
+    branches: *
   release:
     types: [ created ]
 
