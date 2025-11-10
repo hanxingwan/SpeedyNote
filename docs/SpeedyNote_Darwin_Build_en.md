@@ -1,9 +1,9 @@
-# SpeedyNote Mac OS Build
+# SpeedyNote macOS Build
 
 
 ### Preparation
 
-- Macintosh (Mac OS 13+(?)), ARM64 or x86-64
+- Macintosh (macOS 13+(?)), ARM64 or x86-64
 
 ---
 

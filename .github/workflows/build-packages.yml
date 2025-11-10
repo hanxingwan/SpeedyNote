@@ -2,9 +2,9 @@ name: Build SpeedyNote Packages
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, test ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main, master, test ]
   release:
     types: [ created ]
 
@@ -96,6 +96,43 @@ jobs:
           name: speedynote-rpm-package-${{ matrix.arch }}
           path: "*.rpm"
 
+  build-exe:
+    name: Build Windows AMD64 EXE
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        arch: [x86_64]
+    container:
+      image: ${{ matrix.container_image }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          update: true
+          install: >
+            mingw-w64-clang-x86_64-toolchain
+            mingw-w64-clang-x86_64-cmake
+            mingw-w64-clang-x86_64-pkgconf
+            mingw-w64-clang-x86_64-qt6-base
+            mingw-w64-clang-x86_64-qt6-tools
+            mingw-w64-clang-x86_64-poppler
+            mingw-w64-clang-x86_64-poppler-qt6
+            mingw-w64-clang-x86_64-SDL2
+
+      - name: Build
+        shell: pwsh
+        run: |
+          ./compile.ps1
+
+      - name: Upload EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: speedynote-windows-package-${{ matrix.arch }}
+          path: "*.exe"
+
   release:
     name: Create Release
     needs: [build-deb, build-rpm]
@@ -112,6 +149,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: speedynote-rpm-package-*
+          path: .
+
+      - name: Download EXE
+        uses: actions/download-artifact@v4
+        with:
+          pattern: speedynote-windows-package-*
           path: .
 
       - name: Upload packages to release
