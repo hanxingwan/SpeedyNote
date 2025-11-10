@@ -99,7 +99,6 @@ jobs:
   build-exe:
     name: Build Windows EXE
     runs-on: windows-latest
-    if: github.event_name != 'push'
     strategy:
       matrix:
         arch: [x86_64, arm64]
