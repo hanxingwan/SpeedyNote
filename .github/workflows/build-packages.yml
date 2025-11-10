@@ -124,6 +124,7 @@ jobs:
             ${{ matrix.msys_prefix }}-pkgconf
             ${{ matrix.msys_prefix }}-qt6-base
             ${{ matrix.msys_prefix }}-qt6-tools
+            ${{ matrix.msys_prefix }}-qt6-translations
             ${{ matrix.msys_prefix }}-poppler
             ${{ matrix.msys_prefix }}-poppler-qt6
             ${{ matrix.msys_prefix }}-SDL2
