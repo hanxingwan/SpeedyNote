@@ -102,18 +102,18 @@ jobs:
     if: github.event_name != 'push'
     strategy:
       matrix:
-        # arch: [x86_64]
+        arch: [x86_64]
         # Temporarily disabled ARM64 build until toolchain is stable
-        arch: [x86_64, arm64]
+        # arch: [x86_64, arm64]
         include:
           - arch: x86_64
             msys_prefix: mingw-w64-clang-x86_64
             msystem: CLANG64
             build_args: ""
-          - arch: arm64
-            msys_prefix: mingw-w64-clang-aarch64
-            msystem: CLANGARM64
-            build_args: "-arm64"
+          # - arch: arm64
+          #   msys_prefix: mingw-w64-clang-aarch64
+          #   msystem: CLANGARM64
+          #   build_args: "-arm64"
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -137,68 +137,101 @@ jobs:
             ${{ matrix.msys_prefix }}-SDL2
 
       - name: Build
-        shell: msys2 {0}
-        timeout-minutes: 45
+        timeout-minutes: 60
         run: |
-          # Set up environment for the build
-          export MSYSTEM=${{ matrix.msystem }}
-          export PATH="/${{ matrix.msystem }}/bin:$PATH"
+          $ErrorActionPreference = "Stop"
           
-          echo "::group::Prepare build directory"
-          # Create build directory
-          rm -rf build
-          mkdir -p build
+          Write-Host "::group::Prepare build directory" -ForegroundColor Cyan
+          if (Test-Path "build") { Remove-Item -Path "build" -Recurse -Force }
+          New-Item -ItemType Directory -Path "build" | Out-Null
           
-          # Compile translations if lrelease exists
-          if command -v lrelease-qt6 &> /dev/null; then
-            echo "Compiling translation files..."
-            lrelease-qt6 ./resources/translations/app_zh.ts ./resources/translations/app_fr.ts ./resources/translations/app_es.ts
-            cp ./resources/translations/*.qm ./build/ 2>/dev/null || true
-          else
-            echo "Warning: lrelease-qt6 not found, skipping translations"
-          fi
-          echo "::endgroup::"
+          # Compile translations
+          $lreleaseExe = "D:\a\_temp\msys64\${{ matrix.msystem }}\bin\lrelease-qt6.exe"
+          if (Test-Path $lreleaseExe) {
+            Write-Host "Compiling translation files..." -ForegroundColor Green
+            & $lreleaseExe ./resources/translations/app_zh.ts ./resources/translations/app_fr.ts ./resources/translations/app_es.ts
+            Copy-Item -Path ".\resources\translations\*.qm" -Destination ".\build" -Force -ErrorAction SilentlyContinue
+          } else {
+            Write-Host "Warning: lrelease not found, skipping translations" -ForegroundColor Yellow
+          }
+          Write-Host "::endgroup::"
           
-          cd build
+          Set-Location build
           
-          echo "::group::Configure CMake"
-          # Configure CMake
-          cmake -G "MinGW Makefiles" \
-            -DCMAKE_C_COMPILER=clang \
-            -DCMAKE_CXX_COMPILER=clang++ \
-            -DCMAKE_MAKE_PROGRAM=mingw32-make \
-            -DCMAKE_BUILD_TYPE=Release \
-            ${{ matrix.arch == 'arm64' && '-DCMAKE_SYSTEM_PROCESSOR=arm64' || '-DCPU_ARCH=modern' }} \
-            ..
-          echo "::endgroup::"
+          # Setup environment - add MSYS2 to PATH
+          $env:PATH = "D:\a\_temp\msys64\${{ matrix.msystem }}\bin;$env:PATH"
           
-          echo "::group::Build project"
-          # Build with reduced parallelism to avoid memory issues
-          # GitHub Actions runners have limited memory, so use -j2 instead of all cores
-          cmake --build . --config Release -- -j2
-          echo "::endgroup::"
+          Write-Host "::group::Configure CMake" -ForegroundColor Cyan
+          $cmakeArgs = @(
+            "-G", "MinGW Makefiles",
+            "-DCMAKE_C_COMPILER=clang",
+            "-DCMAKE_CXX_COMPILER=clang++",
+            "-DCMAKE_MAKE_PROGRAM=mingw32-make",
+            "-DCMAKE_BUILD_TYPE=Release"
+          )
           
-          echo "::group::Deploy Qt runtime"
-          # Deploy Qt runtime
-          windeployqt6 NoteApp.exe
-          echo "::endgroup::"
+          if ("${{ matrix.arch }}" -eq "arm64") {
+            $cmakeArgs += "-DCMAKE_SYSTEM_PROCESSOR=arm64"
+          } else {
+            $cmakeArgs += "-DCPU_ARCH=modern"
+          }
           
-          echo "::group::Copy dependencies"
+          & cmake @cmakeArgs ..
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Host "::endgroup::"
+          
+          Write-Host "::group::Build project" -ForegroundColor Cyan
+          Write-Host "Building with single-threaded compilation to avoid memory issues..." -ForegroundColor Yellow
+          & cmake --build . --config Release -- -j16
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Host "::endgroup::"
+          
+          Write-Host "::group::Deploy Qt runtime" -ForegroundColor Cyan
+          & windeployqt6 NoteApp.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Host "::endgroup::"
+          
+          Write-Host "::group::Copy dependencies" -ForegroundColor Cyan
+          $sourceDir = "D:\a\_temp\msys64\${{ matrix.msystem }}\bin"
+          
           # Copy required DLLs
-          echo "Copying required DLLs..."
-          for dll in libpoppler-*.dll libdeflate.dll libiconv-2.dll libnettle-8.dll Qt6Core.dll libexpat-1.dll libicuin*.dll libicuuc*.dll libfreetype-6.dll libfontconfig-1.dll libglib-2.0-0.dll libintl-8.dll libpng16-16.dll libjpeg-8.dll libtiff-*.dll libopenjp2-*.dll liblcms2-2.dll libcrypto-3*.dll libssl-3*.dll libzstd.dll zlib1.dll libbz2-1.dll liblzma-5.dll libpoppler-qt6-*.dll SDL2.dll libharfbuzz-0.dll libgraphite2.dll libbrotlidec.dll libbrotlicommon.dll libpcre2-16-0.dll; do
-            cp "/${{ matrix.msystem }}/bin/$dll" . 2>/dev/null || true
-          done
+          $dllPatterns = @(
+            "libpoppler-*.dll", "libdeflate.dll", "libiconv-2.dll", "libnettle-8.dll",
+            "libexpat-1.dll", "libicuin*.dll", "libicuuc*.dll", "libicudt*.dll",
+            "libfreetype-6.dll", "libfontconfig-1.dll", "libglib-2.0-0.dll",
+            "libintl-8.dll", "libpng16-16.dll", "libjpeg-8.dll", "libtiff-*.dll",
+            "libopenjp2-*.dll", "liblcms2-2.dll", "libcrypto-3*.dll", "libssl-3*.dll",
+            "libzstd.dll", "zlib1.dll", "libbz2-1.dll", "liblzma-5.dll",
+            "libpoppler-qt6-*.dll", "SDL2.dll", "libharfbuzz-0.dll", "libgraphite2.dll",
+            "libbrotlidec.dll", "libbrotlicommon.dll", "libpcre2-16-0.dll",
+            "libgobject-2.0-0.dll", "libgcc_s_seh-1.dll", "libstdc++-6.dll",
+            "libwinpthread-1.dll", "libc++.dll", "libunwind.dll"
+          )
+          
+          $copiedCount = 0
+          foreach ($pattern in $dllPatterns) {
+            $files = Get-ChildItem -Path $sourceDir -Filter $pattern -ErrorAction SilentlyContinue
+            foreach ($file in $files) {
+              Copy-Item -Path $file.FullName -Destination . -Force -ErrorAction SilentlyContinue
+              $copiedCount++
+            }
+          }
+          Write-Host "Copied $copiedCount DLL files" -ForegroundColor Green
           
           # Copy share folder
-          mkdir -p share
-          cp -r "/${{ matrix.msystem }}/share/poppler" ./share/ 2>/dev/null || true
-          echo "::endgroup::"
+          $shareSource = "D:\a\_temp\msys64\${{ matrix.msystem }}\share\poppler"
+          if (Test-Path $shareSource) {
+            New-Item -ItemType Directory -Path "share" -Force | Out-Null
+            Copy-Item -Path $shareSource -Destination "share" -Recurse -Force
+            Write-Host "Copied Poppler data files" -ForegroundColor Green
+          }
+          Write-Host "::endgroup::"
           
-          echo "Build completed successfully!"
-          ls -lh NoteApp.exe
+          Write-Host "Build completed successfully!" -ForegroundColor Green
+          Get-Item NoteApp.exe | Format-List Name,Length,LastWriteTime
           
-          cd ..
+          Set-Location ..
+        shell: pwsh
 
       - name: Upload EXE
         uses: actions/upload-artifact@v4
