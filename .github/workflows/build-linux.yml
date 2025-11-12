@@ -95,30 +95,3 @@ jobs:
         with:
           name: speedynote-rpm-package-${{ matrix.arch }}
           path: "*.rpm"
-
-  release:
-    name: Create Release
-    needs: [build-deb, build-rpm]
-    runs-on: ubuntu-latest
-    if: github.event_name == 'release'
-    steps:
-      - name: Download DEB packages
-        uses: actions/download-artifact@v4
-        with:
-          pattern: speedynote-deb-package-*
-          path: .
-
-      - name: Download RPM packages
-        uses: actions/download-artifact@v4
-        with:
-          pattern: speedynote-rpm-package-*
-          path: .
-
-      - name: Upload packages to release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            **/*.deb
-            **/*.rpm
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -41,22 +41,3 @@ jobs:
         with:
           name: speedynote-dmg-package-${{ matrix.arch }}
           path: "*.dmg"
-
-  release:
-    name: Create Release
-    needs: [build-dmg]
-    runs-on: ubuntu-latest
-    if: github.event_name == 'release'
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: ./artifacts
-
-      - name: Upload packages to release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            **/*.dmg
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
