@@ -151,23 +151,3 @@ jobs:
         with:
           name: speedynote-windows-package-${{ matrix.arch }}
           path: "build/*.exe"
-
-  release:
-    name: Create Release
-    needs: [build-exe]
-    runs-on: ubuntu-latest
-    if: github.event_name == 'release'
-    steps:
-      - name: Download EXE packages
-        uses: actions/download-artifact@v4
-        with:
-          pattern: speedynote-windows-package-*
-          path: .
-
-      - name: Upload packages to release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            **/*.exe
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
