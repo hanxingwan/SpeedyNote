@@ -55,7 +55,6 @@ signals:
     void pdfTextSelected(const QString &text); // Signal emitted when PDF text is selected
     void pdfLoaded(); // Signal emitted when a PDF is loaded
     void markdownSelectionModeChanged(bool enabled); // Signal emitted when markdown selection mode changes
-    void annotatedImageSaved(const QString &filePath); // ✅ Signal emitted when annotated image is saved
     void autoScrollRequested(int direction); // Signal for autoscrolling to next/prev page
     void earlySaveRequested(); // Signal for proactive save before autoscroll threshold
 
@@ -77,7 +76,6 @@ public:
     void deletePage(int pageNumber);
     void clearCurrentPage(); // Clear all content (drawing + pictures) from current page
     void setBackground(const QString &filePath, int pageNumber);
-    void saveAnnotated(int pageNumber);
 
     void setZoom(int zoomLevel);
     int getZoom() const;

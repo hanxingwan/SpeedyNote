@@ -318,7 +318,6 @@ private slots:
     void adjustThicknessForZoom(int oldZoom, int newZoom); // Adjust thickness when zoom changes
     void changeTool(int index);
     void saveCanvas(); // Save canvas to file
-    void saveAnnotated();
     void deleteCurrentPage();
 
     void loadPdf();
@@ -411,8 +410,6 @@ public slots:
     void onEarlySaveRequested();
 
 private:
-    void onAnnotatedImageSaved(const QString &filePath); // ✅ Handle annotated image saved notification
-
     void setPenTool();               // Set pen tool
     void setMarkerTool();            // Set marker tool
     void setEraserTool();            // Set eraser tool
@@ -469,7 +466,6 @@ private:
     QPushButton *deletePageButton;
     QPushButton *selectFolderButton; // Button to select folder
     QPushButton *saveButton; // Button to save file
-    QPushButton *saveAnnotatedButton;
     QPushButton *fullscreenButton;
     QPushButton *openControlPanelButton;
     QPushButton *openRecentNotebooksButton; // Added button

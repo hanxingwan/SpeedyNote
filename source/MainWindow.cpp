@@ -319,18 +319,10 @@ void MainWindow::setupUi() {
     saveButton->setStyleSheet(buttonStyle);
     saveButton->setToolTip(tr("Save Notebook"));
     connect(saveButton, &QPushButton::clicked, this, &MainWindow::saveCurrentPage);
-    
-    saveAnnotatedButton = new QPushButton(this);
-    saveAnnotatedButton->setFixedSize(26, 30);
-    QIcon saveAnnotatedIcon(loadThemedIcon("saveannotated"));  // Path to your icon in resources
-    saveAnnotatedButton->setIcon(saveAnnotatedIcon);
-    saveAnnotatedButton->setStyleSheet(buttonStyle);
-    saveAnnotatedButton->setToolTip(tr("Save Page with Background"));
-    connect(saveAnnotatedButton, &QPushButton::clicked, this, &MainWindow::saveAnnotated);
 
     exportPdfButton = new QPushButton(this);
     exportPdfButton->setFixedSize(26, 30);
-    QIcon exportPdfIcon(loadThemedIcon("pdf"));  // Using PDF icon for export
+    QIcon exportPdfIcon(loadThemedIcon("export"));  // Using PDF icon for export
     exportPdfButton->setIcon(exportPdfIcon);
     exportPdfButton->setStyleSheet(buttonStyle);
     exportPdfButton->setToolTip(tr("Export Annotated PDF"));
@@ -1060,7 +1052,6 @@ void MainWindow::setupUi() {
     controlLayout->addWidget(pdfTextSelectButton);
     // controlLayout->addWidget(backgroundButton);
     controlLayout->addWidget(saveButton);
-    controlLayout->addWidget(saveAnnotatedButton);
     controlLayout->addWidget(exportPdfButton);
     controlLayout->addWidget(openControlPanelButton);
     controlLayout->addWidget(openRecentNotebooksButton); // Add button to layout
@@ -1824,10 +1815,6 @@ void MainWindow::selectBackground() {
         currentCanvas()->setBackground(filePath, getCurrentPageForCanvas(currentCanvas()));
         updateZoom(); // ✅ Update zoom and pan range after background is set
     }
-}
-
-void MainWindow::saveAnnotated() {
-    currentCanvas()->saveAnnotated(getCurrentPageForCanvas(currentCanvas()));
 }
 
 void MainWindow::exportAnnotatedPdf() {
@@ -3139,7 +3126,6 @@ void MainWindow::addNewTab() {
         }
     });
     connect(newCanvas, &InkCanvas::markdownSelectionModeChanged, this, &MainWindow::updateMarkdownButtonState);
-    connect(newCanvas, &InkCanvas::annotatedImageSaved, this, &MainWindow::onAnnotatedImageSaved);
     connect(newCanvas, &InkCanvas::autoScrollRequested, this, &MainWindow::onAutoScrollRequested);
     connect(newCanvas, &InkCanvas::earlySaveRequested, this, &MainWindow::onEarlySaveRequested);
     
@@ -4872,8 +4858,7 @@ void MainWindow::updateTheme() {
     updateButtonIcon(toggleBookmarkButton, "star");
     if (selectFolderButton) selectFolderButton->setIcon(loadThemedIcon("folder"));
     if (saveButton) saveButton->setIcon(loadThemedIcon("save"));
-    if (saveAnnotatedButton) saveAnnotatedButton->setIcon(loadThemedIcon("saveannotated"));
-    if (exportPdfButton) exportPdfButton->setIcon(loadThemedIcon("pdf"));
+    if (exportPdfButton) exportPdfButton->setIcon(loadThemedIcon("export"));
     if (fullscreenButton) fullscreenButton->setIcon(loadThemedIcon("fullscreen"));
     // if (backgroundButton) backgroundButton->setIcon(loadThemedIcon("background"));
     updateButtonIcon(straightLineToggleButton, "straightLine");
@@ -4920,7 +4905,6 @@ void MainWindow::updateTheme() {
     if (toggleBookmarkButton) toggleBookmarkButton->setStyleSheet(newButtonStyle);
     if (selectFolderButton) selectFolderButton->setStyleSheet(newButtonStyle);
     if (saveButton) saveButton->setStyleSheet(newButtonStyle);
-    if (saveAnnotatedButton) saveAnnotatedButton->setStyleSheet(newButtonStyle);
     if (fullscreenButton) fullscreenButton->setStyleSheet(newButtonStyle);
     if (redButton) redButton->setStyleSheet(newButtonStyle);
     if (blueButton) blueButton->setStyleSheet(newButtonStyle);
@@ -6208,18 +6192,6 @@ void MainWindow::updatePictureButtonState() {
     }
 }
 
-void MainWindow::onAnnotatedImageSaved(const QString &filePath) {
-    // ✅ Show success message to user
-    QFileInfo fileInfo(filePath);
-    QString fileName = fileInfo.fileName();
-    QString dirPath = fileInfo.absolutePath();
-    
-    QMessageBox::information(this, tr("Annotated Image Saved"), 
-        tr("Annotated page saved successfully!\n\n"
-           "File: %1\n"
-           "Location: %2").arg(fileName, dirPath));
-}
-
 void MainWindow::updateDialButtonState() {
     // Check if dial is visible
     bool isDialVisible = dialContainer && dialContainer->isVisible();
@@ -6423,7 +6395,6 @@ void MainWindow::createSingleRowLayout() {
     newLayout->addWidget(pdfTextSelectButton);
     // newLayout->addWidget(backgroundButton);
     newLayout->addWidget(saveButton);
-    newLayout->addWidget(saveAnnotatedButton);
     newLayout->addWidget(exportPdfButton);
     newLayout->addWidget(openControlPanelButton);
     // openRecentNotebooksButton is now in tab bar layout, not toolbar
@@ -6517,7 +6488,6 @@ void MainWindow::createTwoRowLayout() {
     newFirstRowLayout->addWidget(pdfTextSelectButton);
     // newFirstRowLayout->addWidget(backgroundButton);
     newFirstRowLayout->addWidget(saveButton);
-    newFirstRowLayout->addWidget(saveAnnotatedButton);
     newFirstRowLayout->addWidget(exportPdfButton);
     newFirstRowLayout->addWidget(openControlPanelButton);
     // openRecentNotebooksButton is now in tab bar layout, not toolbar
