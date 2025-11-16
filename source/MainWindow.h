@@ -40,6 +40,7 @@
 
 // Forward declarations
 class QTreeWidgetItem;
+class QProgressDialog;
 namespace Poppler { 
     class Document; 
     class OutlineItem;
@@ -323,6 +324,12 @@ private slots:
     void loadPdf();
     void clearPdf();
     void handleSmartPdfButton(); // ✅ Smart PDF button that handles all PDF operations
+    void exportAnnotatedPdf(); // Export PDF with all annotations overlaid
+    void exportCanvasOnlyNotebook(const QString &saveFolder, const QString &notebookId); // Export canvas-only notebook (no PDF)
+    void exportAnnotatedPdfFullRender(const QString &exportPath, const QSet<int> &annotatedPages); // Full render fallback
+    bool createAnnotatedPagesPdf(const QString &outputPath, const QList<int> &pages, QProgressDialog &progress); // Create temp PDF
+    bool mergePdfWithPdftk(const QString &originalPdf, const QString &annotatedPagesPdf, const QString &outputPdf, const QList<int> &annotatedPageNumbers, QString *errorMsg = nullptr); // Merge using pdftk
+    bool mergePdfWithQpdf(const QString &originalPdf, const QString &annotatedPagesPdf, const QString &outputPdf, const QList<int> &annotatedPageNumbers, QString *errorMsg = nullptr); // Merge using qpdf
 
     void updateZoom();
     void onZoomSliderChanged(int value); // Handle manual zoom slider changes
@@ -469,6 +476,7 @@ private:
 
     QPushButton *loadPdfButton;
     QPushButton *clearPdfButton;
+    QPushButton *exportPdfButton; // Button to export annotated PDF
     QPushButton *pdfTextSelectButton; // Button to toggle PDF text selection mode
     QPushButton *toggleTabBarButton;
 

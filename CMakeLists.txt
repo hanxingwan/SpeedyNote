@@ -1,7 +1,7 @@
 ﻿cmake_minimum_required(VERSION 3.10)
 cmake_policy(SET CMP0074 NEW)
 
-project(SpeedyNote VERSION 0.10.7)
+project(SpeedyNote VERSION 0.11.0)
 project(NoteApp)
 set(CMAKE_CXX_STANDARD 17)
 

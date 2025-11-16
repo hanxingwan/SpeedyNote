@@ -38,6 +38,12 @@
 #include <QSet>
 #include <QWheelEvent>
 #include <QTimer>
+#include <QPdfWriter>
+#include <QProgressDialog>
+#include <QProcess>
+#include <QFileInfo>
+#include <QThread>
+#include <QPointer>
 // #include "HandwritingLineEdit.h"
 #include "ControlPanelDialog.h"
 #include "SDLControllerManager.h"
@@ -88,7 +94,7 @@ void setupLinuxSignalHandlers() {
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false), localServer(nullptr) {
 
-    setWindowTitle(tr("SpeedyNote Beta 0.10.7"));
+    setWindowTitle(tr("SpeedyNote Beta 0.11.0"));
 
 #ifdef Q_OS_LINUX
     // Setup signal handlers for proper cleanup on Linux
@@ -321,6 +327,14 @@ void MainWindow::setupUi() {
     saveAnnotatedButton->setStyleSheet(buttonStyle);
     saveAnnotatedButton->setToolTip(tr("Save Page with Background"));
     connect(saveAnnotatedButton, &QPushButton::clicked, this, &MainWindow::saveAnnotated);
+
+    exportPdfButton = new QPushButton(this);
+    exportPdfButton->setFixedSize(26, 30);
+    QIcon exportPdfIcon(loadThemedIcon("pdf"));  // Using PDF icon for export
+    exportPdfButton->setIcon(exportPdfIcon);
+    exportPdfButton->setStyleSheet(buttonStyle);
+    exportPdfButton->setToolTip(tr("Export Annotated PDF"));
+    connect(exportPdfButton, &QPushButton::clicked, this, &MainWindow::exportAnnotatedPdf);
 
     fullscreenButton = new QPushButton(this);
     fullscreenButton->setIcon(loadThemedIcon("fullscreen"));  // Load from resources
@@ -1047,6 +1061,7 @@ void MainWindow::setupUi() {
     // controlLayout->addWidget(backgroundButton);
     controlLayout->addWidget(saveButton);
     controlLayout->addWidget(saveAnnotatedButton);
+    controlLayout->addWidget(exportPdfButton);
     controlLayout->addWidget(openControlPanelButton);
     controlLayout->addWidget(openRecentNotebooksButton); // Add button to layout
     controlLayout->addWidget(redButton);
@@ -1813,6 +1828,716 @@ void MainWindow::selectBackground() {
 
 void MainWindow::saveAnnotated() {
     currentCanvas()->saveAnnotated(getCurrentPageForCanvas(currentCanvas()));
+}
+
+void MainWindow::exportAnnotatedPdf() {
+    InkCanvas *canvas = currentCanvas();
+    if (!canvas) return;
+
+    QString saveFolder = canvas->getSaveFolder();
+    QString notebookId = canvas->getNotebookId();
+
+    if (saveFolder.isEmpty() || notebookId.isEmpty()) {
+        QMessageBox::warning(this, tr("Export Failed"), 
+            tr("Cannot export: notebook not properly initialized."));
+        return;
+    }
+
+    // Check if a PDF is loaded
+    bool hasPdf = canvas->isPdfLoadedFunc();
+    
+    if (!hasPdf) {
+        // No PDF - export canvas-only notebook to PDF
+        exportCanvasOnlyNotebook(saveFolder, notebookId);
+        return;
+    }
+
+    // Get PDF document and notebook info
+    Poppler::Document* pdfDoc = canvas->getPdfDocument();
+    if (!pdfDoc) {
+        QMessageBox::warning(this, tr("Export Failed"), 
+            tr("Failed to access PDF document."));
+        return;
+    }
+
+    int totalPages = canvas->getTotalPdfPages();
+    QString originalPdfPath = canvas->getPdfPath();
+
+    if (originalPdfPath.isEmpty()) {
+        QMessageBox::warning(this, tr("Export Failed"), 
+            tr("Cannot export: PDF path not found."));
+        return;
+    }
+
+    // Ask user where to save the exported PDF
+    // Default to same location as .spn file with similar name
+    QString defaultPath;
+    QString displayPath = canvas->getDisplayPath();
+    
+    if (!displayPath.isEmpty() && displayPath.endsWith(".spn", Qt::CaseInsensitive)) {
+        // It's a .spn file - use its directory and name
+        QFileInfo spnInfo(displayPath);
+        QString baseName = spnInfo.completeBaseName(); // filename without extension
+        QString directory = spnInfo.absolutePath();
+        defaultPath = directory + "/" + baseName + "_annotated.pdf";
+    } else if (!displayPath.isEmpty()) {
+        // It's a folder - use folder name
+        QFileInfo folderInfo(displayPath);
+        QString folderName = folderInfo.fileName();
+        defaultPath = displayPath + "/" + folderName + "_annotated.pdf";
+    } else {
+        // Fallback
+        defaultPath = "annotated_export.pdf";
+    }
+    
+    QString exportPath = QFileDialog::getSaveFileName(this, 
+        tr("Export Annotated PDF"), 
+        defaultPath, 
+        "PDF Files (*.pdf)");
+
+    if (exportPath.isEmpty()) {
+        return; // User cancelled
+    }
+
+    // Ensure .pdf extension
+    if (!exportPath.toLower().endsWith(".pdf")) {
+        exportPath += ".pdf";
+    }
+
+    // First pass: identify which pages have annotations
+    QSet<int> annotatedPages;
+    QProgressDialog scanProgress(tr("Scanning for annotated pages..."), tr("Cancel"), 0, totalPages, this);
+    scanProgress.setWindowModality(Qt::WindowModal);
+    scanProgress.setMinimumDuration(500);
+    
+    for (int pageNum = 0; pageNum < totalPages; ++pageNum) {
+        if (scanProgress.wasCanceled()) {
+            return;
+        }
+        
+        scanProgress.setValue(pageNum);
+        QCoreApplication::processEvents();
+        
+        QString canvasFile = saveFolder + QString("/%1_%2.png")
+                            .arg(notebookId)
+                            .arg(pageNum, 5, 10, QChar('0'));
+        
+        if (QFile::exists(canvasFile)) {
+            // Check if the file has actual content (not just an empty/transparent PNG)
+            QImage canvasImage(canvasFile);
+            if (!canvasImage.isNull() && canvasImage.width() > 0 && canvasImage.height() > 0) {
+                annotatedPages.insert(pageNum);
+            }
+        }
+    }
+    scanProgress.setValue(totalPages);
+
+    if (annotatedPages.isEmpty()) {
+        QMessageBox::information(this, tr("No Annotations"), 
+            tr("No annotated pages found. The output will be identical to the original PDF."));
+        
+        // Just copy the original PDF
+        if (QFile::copy(originalPdfPath, exportPath)) {
+            QMessageBox::information(this, tr("Export Complete"), 
+                tr("PDF copied successfully (no annotations to add)."));
+        } else {
+            QMessageBox::critical(this, tr("Export Failed"), 
+                tr("Failed to copy original PDF."));
+        }
+        return;
+    }
+
+    // Try to use pdftk or qpdf for efficient merging (only annotated pages need rendering)
+    QString tempAnnotatedPdf = QDir::temp().filePath("speedynote_annotated_pages.pdf");
+    QString stampFile = QDir::temp().filePath("speedynote_stamp_pages.pdf");
+    
+    // Strategy: Create a PDF with only annotated pages, then use pdftk/qpdf to overlay
+    // If those tools aren't available, fall back to full re-render (but inform user)
+    
+    // Check if pdftk or qpdf is available
+    QString overlayTool;
+    QProcess testProcess;
+    
+    testProcess.start("pdftk", QStringList() << "--version");
+    if (testProcess.waitForFinished(1000) && testProcess.exitCode() == 0) {
+        overlayTool = "pdftk";
+    } else {
+        testProcess.start("qpdf", QStringList() << "--version");
+        if (testProcess.waitForFinished(1000) && testProcess.exitCode() == 0) {
+            overlayTool = "qpdf";
+        }
+    }
+
+    if (overlayTool.isEmpty()) {
+        // No external tool available - inform user and use slower method
+        QMessageBox::StandardButton reply = QMessageBox::question(this, 
+            tr("Optimization Not Available"),
+            tr("Found %1 annotated pages out of %2 total pages.\n\n"
+               "For fast export, please install 'pdftk' or 'qpdf':\n"
+               "  MSYS2: pacman -S mingw-w64-clang-x86_64-pdftk\n\n"
+               "Without these tools, export requires re-rendering all %2 pages.\n"
+               "On slow systems this may take over an hour.\n\n"
+               "Continue with slow export anyway?")
+            .arg(annotatedPages.size()).arg(totalPages),
+            QMessageBox::Yes | QMessageBox::No);
+        
+        if (reply == QMessageBox::No) {
+            return;
+        }
+        
+        // Fall back to rendering all pages
+        exportAnnotatedPdfFullRender(exportPath, annotatedPages);
+        return;
+    }
+
+    // Create temporary PDF with only annotated pages
+    QProgressDialog progress(tr("Rendering annotated pages..."), tr("Cancel"), 0, annotatedPages.size(), this);
+    progress.setWindowModality(Qt::WindowModal);
+    progress.setMinimumDuration(0);
+    
+    QList<int> sortedPages = annotatedPages.values();
+    std::sort(sortedPages.begin(), sortedPages.end());
+    
+    // Create temporary annotated pages PDF
+    if (!createAnnotatedPagesPdf(tempAnnotatedPdf, sortedPages, progress)) {
+        QFile::remove(tempAnnotatedPdf);
+        return;
+    }
+
+    // Close the rendering progress dialog
+    progress.close();
+    
+    // Create new progress dialog for merge step
+    QProgressDialog *mergeProgress = new QProgressDialog(
+        tr("Merging %1 annotated pages with original PDF...\nThis may take a minute...").arg(annotatedPages.size()),
+        tr("Cancel"), 0, 0, this);
+    mergeProgress->setWindowModality(Qt::WindowModal);
+    mergeProgress->setMinimumDuration(0);
+    mergeProgress->setValue(0);
+    mergeProgress->show();
+    QCoreApplication::processEvents();
+    
+    // Run merge in background thread using QFutureWatcher for proper event-driven handling
+    QFutureWatcher<bool> *mergeWatcher = new QFutureWatcher<bool>(this);
+    QString *mergeError = new QString(); // Heap allocated so it survives the lambda
+    
+    // Set parent to ensure cleanup if window closes during export
+    mergeProgress->setParent(this);
+    
+    // Use QPointer to safely check if MainWindow still exists when lambda runs
+    QPointer<MainWindow> mainWindowPtr(this);
+    
+    // Connect finished signal before starting
+    // Use mergeWatcher as context so cleanup always happens even if MainWindow is destroyed
+    connect(mergeWatcher, &QFutureWatcher<bool>::finished, mergeWatcher, [=]() {
+        bool mergeSuccess = mergeWatcher->result();
+        
+        // Close progress dialog
+        if (mergeProgress) {
+            mergeProgress->close();
+            mergeProgress->deleteLater();
+        }
+        
+        // Cleanup temp files - always happens
+        QFile::remove(tempAnnotatedPdf);
+        QFile::remove(stampFile);
+
+        // Only show message boxes if MainWindow still exists
+        if (!mainWindowPtr.isNull()) {
+            if (mergeSuccess) {
+                QFileInfo outputInfo(exportPath);
+                QFileInfo originalInfo(originalPdfPath);
+                
+                QMessageBox::information(mainWindowPtr, tr("Export Complete"), 
+                    tr("Annotated PDF exported successfully!\n\n"
+                       "Annotated pages: %1 of %2\n"
+                       "Original size: %3 MB\n"
+                       "Output size: %4 MB\n"
+                       "Saved to: %5")
+                    .arg(annotatedPages.size())
+                    .arg(totalPages)
+                    .arg(originalInfo.size() / 1024.0 / 1024.0, 0, 'f', 2)
+                    .arg(outputInfo.size() / 1024.0 / 1024.0, 0, 'f', 2)
+                    .arg(exportPath));
+            } else {
+                QString errorMsg = tr("Failed to merge annotated pages with original PDF.");
+                if (!mergeError->isEmpty()) {
+                    errorMsg += "\n\n" + *mergeError;
+                }
+                QMessageBox::critical(mainWindowPtr, tr("Export Failed"), errorMsg);
+            }
+        }
+        
+        // Cleanup - always happens even if MainWindow is destroyed
+        delete mergeError;
+        mergeWatcher->deleteLater();
+    });
+    
+    // Handle cancel
+    connect(mergeProgress, &QProgressDialog::canceled, mergeProgress, [=]() {
+        // Note: Can't actually cancel pdftk once started
+        if (mergeProgress) {
+            mergeProgress->setLabelText(tr("Waiting for merge to complete..."));
+        }
+    });
+    
+    // Start the background task
+    QFuture<bool> mergeFuture = QtConcurrent::run([=]() {
+        if (overlayTool == "pdftk") {
+            return mergePdfWithPdftk(originalPdfPath, tempAnnotatedPdf, exportPath, sortedPages, mergeError);
+        } else if (overlayTool == "qpdf") {
+            return mergePdfWithQpdf(originalPdfPath, tempAnnotatedPdf, exportPath, sortedPages, mergeError);
+        }
+        return false;
+    });
+    
+    mergeWatcher->setFuture(mergeFuture);
+}
+
+// Export canvas-only notebook (no underlying PDF) to PDF
+void MainWindow::exportCanvasOnlyNotebook(const QString &saveFolder, const QString &notebookId) {
+    // Scan for canvas PNG files
+    QDir dir(saveFolder);
+    QStringList filters;
+    filters << QString("%1_*.png").arg(notebookId);
+    QStringList pngFiles = dir.entryList(filters, QDir::Files, QDir::Name);
+    
+    if (pngFiles.isEmpty()) {
+        QMessageBox::information(this, tr("No Pages Found"), 
+            tr("No canvas pages found to export."));
+        return;
+    }
+    
+    // Parse page numbers from filenames
+    QMap<int, QString> pageFiles; // pageNumber -> filePath
+    for (const QString &fileName : pngFiles) {
+        // Format: notebookId_XXXXX.png
+        QString baseName = fileName;
+        baseName.remove(0, notebookId.length() + 1); // Remove "notebookId_"
+        baseName.chop(4); // Remove ".png"
+        
+        bool ok;
+        int pageNum = baseName.toInt(&ok);
+        if (ok) {
+            pageFiles[pageNum] = dir.filePath(fileName);
+        }
+    }
+    
+    if (pageFiles.isEmpty()) {
+        QMessageBox::information(this, tr("No Pages Found"), 
+            tr("No valid canvas pages found to export."));
+        return;
+    }
+    
+    // Get sorted list of pages
+    QList<int> sortedPages = pageFiles.keys();
+    std::sort(sortedPages.begin(), sortedPages.end());
+    
+    // Ask user where to save
+    // Default to same location as .spn file with similar name
+    QString defaultPath;
+    InkCanvas *canvas = currentCanvas();
+    if (canvas) {
+        QString displayPath = canvas->getDisplayPath();
+        
+        if (!displayPath.isEmpty() && displayPath.endsWith(".spn", Qt::CaseInsensitive)) {
+            // It's a .spn file - use its directory and name
+            QFileInfo spnInfo(displayPath);
+            QString baseName = spnInfo.completeBaseName(); // filename without extension
+            QString directory = spnInfo.absolutePath();
+            defaultPath = directory + "/" + baseName + ".pdf";
+        } else if (!displayPath.isEmpty()) {
+            // It's a folder - use folder name
+            QFileInfo folderInfo(displayPath);
+            QString folderName = folderInfo.fileName();
+            defaultPath = displayPath + "/" + folderName + ".pdf";
+        } else {
+            // Fallback
+            defaultPath = "canvas_export.pdf";
+        }
+    } else {
+        defaultPath = "canvas_export.pdf";
+    }
+    
+    QString exportPath = QFileDialog::getSaveFileName(this, 
+        tr("Export Canvas Notebook to PDF"), 
+        defaultPath, 
+        "PDF Files (*.pdf)");
+    
+    if (exportPath.isEmpty()) {
+        return; // User cancelled
+    }
+    
+    // Ensure .pdf extension
+    if (!exportPath.toLower().endsWith(".pdf")) {
+        exportPath += ".pdf";
+    }
+    
+    // Show progress dialog
+    QProgressDialog progress(tr("Creating PDF from canvas pages..."), tr("Cancel"), 0, sortedPages.size(), this);
+    progress.setWindowModality(Qt::WindowModal);
+    progress.setMinimumDuration(0);
+    
+    // Load first page to determine size
+    QImage firstImage(pageFiles[sortedPages.first()]);
+    if (firstImage.isNull()) {
+        QMessageBox::critical(this, tr("Export Failed"), 
+            tr("Failed to read canvas pages."));
+        return;
+    }
+    
+    // Create QPdfWriter
+    QPdfWriter pdfWriter(exportPath);
+    pdfWriter.setResolution(pdfRenderDPI);
+    
+    // Calculate page size in points (1/72 inch) from image size and DPI
+    // imageWidth pixels / DPI * 72 = points
+    qreal pageWidthPoints = (firstImage.width() * 72.0) / pdfRenderDPI;
+    qreal pageHeightPoints = (firstImage.height() * 72.0) / pdfRenderDPI;
+    
+    pdfWriter.setPageSize(QPageSize(QSizeF(pageWidthPoints, pageHeightPoints), QPageSize::Point));
+    pdfWriter.setPageMargins(QMarginsF(0, 0, 0, 0));
+    
+    QPainter painter;
+    if (!painter.begin(&pdfWriter)) {
+        QMessageBox::critical(this, tr("Export Failed"), 
+            tr("Failed to create PDF file."));
+        return;
+    }
+    
+    // Export each page
+    for (int i = 0; i < sortedPages.size(); ++i) {
+        if (progress.wasCanceled()) {
+            painter.end();
+            QFile::remove(exportPath);
+            return;
+        }
+        
+        int pageNum = sortedPages[i];
+        progress.setValue(i);
+        progress.setLabelText(tr("Exporting page %1 of %2...").arg(pageNum + 1).arg(sortedPages.size()));
+        QCoreApplication::processEvents();
+        
+        // Add new page if not the first
+        if (i > 0) {
+            pdfWriter.newPage();
+        }
+        
+        // Load and draw canvas image
+        QImage canvasImage(pageFiles[pageNum]);
+        if (!canvasImage.isNull()) {
+            QSizeF targetSize = pdfWriter.pageLayout().paintRectPixels(pdfRenderDPI).size();
+            QRectF targetRect(0, 0, targetSize.width(), targetSize.height());
+            painter.drawImage(targetRect, canvasImage);
+        }
+    }
+    
+    painter.end();
+    progress.setValue(sortedPages.size());
+    
+    QFileInfo outputInfo(exportPath);
+    QMessageBox::information(this, tr("Export Complete"), 
+        tr("Canvas notebook exported successfully!\n\n"
+           "Pages exported: %1\n"
+           "Output size: %2 MB\n"
+           "Saved to: %3")
+        .arg(sortedPages.size())
+        .arg(outputInfo.size() / 1024.0 / 1024.0, 0, 'f', 2)
+        .arg(exportPath));
+}
+
+// Helper function for full render fallback
+void MainWindow::exportAnnotatedPdfFullRender(const QString &exportPath, const QSet<int> &annotatedPages) {
+    InkCanvas *canvas = currentCanvas();
+    if (!canvas) return;
+    
+    Poppler::Document* pdfDoc = canvas->getPdfDocument();
+    QString saveFolder = canvas->getSaveFolder();
+    QString notebookId = canvas->getNotebookId();
+    int totalPages = canvas->getTotalPdfPages();
+
+    QProgressDialog progress(tr("Exporting annotated PDF..."), tr("Cancel"), 0, totalPages, this);
+    progress.setWindowModality(Qt::WindowModal);
+    progress.setMinimumDuration(0);
+
+    QPdfWriter pdfWriter(exportPath);
+    pdfWriter.setResolution(pdfRenderDPI);
+    
+    std::unique_ptr<Poppler::Page> firstPage(pdfDoc->page(0));
+    if (!firstPage) return;
+    
+    QSizeF pageSize = firstPage->pageSizeF();
+    pdfWriter.setPageSize(QPageSize(pageSize, QPageSize::Point));
+    pdfWriter.setPageMargins(QMarginsF(0, 0, 0, 0));
+
+    QPainter painter;
+    if (!painter.begin(&pdfWriter)) {
+        QMessageBox::critical(this, tr("Export Failed"), 
+            tr("Failed to create PDF file."));
+        return;
+    }
+
+    for (int pageNum = 0; pageNum < totalPages; ++pageNum) {
+        if (progress.wasCanceled()) {
+            painter.end();
+            QFile::remove(exportPath);
+            return;
+        }
+
+        progress.setValue(pageNum);
+        if (annotatedPages.contains(pageNum)) {
+            progress.setLabelText(tr("Rendering page %1 of %2 (annotated)...").arg(pageNum + 1).arg(totalPages));
+        } else {
+            progress.setLabelText(tr("Rendering page %1 of %2...").arg(pageNum + 1).arg(totalPages));
+        }
+        QCoreApplication::processEvents();
+
+        if (pageNum > 0) {
+            pdfWriter.newPage();
+        }
+
+        std::unique_ptr<Poppler::Page> pdfPage(pdfDoc->page(pageNum));
+        if (!pdfPage) continue;
+
+        QImage pdfImage = pdfPage->renderToImage(pdfRenderDPI, pdfRenderDPI);
+        if (pdfImage.isNull()) continue;
+
+        QSizeF targetSize = pdfWriter.pageLayout().paintRectPixels(pdfRenderDPI).size();
+        QRectF targetRect(0, 0, targetSize.width(), targetSize.height());
+
+        painter.drawImage(targetRect, pdfImage);
+
+        // Overlay annotations only if they exist
+        if (annotatedPages.contains(pageNum)) {
+            QString canvasFile = saveFolder + QString("/%1_%2.png")
+                                .arg(notebookId)
+                                .arg(pageNum, 5, 10, QChar('0'));
+
+            if (QFile::exists(canvasFile)) {
+                QImage canvasImage(canvasFile);
+                if (!canvasImage.isNull()) {
+                    painter.drawImage(targetRect, canvasImage);
+                }
+            }
+        }
+    }
+
+    painter.end();
+    progress.setValue(totalPages);
+
+    QMessageBox::information(this, tr("Export Complete"), 
+        tr("Annotated PDF exported to:\n%1").arg(exportPath));
+}
+
+// Helper function to create PDF with only annotated pages
+bool MainWindow::createAnnotatedPagesPdf(const QString &outputPath, const QList<int> &pages, QProgressDialog &progress) {
+    InkCanvas *canvas = currentCanvas();
+    if (!canvas) return false;
+    
+    Poppler::Document* pdfDoc = canvas->getPdfDocument();
+    QString saveFolder = canvas->getSaveFolder();
+    QString notebookId = canvas->getNotebookId();
+
+    QPdfWriter pdfWriter(outputPath);
+    pdfWriter.setResolution(pdfRenderDPI);
+    
+    std::unique_ptr<Poppler::Page> firstPage(pdfDoc->page(pages.first()));
+    if (!firstPage) return false;
+    
+    QSizeF pageSize = firstPage->pageSizeF();
+    pdfWriter.setPageSize(QPageSize(pageSize, QPageSize::Point));
+    pdfWriter.setPageMargins(QMarginsF(0, 0, 0, 0));
+
+    QPainter painter;
+    if (!painter.begin(&pdfWriter)) return false;
+
+    for (int i = 0; i < pages.size(); ++i) {
+        if (progress.wasCanceled()) {
+            painter.end();
+            return false;
+        }
+
+        int pageNum = pages[i];
+        progress.setValue(i);
+        progress.setLabelText(tr("Rendering page %1...").arg(pageNum + 1));
+        QCoreApplication::processEvents();
+
+        if (i > 0) {
+            pdfWriter.newPage();
+        }
+
+        std::unique_ptr<Poppler::Page> pdfPage(pdfDoc->page(pageNum));
+        if (!pdfPage) continue;
+
+        QImage pdfImage = pdfPage->renderToImage(pdfRenderDPI, pdfRenderDPI);
+        if (pdfImage.isNull()) continue;
+
+        QSizeF targetSize = pdfWriter.pageLayout().paintRectPixels(pdfRenderDPI).size();
+        QRectF targetRect(0, 0, targetSize.width(), targetSize.height());
+
+        painter.drawImage(targetRect, pdfImage);
+
+        QString canvasFile = saveFolder + QString("/%1_%2.png")
+                            .arg(notebookId)
+                            .arg(pageNum, 5, 10, QChar('0'));
+
+        if (QFile::exists(canvasFile)) {
+            QImage canvasImage(canvasFile);
+            if (!canvasImage.isNull()) {
+                painter.drawImage(targetRect, canvasImage);
+            }
+        }
+    }
+
+    painter.end();
+    return true;
+}
+
+// Helper function to merge using pdftk
+bool MainWindow::mergePdfWithPdftk(const QString &originalPdf, const QString &annotatedPagesPdf, 
+                                    const QString &outputPdf, const QList<int> &annotatedPageNumbers,
+                                    QString *errorMsg) {
+    // Strategy: Use pdftk's "cat" command to assemble pages from original and annotated PDFs
+    // This reads through the PDF only once and assembles pages in order
+    // Note: pdftk is single-threaded by design, no way to parallelize
+    
+    InkCanvas *canvas = currentCanvas();
+    if (!canvas) return false;
+    
+    int totalPages = canvas->getTotalPdfPages();
+    
+    // Create a map for quick lookup
+    QMap<int, int> annotatedPageMap; // originalPageNum -> indexInAnnotatedPdf
+    for (int i = 0; i < annotatedPageNumbers.size(); ++i) {
+        annotatedPageMap[annotatedPageNumbers[i]] = i;
+    }
+    
+    // Build the page specification string
+    QStringList pageSpecs;
+    int lastProcessedPage = -1;
+    
+    for (int pageNum = 0; pageNum < totalPages; ++pageNum) {
+        if (annotatedPageMap.contains(pageNum)) {
+            // Need to add pages from original up to (but not including) this page
+            if (pageNum > lastProcessedPage + 1) {
+                int rangeStart = lastProcessedPage + 2; // pdftk uses 1-based indexing
+                int rangeEnd = pageNum; // This page will be from annotated
+                if (rangeStart == rangeEnd) {
+                    pageSpecs << QString("A%1").arg(rangeStart);
+                } else {
+                    pageSpecs << QString("A%1-%2").arg(rangeStart).arg(rangeEnd);
+                }
+            }
+            
+            // Add the annotated page
+            int annotatedIndex = annotatedPageMap[pageNum];
+            pageSpecs << QString("B%1").arg(annotatedIndex + 1); // 1-based
+            lastProcessedPage = pageNum;
+        }
+    }
+    
+    // Add remaining pages from original if any
+    if (lastProcessedPage < totalPages - 1) {
+        int rangeStart = lastProcessedPage + 2;
+        pageSpecs << QString("A%1-end").arg(rangeStart);
+    }
+    
+    // Build pdftk command with compression for faster output
+    QProcess pdftkProcess;
+    QStringList args;
+    args << "A=" + originalPdf
+         << "B=" + annotatedPagesPdf
+         << "cat";
+    args << pageSpecs;  // Add each page spec as separate argument
+    args << "output" << outputPdf
+         << "compress";  // Enable compression for faster writing
+    
+    pdftkProcess.start("pdftk", args);
+    if (!pdftkProcess.waitForFinished(300000) || pdftkProcess.exitCode() != 0) { // 5 minute timeout
+        if (errorMsg) {
+            *errorMsg = QString("pdftk merge failed:\nStderr: %1\nExit code: %2")
+                .arg(QString(pdftkProcess.readAllStandardError()))
+                .arg(pdftkProcess.exitCode());
+        }
+        return false;
+    }
+    
+    return true;
+}
+
+// Helper function to merge using qpdf  
+bool MainWindow::mergePdfWithQpdf(const QString &originalPdf, const QString &annotatedPagesPdf,
+                                   const QString &outputPdf, const QList<int> &annotatedPageNumbers,
+                                   QString *errorMsg) {
+    // Strategy: Replace individual pages in the original PDF with annotated versions
+    // This avoids command-line length issues with large PDFs
+    
+    QString tempDir = QDir::temp().path();
+    QString workingPdf = outputPdf;
+    
+    // Step 1: Copy original to output
+    if (!QFile::copy(originalPdf, workingPdf)) {
+        QFile::remove(workingPdf);
+        if (!QFile::copy(originalPdf, workingPdf)) {
+            return false;
+        }
+    }
+    QFile::setPermissions(workingPdf, QFile::WriteOwner | QFile::ReadOwner | QFile::ReadGroup | QFile::ReadOther);
+    
+    // Step 2: For each annotated page, replace it in the working PDF
+    for (int i = 0; i < annotatedPageNumbers.size(); ++i) {
+        int pageNum = annotatedPageNumbers[i]; // 0-based
+        QString tempOut = tempDir + QString("/speedynote_working_%1.pdf").arg(i);
+        
+        // Use qpdf to replace page pageNum+1 with page i+1 from annotatedPagesPdf
+        // Strategy: Extract all pages except pageNum+1 from working, insert annotated page at that position
+        
+        // Build page ranges: 1-(pageNum), annotatedPage, (pageNum+2)-end
+        QProcess replaceProcess;
+        QStringList replaceArgs;
+        replaceArgs << "--empty" << "--pages";
+        
+        // Pages before the annotated page
+        if (pageNum > 0) {
+            replaceArgs << workingPdf << "1-" + QString::number(pageNum);
+        }
+        
+        // The annotated page
+        replaceArgs << annotatedPagesPdf << QString::number(i + 1);
+        
+        // Pages after the annotated page
+        InkCanvas *canvas = currentCanvas();
+        if (canvas) {
+            int totalPages = canvas->getTotalPdfPages();
+            if (pageNum < totalPages - 1) {
+                replaceArgs << workingPdf << QString::number(pageNum + 2) + "-z";
+            }
+        }
+        
+        replaceArgs << "--" << tempOut;
+        
+        replaceProcess.start("qpdf", replaceArgs);
+        if (!replaceProcess.waitForFinished(30000) || replaceProcess.exitCode() != 0) {
+            QString errorMsg = QString("qpdf page replacement failed for page %1:\nCommand: qpdf %2\nStderr: %3")
+                .arg(pageNum + 1)
+                .arg(replaceArgs.join(" "))
+                .arg(QString(replaceProcess.readAllStandardError()));
+            QMessageBox::critical(nullptr, "qpdf Error", errorMsg);
+            QFile::remove(tempOut);
+            return false;
+        }
+        
+        // Replace working PDF with result
+        QFile::remove(workingPdf);
+        if (!QFile::copy(tempOut, workingPdf)) {
+            QFile::remove(tempOut);
+            return false;
+        }
+        QFile::setPermissions(workingPdf, QFile::WriteOwner | QFile::ReadOwner | QFile::ReadGroup | QFile::ReadOther);
+        QFile::remove(tempOut);
+    }
+    
+    return true;
 }
 
 
@@ -4148,6 +4873,7 @@ void MainWindow::updateTheme() {
     if (selectFolderButton) selectFolderButton->setIcon(loadThemedIcon("folder"));
     if (saveButton) saveButton->setIcon(loadThemedIcon("save"));
     if (saveAnnotatedButton) saveAnnotatedButton->setIcon(loadThemedIcon("saveannotated"));
+    if (exportPdfButton) exportPdfButton->setIcon(loadThemedIcon("pdf"));
     if (fullscreenButton) fullscreenButton->setIcon(loadThemedIcon("fullscreen"));
     // if (backgroundButton) backgroundButton->setIcon(loadThemedIcon("background"));
     updateButtonIcon(straightLineToggleButton, "straightLine");
@@ -5698,6 +6424,7 @@ void MainWindow::createSingleRowLayout() {
     // newLayout->addWidget(backgroundButton);
     newLayout->addWidget(saveButton);
     newLayout->addWidget(saveAnnotatedButton);
+    newLayout->addWidget(exportPdfButton);
     newLayout->addWidget(openControlPanelButton);
     // openRecentNotebooksButton is now in tab bar layout, not toolbar
     newLayout->addWidget(redButton);
@@ -5791,6 +6518,7 @@ void MainWindow::createTwoRowLayout() {
     // newFirstRowLayout->addWidget(backgroundButton);
     newFirstRowLayout->addWidget(saveButton);
     newFirstRowLayout->addWidget(saveAnnotatedButton);
+    newFirstRowLayout->addWidget(exportPdfButton);
     newFirstRowLayout->addWidget(openControlPanelButton);
     // openRecentNotebooksButton is now in tab bar layout, not toolbar
     newFirstRowLayout->addWidget(redButton);
