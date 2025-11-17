@@ -144,5 +144,26 @@ Write-Host "Copied $copiedCount DLL(s) from $toolchain\bin" -ForegroundColor Gre
 
 # Copy share folder
 Copy-Item -Path "$toolchainPath\share\poppler" -Destination "..\build\share\poppler" -Recurse -Force
+
+# ✅ Copy pdftk for optimized PDF export (if available in MSYS2)
+$pdftkExe = "$toolchainPath\bin\pdftk.exe"
+
+if (Test-Path $pdftkExe) {
+    Copy-Item -Path $pdftkExe -Destination "pdftk.exe" -Force
+    Write-Host "✅ Copied pdftk.exe from MSYS2 for optimized PDF export" -ForegroundColor Green
+} else {
+    Write-Host "ℹ️  pdftk.exe not found in MSYS2 - checking system PATH..." -ForegroundColor Cyan
+    
+    # Check if pdftk is available in system PATH (e.g., installed from pdftk.com)
+    try {
+        $pdftkCheck = Get-Command pdftk -ErrorAction Stop
+        Write-Host "✅ Found pdftk in system PATH: $($pdftkCheck.Source)" -ForegroundColor Green
+    } catch {
+        Write-Host "⚠️  pdftk not found - PDF export will use slower fallback method" -ForegroundColor Yellow
+        Write-Host "   Option 1: pacman -S mingw-w64-$toolchain-pdftk" -ForegroundColor Yellow
+        Write-Host "   Option 2: Download from https://www.pdflabs.com/tools/pdftk-the-pdf-toolkit/" -ForegroundColor Yellow
+    }
+}
+
 ./NoteApp.exe
 cd ../

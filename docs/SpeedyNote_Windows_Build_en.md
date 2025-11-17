@@ -24,10 +24,11 @@ Install these packages:
 
 ```bash
 pacman -S mingw-w64-clang-x86_64-toolchain mingw-w64-clang-x86_64-cmake mingw-w64-clang-x86_64-pkgconf
-pacman -S mingw-w64-clang-x86_64-qt6-base mingw-w64-clang-x86_64-qt6-tools
+pacman -S mingw-w64-clang-x86_64-qt6-base mingw-w64-clang-x86_64-qt6-tools mingw-w64-clang-x86_64-qt6-declarative mingw-w64-clang-x86_64-qt6-translations
 pacman -S mingw-w64-clang-x86_64-poppler mingw-w64-clang-x86_64-poppler-qt6
 pacman -S mingw-w64-clang-x86_64-SDL2
 ```
+``mingw-w64-clang-x86_64-pkgconf`` is only used for ``lupdate-qt6.exe`` to parse the new translations.
 
 **For ARM64 systems:** Replace `x86_64` with `aarch64` in the commands above, and use `clangarm64` instead of `clang64` in the paths below. 
 

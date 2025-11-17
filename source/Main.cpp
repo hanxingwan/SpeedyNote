@@ -133,8 +133,8 @@ int main(int argc, char *argv[]) {
     AllocConsole();
     freopen("CONOUT$", "w", stdout);
     freopen("CONOUT$", "w", stderr);
-    */
     
+    */
     
      // to show console for debugging
     

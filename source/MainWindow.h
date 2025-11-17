@@ -12,6 +12,8 @@
 #include <QScrollBar>
 #include <QComboBox>
 #include <QSpinBox>
+#include <QRadioButton>
+#include <QDialog>
 #include <QFileDialog>
 #include <QListWidget>
 #include <QStackedWidget>
@@ -40,6 +42,7 @@
 
 // Forward declarations
 class QTreeWidgetItem;
+class QProgressDialog;
 namespace Poppler { 
     class Document; 
     class OutlineItem;
@@ -317,12 +320,20 @@ private slots:
     void adjustThicknessForZoom(int oldZoom, int newZoom); // Adjust thickness when zoom changes
     void changeTool(int index);
     void saveCanvas(); // Save canvas to file
-    void saveAnnotated();
     void deleteCurrentPage();
 
     void loadPdf();
     void clearPdf();
     void handleSmartPdfButton(); // ✅ Smart PDF button that handles all PDF operations
+    void exportAnnotatedPdf(); // Export PDF with all annotations overlaid
+    void exportCanvasOnlyNotebook(const QString &saveFolder, const QString &notebookId); // Export canvas-only notebook (no PDF)
+    void exportAnnotatedPdfFullRender(const QString &exportPath, const QSet<int> &annotatedPages); // Full render fallback
+    bool createAnnotatedPagesPdf(const QString &outputPath, const QList<int> &pages, QProgressDialog &progress); // Create temp PDF
+    bool mergePdfWithPdftk(const QString &originalPdf, const QString &annotatedPagesPdf, const QString &outputPdf, const QList<int> &annotatedPageNumbers, QString *errorMsg = nullptr, bool exportWholeDocument = true, int exportStartPage = 0, int exportEndPage = -1); // Merge using pdftk
+    bool mergePdfWithQpdf(const QString &originalPdf, const QString &annotatedPagesPdf, const QString &outputPdf, const QList<int> &annotatedPageNumbers, QString *errorMsg = nullptr); // Merge using qpdf
+    
+    // Helper function to show page range dialog (returns false if cancelled)
+    bool showPageRangeDialog(int totalPages, bool &exportWholeDocument, int &startPage, int &endPage);
 
     void updateZoom();
     void onZoomSliderChanged(int value); // Handle manual zoom slider changes
@@ -404,8 +415,6 @@ public slots:
     void onEarlySaveRequested();
 
 private:
-    void onAnnotatedImageSaved(const QString &filePath); // ✅ Handle annotated image saved notification
-
     void setPenTool();               // Set pen tool
     void setMarkerTool();            // Set marker tool
     void setEraserTool();            // Set eraser tool
@@ -462,13 +471,13 @@ private:
     QPushButton *deletePageButton;
     QPushButton *selectFolderButton; // Button to select folder
     QPushButton *saveButton; // Button to save file
-    QPushButton *saveAnnotatedButton;
     QPushButton *fullscreenButton;
     QPushButton *openControlPanelButton;
     QPushButton *openRecentNotebooksButton; // Added button
 
     QPushButton *loadPdfButton;
     QPushButton *clearPdfButton;
+    QPushButton *exportPdfButton; // Button to export annotated PDF
     QPushButton *pdfTextSelectButton; // Button to toggle PDF text selection mode
     QPushButton *toggleTabBarButton;
 
