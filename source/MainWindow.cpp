@@ -1817,6 +1817,102 @@ void MainWindow::selectBackground() {
     }
 }
 
+// Helper function to show page range selection dialog
+bool MainWindow::showPageRangeDialog(int totalPages, bool &exportWholeDocument, int &startPage, int &endPage) {
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Select Page Range to Export"));
+    dialog.setMinimumWidth(400);
+    
+    QVBoxLayout *mainLayout = new QVBoxLayout(&dialog);
+    
+    // Info label
+    QLabel *infoLabel = new QLabel(tr("Choose which pages to export:"));
+    mainLayout->addWidget(infoLabel);
+    
+    mainLayout->addSpacing(10);
+    
+    // Radio button for whole document
+    QRadioButton *wholeDocRadio = new QRadioButton(tr("Whole document (pages 1-%1)").arg(totalPages));
+    wholeDocRadio->setChecked(true);
+    mainLayout->addWidget(wholeDocRadio);
+    
+    mainLayout->addSpacing(5);
+    
+    // Radio button for page range
+    QRadioButton *rangeRadio = new QRadioButton(tr("Page range:"));
+    mainLayout->addWidget(rangeRadio);
+    
+    // Range input layout
+    QHBoxLayout *rangeLayout = new QHBoxLayout();
+    rangeLayout->addSpacing(30); // Indent
+    
+    QLabel *fromLabel = new QLabel(tr("From:"));
+    rangeLayout->addWidget(fromLabel);
+    
+    QSpinBox *fromSpinBox = new QSpinBox();
+    fromSpinBox->setMinimum(1);
+    fromSpinBox->setMaximum(totalPages);
+    fromSpinBox->setValue(1);
+    fromSpinBox->setEnabled(false); // Initially disabled
+    rangeLayout->addWidget(fromSpinBox);
+    
+    QLabel *toLabel = new QLabel(tr("To:"));
+    rangeLayout->addWidget(toLabel);
+    
+    QSpinBox *toSpinBox = new QSpinBox();
+    toSpinBox->setMinimum(1);
+    toSpinBox->setMaximum(totalPages);
+    toSpinBox->setValue(totalPages);
+    toSpinBox->setEnabled(false); // Initially disabled
+    rangeLayout->addWidget(toSpinBox);
+    
+    rangeLayout->addStretch();
+    mainLayout->addLayout(rangeLayout);
+    
+    mainLayout->addSpacing(20);
+    
+    // Buttons
+    QHBoxLayout *buttonLayout = new QHBoxLayout();
+    buttonLayout->addStretch();
+    
+    QPushButton *okButton = new QPushButton(tr("OK"));
+    QPushButton *cancelButton = new QPushButton(tr("Cancel"));
+    
+    buttonLayout->addWidget(okButton);
+    buttonLayout->addWidget(cancelButton);
+    mainLayout->addLayout(buttonLayout);
+    
+    // Connect radio button to enable/disable spin boxes
+    connect(rangeRadio, &QRadioButton::toggled, fromSpinBox, &QSpinBox::setEnabled);
+    connect(rangeRadio, &QRadioButton::toggled, toSpinBox, &QSpinBox::setEnabled);
+    
+    // Connect buttons
+    connect(okButton, &QPushButton::clicked, &dialog, &QDialog::accept);
+    connect(cancelButton, &QPushButton::clicked, &dialog, &QDialog::reject);
+    
+    // Ensure 'from' <= 'to'
+    connect(fromSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), [=](int value) {
+        if (value > toSpinBox->value()) {
+            toSpinBox->setValue(value);
+        }
+    });
+    connect(toSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), [=](int value) {
+        if (value < fromSpinBox->value()) {
+            fromSpinBox->setValue(value);
+        }
+    });
+    
+    // Show dialog
+    if (dialog.exec() == QDialog::Accepted) {
+        exportWholeDocument = wholeDocRadio->isChecked();
+        startPage = fromSpinBox->value() - 1; // Convert to 0-based
+        endPage = toSpinBox->value() - 1; // Convert to 0-based
+        return true;
+    }
+    
+    return false; // User cancelled
+}
+
 void MainWindow::exportAnnotatedPdf() {
     InkCanvas *canvas = currentCanvas();
     if (!canvas) return;
@@ -1855,6 +1951,19 @@ void MainWindow::exportAnnotatedPdf() {
             tr("Cannot export: PDF path not found."));
         return;
     }
+    
+    // Show page range selection dialog
+    bool exportWholeDocument = true;
+    int userStartPage = 0;
+    int userEndPage = totalPages - 1;
+    
+    if (!showPageRangeDialog(totalPages, exportWholeDocument, userStartPage, userEndPage)) {
+        return; // User cancelled
+    }
+    
+    // Apply page range filter
+    int exportStartPage = exportWholeDocument ? 0 : userStartPage;
+    int exportEndPage = exportWholeDocument ? totalPages - 1 : userEndPage;
 
     // Ask user where to save the exported PDF
     // Default to same location as .spn file with similar name
@@ -1891,18 +2000,20 @@ void MainWindow::exportAnnotatedPdf() {
         exportPath += ".pdf";
     }
 
-    // First pass: identify which pages have annotations
+    // First pass: identify which pages have annotations (within selected range)
     QSet<int> annotatedPages;
-    QProgressDialog scanProgress(tr("Scanning for annotated pages..."), tr("Cancel"), 0, totalPages, this);
+    int scanPageCount = exportEndPage - exportStartPage + 1;
+    QProgressDialog scanProgress(tr("Scanning for annotated pages..."), tr("Cancel"), 0, scanPageCount, this);
     scanProgress.setWindowModality(Qt::WindowModal);
     scanProgress.setMinimumDuration(500);
     
-    for (int pageNum = 0; pageNum < totalPages; ++pageNum) {
+    int scanIdx = 0;
+    for (int pageNum = exportStartPage; pageNum <= exportEndPage; ++pageNum) {
         if (scanProgress.wasCanceled()) {
             return;
         }
         
-        scanProgress.setValue(pageNum);
+        scanProgress.setValue(scanIdx);
         QCoreApplication::processEvents();
         
         QString canvasFile = saveFolder + QString("/%1_%2.png")
@@ -1916,29 +2027,55 @@ void MainWindow::exportAnnotatedPdf() {
                 annotatedPages.insert(pageNum);
             }
         }
+        scanIdx++;
     }
-    scanProgress.setValue(totalPages);
+    scanProgress.setValue(scanPageCount);
 
     if (annotatedPages.isEmpty()) {
-        QMessageBox::information(this, tr("No Annotations"), 
-            tr("No annotated pages found. The output will be identical to the original PDF."));
-        
-        // Just copy the original PDF
-        if (QFile::copy(originalPdfPath, exportPath)) {
-            QMessageBox::information(this, tr("Export Complete"), 
-                tr("PDF copied successfully (no annotations to add)."));
+        // No annotations found in selected page range
+        if (exportWholeDocument) {
+            QMessageBox::information(this, tr("No Annotations"), 
+                tr("No annotated pages found. The output will be identical to the original PDF."));
+            
+            // Just copy the original PDF
+            if (QFile::copy(originalPdfPath, exportPath)) {
+                QMessageBox::information(this, tr("Export Complete"), 
+                    tr("PDF copied successfully (no annotations to add)."));
+            } else {
+                QMessageBox::critical(this, tr("Export Failed"), 
+                    tr("Failed to copy original PDF."));
+            }
+            return;
         } else {
-            QMessageBox::critical(this, tr("Export Failed"), 
-                tr("Failed to copy original PDF."));
+            // User selected a page range, but no annotations - extract that range using pdftk
+            QProcess pdftkProcess;
+            QStringList args;
+            args << originalPdfPath;
+            args << "cat";
+            args << QString("%1-%2").arg(exportStartPage + 1).arg(exportEndPage + 1); // pdftk uses 1-based indexing
+            args << "output";
+            args << exportPath;
+            
+            pdftkProcess.start("pdftk", args);
+            if (!pdftkProcess.waitForFinished(30000) || pdftkProcess.exitCode() != 0) {
+                QMessageBox::critical(this, tr("Export Failed"), 
+                    tr("Failed to extract page range from PDF.\n\nError: %1")
+                    .arg(QString::fromUtf8(pdftkProcess.readAllStandardError())));
+                return;
+            }
+            
+            QMessageBox::information(this, tr("Export Complete"), 
+                tr("Pages %1-%2 exported successfully (no annotations found in this range).").arg(exportStartPage + 1).arg(exportEndPage + 1));
+            return;
         }
-        return;
     }
 
     // Try to use pdftk or qpdf for efficient merging (only annotated pages need rendering)
     QString tempAnnotatedPdf = QDir::temp().filePath("speedynote_annotated_pages.pdf");
     QString stampFile = QDir::temp().filePath("speedynote_stamp_pages.pdf");
     
-    // Strategy: Create a PDF with only annotated pages, then use pdftk/qpdf to overlay
+    // Strategy: Create a PDF with only annotated pages (using original page numbers),
+    // then use pdftk to merge and extract the desired range in one operation
     // If those tools aren't available, fall back to full re-render (but inform user)
     
     // Check if pdftk or qpdf is available
@@ -1957,15 +2094,16 @@ void MainWindow::exportAnnotatedPdf() {
 
     if (overlayTool.isEmpty()) {
         // No external tool available - inform user and use slower method
+        int pageCount = exportWholeDocument ? totalPages : (exportEndPage - exportStartPage + 1);
         QMessageBox::StandardButton reply = QMessageBox::question(this, 
             tr("Optimization Not Available"),
-            tr("Found %1 annotated pages out of %2 total pages.\n\n"
+            tr("Found %1 annotated pages out of %2 total pages in selected range.\n\n"
                "For fast export, please install 'pdftk' or 'qpdf':\n"
                "  MSYS2: pacman -S mingw-w64-clang-x86_64-pdftk\n\n"
                "Without these tools, export requires re-rendering all %2 pages.\n"
                "On slow systems this may take over an hour.\n\n"
                "Continue with slow export anyway?")
-            .arg(annotatedPages.size()).arg(totalPages),
+            .arg(annotatedPages.size()).arg(pageCount),
             QMessageBox::Yes | QMessageBox::No);
         
         if (reply == QMessageBox::No) {
@@ -1985,7 +2123,7 @@ void MainWindow::exportAnnotatedPdf() {
     QList<int> sortedPages = annotatedPages.values();
     std::sort(sortedPages.begin(), sortedPages.end());
     
-    // Create temporary annotated pages PDF
+    // Create temporary annotated pages PDF (using original page numbers)
     if (!createAnnotatedPagesPdf(tempAnnotatedPdf, sortedPages, progress)) {
         QFile::remove(tempAnnotatedPdf);
         return;
@@ -2035,6 +2173,8 @@ void MainWindow::exportAnnotatedPdf() {
                 QFileInfo outputInfo(exportPath);
                 QFileInfo originalInfo(originalPdfPath);
                 
+                int exportedPageCount = exportWholeDocument ? totalPages : (exportEndPage - exportStartPage + 1);
+                
                 QMessageBox::information(mainWindowPtr, tr("Export Complete"), 
                     tr("Annotated PDF exported successfully!\n\n"
                        "Annotated pages: %1 of %2\n"
@@ -2042,7 +2182,7 @@ void MainWindow::exportAnnotatedPdf() {
                        "Output size: %4 MB\n"
                        "Saved to: %5")
                     .arg(annotatedPages.size())
-                    .arg(totalPages)
+                    .arg(exportedPageCount)
                     .arg(originalInfo.size() / 1024.0 / 1024.0, 0, 'f', 2)
                     .arg(outputInfo.size() / 1024.0 / 1024.0, 0, 'f', 2)
                     .arg(exportPath));
@@ -2069,9 +2209,12 @@ void MainWindow::exportAnnotatedPdf() {
     });
     
     // Start the background task
+    // Pass exportStartPage and exportEndPage to handle page range extraction during merge
     QFuture<bool> mergeFuture = QtConcurrent::run([=]() {
         if (overlayTool == "pdftk") {
-            return mergePdfWithPdftk(originalPdfPath, tempAnnotatedPdf, exportPath, sortedPages, mergeError);
+            // mergePdfWithPdftk will handle extracting the range if needed
+            return mergePdfWithPdftk(originalPdfPath, tempAnnotatedPdf, exportPath, sortedPages, 
+                                     mergeError, exportWholeDocument, exportStartPage, exportEndPage);
         } else if (overlayTool == "qpdf") {
             return mergePdfWithQpdf(originalPdfPath, tempAnnotatedPdf, exportPath, sortedPages, mergeError);
         }
@@ -2119,6 +2262,35 @@ void MainWindow::exportCanvasOnlyNotebook(const QString &saveFolder, const QStri
     // Get sorted list of pages
     QList<int> sortedPages = pageFiles.keys();
     std::sort(sortedPages.begin(), sortedPages.end());
+    
+    int totalPages = sortedPages.size();
+    
+    // Show page range selection dialog
+    bool exportWholeDocument = true;
+    int userStartPage = 0;
+    int userEndPage = totalPages - 1;
+    
+    if (!showPageRangeDialog(totalPages, exportWholeDocument, userStartPage, userEndPage)) {
+        return; // User cancelled
+    }
+    
+    // Apply page range filter
+    if (!exportWholeDocument) {
+        // Filter sortedPages to only include pages in the selected range
+        QList<int> filteredPages;
+        for (int i = 0; i < sortedPages.size(); ++i) {
+            if (i >= userStartPage && i <= userEndPage) {
+                filteredPages.append(sortedPages[i]);
+            }
+        }
+        sortedPages = filteredPages;
+    }
+    
+    if (sortedPages.isEmpty()) {
+        QMessageBox::information(this, tr("No Pages to Export"), 
+            tr("No pages found in the selected range."));
+        return;
+    }
     
     // Ask user where to save
     // Default to same location as .spn file with similar name
@@ -2383,7 +2555,7 @@ bool MainWindow::createAnnotatedPagesPdf(const QString &outputPath, const QList<
 // Helper function to merge using pdftk
 bool MainWindow::mergePdfWithPdftk(const QString &originalPdf, const QString &annotatedPagesPdf, 
                                     const QString &outputPdf, const QList<int> &annotatedPageNumbers,
-                                    QString *errorMsg) {
+                                    QString *errorMsg, bool exportWholeDocument, int exportStartPage, int exportEndPage) {
     // Strategy: Use pdftk's "cat" command to assemble pages from original and annotated PDFs
     // This reads through the PDF only once and assembles pages in order
     // Note: pdftk is single-threaded by design, no way to parallelize
@@ -2393,17 +2565,21 @@ bool MainWindow::mergePdfWithPdftk(const QString &originalPdf, const QString &an
     
     int totalPages = canvas->getTotalPdfPages();
     
+    // Determine the range to export
+    int startPage = exportWholeDocument ? 0 : exportStartPage;
+    int endPage = exportWholeDocument ? (totalPages - 1) : exportEndPage;
+    
     // Create a map for quick lookup
     QMap<int, int> annotatedPageMap; // originalPageNum -> indexInAnnotatedPdf
     for (int i = 0; i < annotatedPageNumbers.size(); ++i) {
         annotatedPageMap[annotatedPageNumbers[i]] = i;
     }
     
-    // Build the page specification string
+    // Build the page specification string (only for the selected range)
     QStringList pageSpecs;
-    int lastProcessedPage = -1;
+    int lastProcessedPage = startPage - 1;
     
-    for (int pageNum = 0; pageNum < totalPages; ++pageNum) {
+    for (int pageNum = startPage; pageNum <= endPage; ++pageNum) {
         if (annotatedPageMap.contains(pageNum)) {
             // Need to add pages from original up to (but not including) this page
             if (pageNum > lastProcessedPage + 1) {
@@ -2423,10 +2599,15 @@ bool MainWindow::mergePdfWithPdftk(const QString &originalPdf, const QString &an
         }
     }
     
-    // Add remaining pages from original if any
-    if (lastProcessedPage < totalPages - 1) {
+    // Add remaining pages from original if any (within the selected range)
+    if (lastProcessedPage < endPage) {
         int rangeStart = lastProcessedPage + 2;
-        pageSpecs << QString("A%1-end").arg(rangeStart);
+        int rangeEnd = endPage + 1; // 1-based
+        if (rangeStart == rangeEnd) {
+            pageSpecs << QString("A%1").arg(rangeStart);
+        } else {
+            pageSpecs << QString("A%1-%2").arg(rangeStart).arg(rangeEnd);
+        }
     }
     
     // Build pdftk command with compression for faster output

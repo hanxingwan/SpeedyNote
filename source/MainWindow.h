@@ -12,6 +12,8 @@
 #include <QScrollBar>
 #include <QComboBox>
 #include <QSpinBox>
+#include <QRadioButton>
+#include <QDialog>
 #include <QFileDialog>
 #include <QListWidget>
 #include <QStackedWidget>
@@ -327,8 +329,11 @@ private slots:
     void exportCanvasOnlyNotebook(const QString &saveFolder, const QString &notebookId); // Export canvas-only notebook (no PDF)
     void exportAnnotatedPdfFullRender(const QString &exportPath, const QSet<int> &annotatedPages); // Full render fallback
     bool createAnnotatedPagesPdf(const QString &outputPath, const QList<int> &pages, QProgressDialog &progress); // Create temp PDF
-    bool mergePdfWithPdftk(const QString &originalPdf, const QString &annotatedPagesPdf, const QString &outputPdf, const QList<int> &annotatedPageNumbers, QString *errorMsg = nullptr); // Merge using pdftk
+    bool mergePdfWithPdftk(const QString &originalPdf, const QString &annotatedPagesPdf, const QString &outputPdf, const QList<int> &annotatedPageNumbers, QString *errorMsg = nullptr, bool exportWholeDocument = true, int exportStartPage = 0, int exportEndPage = -1); // Merge using pdftk
     bool mergePdfWithQpdf(const QString &originalPdf, const QString &annotatedPagesPdf, const QString &outputPdf, const QList<int> &annotatedPageNumbers, QString *errorMsg = nullptr); // Merge using qpdf
+    
+    // Helper function to show page range dialog (returns false if cancelled)
+    bool showPageRangeDialog(int totalPages, bool &exportWholeDocument, int &startPage, int &endPage);
 
     void updateZoom();
     void onZoomSliderChanged(int value); // Handle manual zoom slider changes
