@@ -354,6 +354,29 @@ static QImage invertPdfImage(const QImage &original) {
     return inverted;
 }
 
+// Helper function to calculate contrasting text color for highlights
+// For normal mode: returns white or black based on highlight luminance
+// For inverted PDF mode: returns the inverted highlight color (original color)
+static QColor getContrastingTextColor(const QColor &highlightColor, bool isPdfInverted) {
+    if (isPdfInverted) {
+        // For inverted PDFs, use the original (non-inverted) color
+        // This means inverting the highlight color back
+        return QColor(255 - highlightColor.red(),
+                     255 - highlightColor.green(),
+                     255 - highlightColor.blue());
+    } else {
+        // For normal mode, calculate a contrasting color based on luminance
+        // Use standard luminance calculation (ITU-R BT.601)
+        int luminance = (highlightColor.red() * 299 + 
+                        highlightColor.green() * 587 + 
+                        highlightColor.blue() * 114) / 1000;
+        
+        // If highlight is dark, use white text; if light, use black text
+        return (luminance < 128) ? Qt::white : Qt::black;
+    }
+}
+
+
 void InkCanvas::setPdfInversionEnabled(bool enabled) {
     if (pdfInversionEnabled != enabled) {
         pdfInversionEnabled = enabled;
@@ -964,13 +987,20 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
         // Note: We no longer draw the selection rectangle during dragging
         // since text selection is row-based, not area-based
         
-        // Draw highlights for selected text boxes
+        // Note: Persistent highlights are now drawn directly onto cached PDF images during rendering
+        // for better performance. See drawHighlightsOnPageImage() and renderPdfPageToCacheThreadSafe()
+        
+        // Draw highlights for selected text boxes (temporary selection during text selection)
         if (!selectedTextBoxes.isEmpty()) {
-            QColor highlightColor = QColor(255, 255, 0, 100); // Semi-transparent yellow
+            // Use current pen color for highlight with semi-transparency
+            // The original PDF text will show through the transparent overlay
+            QColor highlightColor = penColor;
+            highlightColor.setAlpha(120); // Semi-transparent to let original text show through
+            
             painter.setBrush(highlightColor);
             painter.setPen(Qt::NoPen);
             
-            // Draw highlight rectangles for selected text boxes
+            // Draw highlight rectangles over the original PDF text
             for (int i = 0; i < selectedTextBoxes.size(); ++i) {
                 const Poppler::TextBox* textBox = selectedTextBoxes[i];
                 if (textBox) {
@@ -991,6 +1021,7 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
                     QRectF widgetRect(topLeft, bottomRight);
                     widgetRect = widgetRect.normalized();
                     
+                    // Draw semi-transparent rectangle - original PDF text shows through
                     painter.drawRect(widgetRect);
                 }
             }
@@ -4180,11 +4211,35 @@ void InkCanvas::showPdfTextSelectionMenu(const QPoint &position) {
     
     // Add Copy action
     QAction *copyAction = contextMenu->addAction(tr("Copy"));
-    copyAction->setIcon(QIcon(":/resources/icons/copy.png")); // You may need to add this icon
+    copyAction->setIcon(QIcon(":/resources/icons/copy.png"));
     connect(copyAction, &QAction::triggered, this, [selectedText]() {
         QClipboard *clipboard = QGuiApplication::clipboard();
         clipboard->setText(selectedText);
     });
+    
+    // Add separator
+    contextMenu->addSeparator();
+    
+    // Check if current selection is already highlighted
+    bool alreadyHighlighted = isSelectionHighlighted();
+    
+    if (alreadyHighlighted) {
+        // Add "Remove Highlight" option
+        QAction *removeHighlightAction = contextMenu->addAction(tr("Remove Highlight"));
+        removeHighlightAction->setIcon(QIcon(":/resources/icons/cross.png"));
+        connect(removeHighlightAction, &QAction::triggered, this, [this]() {
+            removeHighlightAtSelection();
+            clearPdfTextSelection();
+        });
+    } else {
+        // Add "Add Highlight" option
+        QAction *addHighlightAction = contextMenu->addAction(tr("Add Highlight"));
+        addHighlightAction->setIcon(QIcon(":/resources/icons/marker.png"));
+        connect(addHighlightAction, &QAction::triggered, this, [this]() {
+            addHighlightFromSelection();
+            clearPdfTextSelection();
+        });
+    }
     
     // Add separator
     contextMenu->addSeparator();
@@ -4198,6 +4253,222 @@ void InkCanvas::showPdfTextSelectionMenu(const QPoint &position) {
     
     // Show the menu at the specified position
     contextMenu->popup(position);
+}
+
+// Add a persistent highlight from the current text selection
+void InkCanvas::addHighlightFromSelection() {
+    if (selectedTextBoxes.isEmpty()) {
+        return; // No selection to highlight
+    }
+    
+    // Create a combined bounding box for all selected text boxes
+    QRectF combinedBoundingBox;
+    QString combinedText;
+    int highlightPage = -1;
+    
+    for (int i = 0; i < selectedTextBoxes.size(); ++i) {
+        const Poppler::TextBox* textBox = selectedTextBoxes[i];
+        if (textBox) {
+            // Get page number for this text box
+            int pageNumber = -1;
+            for (int j = 0; j < currentPdfTextBoxes.size(); ++j) {
+                if (currentPdfTextBoxes[j] == textBox) {
+                    pageNumber = (j < currentPdfTextBoxPageNumbers.size()) ? 
+                                currentPdfTextBoxPageNumbers[j] : -1;
+                    break;
+                }
+            }
+            
+            if (highlightPage == -1) {
+                highlightPage = pageNumber;
+            }
+            
+            // Combine bounding boxes
+            QRectF bbox = textBox->boundingBox();
+            if (combinedBoundingBox.isNull()) {
+                combinedBoundingBox = bbox;
+            } else {
+                combinedBoundingBox = combinedBoundingBox.united(bbox);
+            }
+            
+            // Combine text
+            QString text = textBox->text();
+            if (!text.isEmpty()) {
+                if (!combinedText.isEmpty()) {
+                    combinedText += " ";
+                }
+                combinedText += text;
+            }
+        }
+    }
+    
+    if (highlightPage == -1 || combinedBoundingBox.isNull()) {
+        return; // Invalid highlight
+    }
+    
+    // Create the highlight
+    TextHighlight highlight;
+    highlight.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    highlight.pageNumber = highlightPage;
+    highlight.boundingBox = combinedBoundingBox;
+    highlight.text = combinedText;
+    highlight.color = penColor; // Use current pen color
+    highlight.markdownWindowId = ""; // No markdown window yet (for Step 3)
+    
+    // Add to persistent highlights
+    persistentHighlights.append(highlight);
+    
+    // Save to metadata
+    saveHighlightsToMetadata();
+    
+    // Mark as edited
+    setEdited(true);
+    
+    // Clear PDF cache to force re-rendering with new highlights
+    clearPdfCache();
+    
+    // Refresh display
+    update();
+}
+
+// Remove highlight(s) that overlap with the current selection
+void InkCanvas::removeHighlightAtSelection() {
+    if (selectedTextBoxes.isEmpty()) {
+        return; // No selection
+    }
+    
+    // Get the combined bounding box of the selection
+    QRectF selectionBoundingBox;
+    int selectionPage = -1;
+    
+    for (int i = 0; i < selectedTextBoxes.size(); ++i) {
+        const Poppler::TextBox* textBox = selectedTextBoxes[i];
+        if (textBox) {
+            // Get page number for this text box
+            int pageNumber = -1;
+            for (int j = 0; j < currentPdfTextBoxes.size(); ++j) {
+                if (currentPdfTextBoxes[j] == textBox) {
+                    pageNumber = (j < currentPdfTextBoxPageNumbers.size()) ? 
+                                currentPdfTextBoxPageNumbers[j] : -1;
+                    break;
+                }
+            }
+            
+            if (selectionPage == -1) {
+                selectionPage = pageNumber;
+            }
+            
+            QRectF bbox = textBox->boundingBox();
+            if (selectionBoundingBox.isNull()) {
+                selectionBoundingBox = bbox;
+            } else {
+                selectionBoundingBox = selectionBoundingBox.united(bbox);
+            }
+        }
+    }
+    
+    if (selectionPage == -1) {
+        return;
+    }
+    
+    // Remove highlights that intersect with the selection
+    bool removed = false;
+    for (int i = persistentHighlights.size() - 1; i >= 0; --i) {
+        const TextHighlight &highlight = persistentHighlights[i];
+        if (highlight.pageNumber == selectionPage && 
+            highlight.boundingBox.intersects(selectionBoundingBox)) {
+            persistentHighlights.removeAt(i);
+            removed = true;
+        }
+    }
+    
+    if (removed) {
+        // Save to metadata
+        saveHighlightsToMetadata();
+        
+        // Mark as edited
+        setEdited(true);
+        
+        // Clear PDF cache to force re-rendering without removed highlights
+        clearPdfCache();
+        
+        // Refresh display
+        update();
+    }
+}
+
+// Check if the current selection overlaps with any persistent highlight
+bool InkCanvas::isSelectionHighlighted() const {
+    if (selectedTextBoxes.isEmpty()) {
+        return false;
+    }
+    
+    // Get the combined bounding box of the selection
+    QRectF selectionBoundingBox;
+    int selectionPage = -1;
+    
+    for (int i = 0; i < selectedTextBoxes.size(); ++i) {
+        const Poppler::TextBox* textBox = selectedTextBoxes[i];
+        if (textBox) {
+            // Get page number for this text box
+            int pageNumber = -1;
+            for (int j = 0; j < currentPdfTextBoxes.size(); ++j) {
+                if (currentPdfTextBoxes[j] == textBox) {
+                    pageNumber = (j < currentPdfTextBoxPageNumbers.size()) ? 
+                                currentPdfTextBoxPageNumbers[j] : -1;
+                    break;
+                }
+            }
+            
+            if (selectionPage == -1) {
+                selectionPage = pageNumber;
+            }
+            
+            QRectF bbox = textBox->boundingBox();
+            if (selectionBoundingBox.isNull()) {
+                selectionBoundingBox = bbox;
+            } else {
+                selectionBoundingBox = selectionBoundingBox.united(bbox);
+            }
+        }
+    }
+    
+    if (selectionPage == -1) {
+        return false;
+    }
+    
+    // Check if any highlight intersects with the selection
+    for (const TextHighlight &highlight : persistentHighlights) {
+        if (highlight.pageNumber == selectionPage && 
+            highlight.boundingBox.intersects(selectionBoundingBox)) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+// Get all highlights for a specific page
+QList<TextHighlight> InkCanvas::getHighlightsForPage(int pageNumber) const {
+    QList<TextHighlight> pageHighlights;
+    for (const TextHighlight &highlight : persistentHighlights) {
+        if (highlight.pageNumber == pageNumber) {
+            pageHighlights.append(highlight);
+        }
+    }
+    return pageHighlights;
+}
+
+// Save highlights to metadata (standalone method for Step 3)
+void InkCanvas::saveHighlightsToMetadata() {
+    // Just call the main save function which now includes highlights
+    saveNotebookMetadata();
+}
+
+// Load highlights from metadata (standalone method for Step 3)
+void InkCanvas::loadHighlightsFromMetadata() {
+    // Just call the main load function which now includes highlights
+    loadNotebookMetadata();
 }
 
 void InkCanvas::processPendingTextSelection() {
@@ -4214,6 +4485,62 @@ void InkCanvas::processPendingTextSelection() {
 
 bool InkCanvas::isValidPageNumber(int pageNumber) const {
     return (pageNumber >= 0 && pageNumber < totalPdfPages);
+}
+
+// Helper method to draw highlights onto a PDF page image during rendering/caching
+void InkCanvas::drawHighlightsOnPageImage(QImage &pageImage, int pageNumber, Poppler::Document* pdfDoc) {
+    if (pageImage.isNull() || !pdfDoc || persistentHighlights.isEmpty()) {
+        return;
+    }
+    
+    // Get page size in PDF coordinates
+    std::unique_ptr<Poppler::Page> pdfPage(pdfDoc->page(pageNumber));
+    if (!pdfPage) {
+        return;
+    }
+    QSizeF pdfPageSize = pdfPage->pageSizeF();
+    
+    // Find all highlights for this page
+    QList<TextHighlight> pageHighlights;
+    for (const TextHighlight &highlight : persistentHighlights) {
+        if (highlight.pageNumber == pageNumber) {
+            pageHighlights.append(highlight);
+        }
+    }
+    
+    if (pageHighlights.isEmpty()) {
+        return; // No highlights for this page
+    }
+    
+    // Create painter for the image
+    QPainter painter(&pageImage);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    
+    // Calculate scale from PDF coordinates to image coordinates
+    qreal scaleX = pageImage.width() / pdfPageSize.width();
+    qreal scaleY = pageImage.height() / pdfPageSize.height();
+    
+    // Draw each highlight
+    for (const TextHighlight &highlight : pageHighlights) {
+        // Convert PDF bounding box to image coordinates
+        QRectF pdfRect = highlight.boundingBox;
+        QRectF imageRect(
+            pdfRect.x() * scaleX,
+            pdfRect.y() * scaleY,
+            pdfRect.width() * scaleX,
+            pdfRect.height() * scaleY
+        );
+        
+        // Use the stored highlight color with semi-transparency
+        QColor highlightColor = highlight.color;
+        highlightColor.setAlpha(120); // Semi-transparent
+        
+        painter.setBrush(highlightColor);
+        painter.setPen(Qt::NoPen);
+        painter.drawRect(imageRect);
+    }
+    
+    painter.end();
 }
 
 void InkCanvas::renderPdfPageToCache(int pageNumber) {
@@ -4267,6 +4594,9 @@ void InkCanvas::renderPdfPageToCacheThreadSafe(int pageNumber, Poppler::Document
         currentPageImage = invertPdfImage(currentPageImage);
     }
     
+    // Draw highlights on the current page image
+    drawHighlightsOnPageImage(currentPageImage, pageNumber, sharedDocument);
+    
     // Try to render next page for combination
     QImage nextPageImage;
     int nextPageNumber = pageNumber + 1;
@@ -4279,6 +4609,9 @@ void InkCanvas::renderPdfPageToCacheThreadSafe(int pageNumber, Poppler::Document
             if (pdfInversionEnabled) {
                 nextPageImage = invertPdfImage(nextPageImage);
             }
+            
+            // Draw highlights on the next page image
+            drawHighlightsOnPageImage(nextPageImage, nextPageNumber, sharedDocument);
         }
     }
     
@@ -5050,6 +5383,16 @@ void InkCanvas::loadNotebookMetadata() {
         bookmarks.append(value.toString());
     }
     
+    // Load persistent text highlights (backward compatible - defaults to empty array)
+    persistentHighlights.clear();
+    QJsonArray highlightsArray = obj["text_highlights"].toArray();
+    for (const QJsonValue &value : highlightsArray) {
+        if (value.isObject()) {
+            TextHighlight highlight = TextHighlight::fromJson(value.toObject());
+            persistentHighlights.append(highlight);
+        }
+    }
+    
     // If we have a PDF path, try to load it (missing PDF will be handled later)
     if (!pdfPath.isEmpty()) {
         if (QFile::exists(pdfPath)) {
@@ -5089,6 +5432,13 @@ void InkCanvas::saveNotebookMetadata() {
         bookmarkArray.append(bookmark);
     }
     obj["bookmarks"] = bookmarkArray;
+    
+    // Save persistent text highlights
+    QJsonArray highlightsArray;
+    for (const TextHighlight &highlight : persistentHighlights) {
+        highlightsArray.append(highlight.toJson());
+    }
+    obj["text_highlights"] = highlightsArray;
     
     QJsonDocument doc(obj);
     

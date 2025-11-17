@@ -18,6 +18,9 @@
 #include <QClipboard>
 #include <QFutureWatcher>
 #include <QMutex>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QUuid>
 #include "MarkdownWindowManager.h"
 #include "PictureWindowManager.h"
 #include "ToolType.h"
@@ -40,6 +43,51 @@ enum class BackgroundStyle {
     None,
     Grid,
     Lines
+};
+
+// Structure to store a persistent text highlight
+struct TextHighlight {
+    QString id;              // Unique ID for this highlight (for linking to markdown windows)
+    int pageNumber;          // Page number (0-based)
+    QRectF boundingBox;      // Bounding box in PDF coordinates
+    QString text;            // The highlighted text content
+    QColor color;            // Highlight color
+    QString markdownWindowId; // ID of associated markdown window (empty if none) - for Step 3
+    
+    // Serialization helpers
+    QJsonObject toJson() const {
+        QJsonObject obj;
+        obj["id"] = id;
+        obj["pageNumber"] = pageNumber;
+        obj["boundingBox"] = QString("%1,%2,%3,%4")
+            .arg(boundingBox.x()).arg(boundingBox.y())
+            .arg(boundingBox.width()).arg(boundingBox.height());
+        obj["text"] = text;
+        obj["color"] = color.name(QColor::HexArgb);
+        obj["markdownWindowId"] = markdownWindowId;
+        return obj;
+    }
+    
+    static TextHighlight fromJson(const QJsonObject &obj) {
+        TextHighlight highlight;
+        highlight.id = obj["id"].toString();
+        highlight.pageNumber = obj["pageNumber"].toInt();
+        
+        // Parse bounding box
+        QString bbox = obj["boundingBox"].toString();
+        QStringList parts = bbox.split(',');
+        if (parts.size() == 4) {
+            highlight.boundingBox = QRectF(
+                parts[0].toDouble(), parts[1].toDouble(),
+                parts[2].toDouble(), parts[3].toDouble()
+            );
+        }
+        
+        highlight.text = obj["text"].toString();
+        highlight.color = QColor(obj["color"].toString());
+        highlight.markdownWindowId = obj["markdownWindowId"].toString();
+        return highlight;
+    }
 };
 
 class InkCanvas : public QWidget {
@@ -226,6 +274,14 @@ public:
     bool isPdfTextSelectionEnabled() const { return pdfTextSelectionEnabled; }
     void clearPdfTextSelection(); // Clear current PDF text selection
     QString getSelectedPdfText() const; // Get currently selected PDF text
+    
+    // Persistent text highlight management
+    void addHighlightFromSelection(); // Add a persistent highlight from current selection
+    void removeHighlightAtSelection(); // Remove highlight(s) that overlap with current selection
+    bool isSelectionHighlighted() const; // Check if current selection overlaps with any persistent highlight
+    QList<TextHighlight> getHighlightsForPage(int pageNumber) const; // Get all highlights for a specific page
+    void loadHighlightsFromMetadata(); // Load highlights from JSON metadata
+    void saveHighlightsToMetadata(); // Save highlights to JSON metadata
 
     // Canvas coordinate system support
     QSize getCanvasSize() const { return buffer.size(); }
@@ -445,8 +501,11 @@ private:
     QPointF pdfSelectionStart; // Start point of text selection (logical widget coordinates)
     QPointF pdfSelectionEnd; // End point of text selection (logical widget coordinates)
     QList<Poppler::TextBox*> currentPdfTextBoxes; // Text boxes for current page(s)
-    QList<Poppler::TextBox*> selectedTextBoxes; // Currently selected text boxes
+    QList<Poppler::TextBox*> selectedTextBoxes; // Currently selected text boxes (temporary selection)
     QList<int> currentPdfTextBoxPageNumbers; // Page number for each text box (for combined canvas)
+    
+    // Persistent text highlights storage
+    QList<TextHighlight> persistentHighlights; // All saved highlights for this notebook
     // ✅ MEMORY LEAK FIX: Cache only page sizes instead of full Page objects
     QMap<int, QSizeF> pdfPageSizeCache; // Maps page number -> page size
     int currentTextPageNumber = -1; // Track which page we're displaying text for
@@ -516,6 +575,7 @@ private:
     void renderPdfPageToCacheThreadSafe(int pageNumber, Poppler::Document* sharedDocument); // Thread-safe render with separate document instance
     void checkAndCacheAdjacentPages(int targetPage); // Check and cache adjacent pages if needed
     bool isValidPageNumber(int pageNumber) const; // Check if page number is valid
+    void drawHighlightsOnPageImage(QImage &pageImage, int pageNumber, Poppler::Document* pdfDoc); // Draw highlights on a PDF page image during rendering
     
     // Intelligent note cache helper methods
     void loadSingleNotePageToCache(int pageNumber); // Load a single note page and add to cache
