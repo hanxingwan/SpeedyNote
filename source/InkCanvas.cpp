@@ -1000,7 +1000,17 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
             painter.setBrush(highlightColor);
             painter.setPen(Qt::NoPen);
             
-            // Draw highlight rectangles over the original PDF text
+            // Group text boxes by row for connected highlighting
+            const qreal rowToleranceWidget = 10.0; // Widget coordinate pixels
+            
+            struct TextBoxWithCoords {
+                QRectF widgetRect;
+                qreal centerY;
+            };
+            
+            QList<TextBoxWithCoords> textBoxCoords;
+            
+            // Convert all text boxes to widget coordinates
             for (int i = 0; i < selectedTextBoxes.size(); ++i) {
                 const Poppler::TextBox* textBox = selectedTextBoxes[i];
                 if (textBox) {
@@ -1021,9 +1031,59 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
                     QRectF widgetRect(topLeft, bottomRight);
                     widgetRect = widgetRect.normalized();
                     
-                    // Draw semi-transparent rectangle - original PDF text shows through
-                    painter.drawRect(widgetRect);
+                    TextBoxWithCoords coords;
+                    coords.widgetRect = widgetRect;
+                    coords.centerY = (widgetRect.top() + widgetRect.bottom()) / 2.0;
+                    textBoxCoords.append(coords);
                 }
+            }
+            
+            // Group by row
+            QList<QList<QRectF>> rowGroups;
+            for (const TextBoxWithCoords &coords : textBoxCoords) {
+                bool addedToRow = false;
+                
+                // Try to add to existing row
+                for (QList<QRectF> &row : rowGroups) {
+                    if (!row.isEmpty()) {
+                        qreal avgY = (row.first().top() + row.first().bottom()) / 2.0;
+                        
+                        if (qAbs(avgY - coords.centerY) <= rowToleranceWidget) {
+                            row.append(coords.widgetRect);
+                            addedToRow = true;
+                            break;
+                        }
+                    }
+                }
+                
+                // Create new row if not added
+                if (!addedToRow) {
+                    QList<QRectF> newRow;
+                    newRow.append(coords.widgetRect);
+                    rowGroups.append(newRow);
+                }
+            }
+            
+            // Draw continuous rectangle for each row
+            for (const QList<QRectF> &row : rowGroups) {
+                if (row.isEmpty()) continue;
+                
+                // Find leftmost and rightmost bounds
+                qreal minX = row.first().left();
+                qreal maxX = row.first().right();
+                qreal minY = row.first().top();
+                qreal maxY = row.first().bottom();
+                
+                for (const QRectF &rect : row) {
+                    minX = qMin(minX, rect.left());
+                    maxX = qMax(maxX, rect.right());
+                    minY = qMin(minY, rect.top());
+                    maxY = qMax(maxY, rect.bottom());
+                }
+                
+                // Create continuous rectangle spanning the entire row
+                QRectF continuousRect(minX, minY, maxX - minX, maxY - minY);
+                painter.drawRect(continuousRect);
             }
         }
         
@@ -3537,6 +3597,15 @@ void InkCanvas::loadPdfTextBoxes(int pageNumber) {
         currentPdfTextBoxPageNumbers = entry->pageNumbers;
         currentTextBoxesLoadedForPage = pageNumber; // Track which page these text boxes belong to
         
+        // Restore page number trackers for coordinate mapping (critical for selection overlay)
+        if (isCombinedCanvas) {
+            currentTextPageNumber = pageNumber;
+            currentTextPageNumberSecond = pageNumber + 1;
+        } else {
+            currentTextPageNumber = pageNumber;
+            currentTextPageNumberSecond = -1;
+        }
+        
         // Update LRU access order
         pdfTextBoxCacheAccessOrder.removeAll(cacheKey);
         pdfTextBoxCacheAccessOrder.append(cacheKey);
@@ -4261,8 +4330,9 @@ void InkCanvas::addHighlightFromSelection() {
         return; // No selection to highlight
     }
     
-    // Create a combined bounding box for all selected text boxes
+    // Create storage for individual text box rectangles and combined bounding box
     QRectF combinedBoundingBox;
+    QList<QRectF> individualRects;
     QString combinedText;
     int highlightPage = -1;
     
@@ -4283,8 +4353,11 @@ void InkCanvas::addHighlightFromSelection() {
                 highlightPage = pageNumber;
             }
             
-            // Combine bounding boxes
+            // Store individual text box rectangle
             QRectF bbox = textBox->boundingBox();
+            individualRects.append(bbox);
+            
+            // Also create combined bounding box for intersection checks
             if (combinedBoundingBox.isNull()) {
                 combinedBoundingBox = bbox;
             } else {
@@ -4302,7 +4375,7 @@ void InkCanvas::addHighlightFromSelection() {
         }
     }
     
-    if (highlightPage == -1 || combinedBoundingBox.isNull()) {
+    if (highlightPage == -1 || combinedBoundingBox.isNull() || individualRects.isEmpty()) {
         return; // Invalid highlight
     }
     
@@ -4310,7 +4383,8 @@ void InkCanvas::addHighlightFromSelection() {
     TextHighlight highlight;
     highlight.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     highlight.pageNumber = highlightPage;
-    highlight.boundingBox = combinedBoundingBox;
+    highlight.boundingBox = combinedBoundingBox; // For intersection checks
+    highlight.textBoxRects = individualRects; // For precise rendering
     highlight.text = combinedText;
     highlight.color = penColor; // Use current pen color
     highlight.markdownWindowId = ""; // No markdown window yet (for Step 3)
@@ -4518,22 +4592,82 @@ void InkCanvas::drawHighlightsOnPageImage(QImage &pageImage, int pageNumber, Pop
     
     // Draw each highlight
     for (const TextHighlight &highlight : pageHighlights) {
-        // Convert PDF bounding box to image coordinates
-        QRectF pdfRect = highlight.boundingBox;
-        QRectF imageRect(
-            pdfRect.x() * scaleX,
-            pdfRect.y() * scaleY,
-            pdfRect.width() * scaleX,
-            pdfRect.height() * scaleY
-        );
-        
         // Use the stored highlight color with semi-transparency
         QColor highlightColor = highlight.color;
         highlightColor.setAlpha(120); // Semi-transparent
         
         painter.setBrush(highlightColor);
         painter.setPen(Qt::NoPen);
-        painter.drawRect(imageRect);
+        
+        // Draw connected rectangles row by row
+        if (!highlight.textBoxRects.isEmpty()) {
+            // Group text boxes by row (using Y-coordinate tolerance)
+            const qreal rowTolerance = 5.0; // PDF coordinate units
+            
+            QList<QList<QRectF>> rowGroups;
+            for (const QRectF &rect : highlight.textBoxRects) {
+                bool addedToRow = false;
+                
+                // Try to add to existing row
+                for (QList<QRectF> &row : rowGroups) {
+                    if (!row.isEmpty()) {
+                        qreal avgY = (row.first().top() + row.first().bottom()) / 2.0;
+                        qreal rectY = (rect.top() + rect.bottom()) / 2.0;
+                        
+                        if (qAbs(avgY - rectY) <= rowTolerance) {
+                            row.append(rect);
+                            addedToRow = true;
+                            break;
+                        }
+                    }
+                }
+                
+                // Create new row if not added
+                if (!addedToRow) {
+                    QList<QRectF> newRow;
+                    newRow.append(rect);
+                    rowGroups.append(newRow);
+                }
+            }
+            
+            // Draw continuous rectangle for each row
+            for (const QList<QRectF> &row : rowGroups) {
+                if (row.isEmpty()) continue;
+                
+                // Find leftmost and rightmost bounds
+                qreal minX = row.first().left();
+                qreal maxX = row.first().right();
+                qreal minY = row.first().top();
+                qreal maxY = row.first().bottom();
+                
+                for (const QRectF &rect : row) {
+                    minX = qMin(minX, rect.left());
+                    maxX = qMax(maxX, rect.right());
+                    minY = qMin(minY, rect.top());
+                    maxY = qMax(maxY, rect.bottom());
+                }
+                
+                // Create continuous rectangle spanning the entire row
+                QRectF pdfRowRect(minX, minY, maxX - minX, maxY - minY);
+                QRectF imageRect(
+                    pdfRowRect.x() * scaleX,
+                    pdfRowRect.y() * scaleY,
+                    pdfRowRect.width() * scaleX,
+                    pdfRowRect.height() * scaleY
+                );
+                painter.drawRect(imageRect);
+            }
+        } else {
+            // Legacy format: draw combined bounding box (for backward compatibility)
+            QRectF pdfRect = highlight.boundingBox;
+            QRectF imageRect(
+                pdfRect.x() * scaleX,
+                pdfRect.y() * scaleY,
+                pdfRect.width() * scaleX,
+                pdfRect.height() * scaleY
+            );
+            painter.drawRect(imageRect);
+        }
     }
     
     painter.end();

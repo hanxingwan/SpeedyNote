@@ -49,7 +49,8 @@ enum class BackgroundStyle {
 struct TextHighlight {
     QString id;              // Unique ID for this highlight (for linking to markdown windows)
     int pageNumber;          // Page number (0-based)
-    QRectF boundingBox;      // Bounding box in PDF coordinates
+    QRectF boundingBox;      // Combined bounding box in PDF coordinates (for quick intersection checks)
+    QList<QRectF> textBoxRects; // Individual text box rectangles for precise rendering
     QString text;            // The highlighted text content
     QColor color;            // Highlight color
     QString markdownWindowId; // ID of associated markdown window (empty if none) - for Step 3
@@ -62,6 +63,16 @@ struct TextHighlight {
         obj["boundingBox"] = QString("%1,%2,%3,%4")
             .arg(boundingBox.x()).arg(boundingBox.y())
             .arg(boundingBox.width()).arg(boundingBox.height());
+        
+        // Serialize individual text box rectangles
+        QJsonArray rectsArray;
+        for (const QRectF &rect : textBoxRects) {
+            rectsArray.append(QString("%1,%2,%3,%4")
+                .arg(rect.x()).arg(rect.y())
+                .arg(rect.width()).arg(rect.height()));
+        }
+        obj["textBoxRects"] = rectsArray;
+        
         obj["text"] = text;
         obj["color"] = color.name(QColor::HexArgb);
         obj["markdownWindowId"] = markdownWindowId;
@@ -73,7 +84,7 @@ struct TextHighlight {
         highlight.id = obj["id"].toString();
         highlight.pageNumber = obj["pageNumber"].toInt();
         
-        // Parse bounding box
+        // Parse combined bounding box
         QString bbox = obj["boundingBox"].toString();
         QStringList parts = bbox.split(',');
         if (parts.size() == 4) {
@@ -81,6 +92,19 @@ struct TextHighlight {
                 parts[0].toDouble(), parts[1].toDouble(),
                 parts[2].toDouble(), parts[3].toDouble()
             );
+        }
+        
+        // Parse individual text box rectangles
+        QJsonArray rectsArray = obj["textBoxRects"].toArray();
+        for (const QJsonValue &value : rectsArray) {
+            QString rectStr = value.toString();
+            QStringList rectParts = rectStr.split(',');
+            if (rectParts.size() == 4) {
+                highlight.textBoxRects.append(QRectF(
+                    rectParts[0].toDouble(), rectParts[1].toDouble(),
+                    rectParts[2].toDouble(), rectParts[3].toDouble()
+                ));
+            }
         }
         
         highlight.text = obj["text"].toString();
