@@ -4324,11 +4324,9 @@ void InkCanvas::addHighlightFromSelection() {
     // Mark as edited
     setEdited(true);
     
-    // Clear PDF cache to force re-rendering with new highlights
+    // Clear PDF cache and refresh current page to show new highlight immediately
     clearPdfCache();
-    
-    // Refresh display
-    update();
+    refreshCurrentPdfPage();
 }
 
 // Remove highlight(s) that overlap with the current selection
@@ -4389,11 +4387,9 @@ void InkCanvas::removeHighlightAtSelection() {
         // Mark as edited
         setEdited(true);
         
-        // Clear PDF cache to force re-rendering without removed highlights
+        // Clear PDF cache and refresh current page to remove highlight immediately
         clearPdfCache();
-        
-        // Refresh display
-        update();
+        refreshCurrentPdfPage();
     }
 }
 
@@ -4541,6 +4537,28 @@ void InkCanvas::drawHighlightsOnPageImage(QImage &pageImage, int pageNumber, Pop
     }
     
     painter.end();
+}
+
+// Refresh the currently displayed PDF page (for highlight updates)
+// This re-renders and displays the current page without navigation
+void InkCanvas::refreshCurrentPdfPage() {
+    if (!pdfDocument || currentCachedPage < 0) {
+        return;
+    }
+    
+    // Re-render the current page (which is a combined canvas of current + next page)
+    renderPdfPageToCache(currentCachedPage);
+    
+    // Update the backgroundImage with the newly rendered cached page
+    {
+        QMutexLocker locker(&pdfCacheMutex);
+        if (pdfCache.contains(currentCachedPage)) {
+            backgroundImage = *pdfCache.object(currentCachedPage);
+        }
+    }
+    
+    // Refresh display
+    update();
 }
 
 void InkCanvas::renderPdfPageToCache(int pageNumber) {

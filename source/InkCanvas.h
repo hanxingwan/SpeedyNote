@@ -576,6 +576,7 @@ private:
     void checkAndCacheAdjacentPages(int targetPage); // Check and cache adjacent pages if needed
     bool isValidPageNumber(int pageNumber) const; // Check if page number is valid
     void drawHighlightsOnPageImage(QImage &pageImage, int pageNumber, Poppler::Document* pdfDoc); // Draw highlights on a PDF page image during rendering
+    void refreshCurrentPdfPage(); // Refresh the currently displayed PDF page (for highlight updates)
     
     // Intelligent note cache helper methods
     void loadSingleNotePageToCache(int pageNumber); // Load a single note page and add to cache
