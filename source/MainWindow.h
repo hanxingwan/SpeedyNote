@@ -3,6 +3,7 @@
 
 #include <QMainWindow>
 #include "InkCanvas.h"
+#include "MarkdownNotesSidebar.h"
 #include <QPushButton>
 #include <QLabel>
 #include <QTimer>
@@ -33,7 +34,6 @@
 #include <QMenu>
 #include <QCloseEvent>
 #include "ControlPanelDialog.h"
-#include "MarkdownWindowManager.h"
 #include "PictureWindowManager.h"
 #include "SpnPackageManager.h"
 #include <QLocalServer>
@@ -404,7 +404,6 @@ private slots:
     void selectColorButton(QPushButton* selectedButton);
     void updateStraightLineButtonState();
     void updateRopeToolButtonState(); // New slot for rope tool button
-    void updateMarkdownButtonState();
     
     
     
@@ -443,6 +442,14 @@ private:
     void saveBookmarks();            // Save bookmarks to file
     void toggleCurrentPageBookmark(); // Add/remove current page from bookmarks
     
+    // Markdown notes sidebar functionality
+    void toggleMarkdownNotesSidebar();  // Toggle markdown notes sidebar
+    void onMarkdownNotesUpdated();      // Handle markdown notes updates
+    void onMarkdownNoteContentChanged(const QString &noteId, const MarkdownNoteData &data); // Handle note content changes
+    void onMarkdownNoteDeleted(const QString &noteId); // Handle note deletion
+    void onHighlightLinkClicked(const QString &highlightId); // Handle highlight link clicks
+    void onHighlightDoubleClicked(const QString &highlightId); // Handle highlight double-clicks
+    void loadMarkdownNotesForCurrentPage(); // Load notes for currently visible page(s)
 
 private:
     InkCanvas *canvas;
@@ -487,7 +494,6 @@ private:
     QPushButton *backgroundButton; // New button to set background
     QPushButton *straightLineToggleButton; // Button to toggle straight line mode
     QPushButton *ropeToolButton; // Button to toggle rope tool mode
-    QPushButton *markdownButton; // Button to toggle markdown mode
     QPushButton *insertPictureButton; // Button to insert pictures
 
     QSlider *zoomSlider;
@@ -522,6 +528,11 @@ private:
     bool bookmarksSidebarVisible = false;
     QMap<int, QString> bookmarks;  // Map of page number to bookmark title
     QPushButton *jumpToPageButton; // Button to jump to a specific page
+    
+    // Markdown Notes Sidebar
+    MarkdownNotesSidebar *markdownNotesSidebar;  // Sidebar for markdown notes
+    QPushButton *toggleMarkdownNotesButton; // Button to toggle markdown notes sidebar
+    bool markdownNotesSidebarVisible = false;
 
     QWidget *dialContainer = nullptr;  // ✅ Floating dial container
     QDial *pageDial = nullptr;  // ✅ The dial itself

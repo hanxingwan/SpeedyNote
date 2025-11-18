@@ -105,13 +105,8 @@ InkCanvas::InkCanvas(QWidget *parent)
     noteCacheTimer = nullptr;
     currentCachedNotePage = -1;
     
-    // Initialize markdown manager
-    markdownManager = new MarkdownWindowManager(this, this);
+    // Initialize picture manager
     pictureManager = new PictureWindowManager(this, this);
-    
-    // Connect pan/zoom signals to update markdown window positions
-    connect(this, &InkCanvas::panChanged, markdownManager, &MarkdownWindowManager::updateAllWindowPositions);
-    connect(this, &InkCanvas::zoomChanged, markdownManager, &MarkdownWindowManager::updateAllWindowPositions);
     
     // Connect pan/zoom signals to update picture window positions
     connect(this, &InkCanvas::panChanged, pictureManager, &PictureWindowManager::updateAllWindowPositions);
@@ -134,9 +129,6 @@ InkCanvas::~InkCanvas() {
     if (edited && !saveFolder.isEmpty()) {
         // Save the current page using existing logic
         saveToFile(lastActivePage);
-        
-        // ✅ COMBINED MODE FIX: Use combined-aware save for markdown/picture windows
-        saveCombinedWindowsForPage(lastActivePage);
     }
     
     // ✅ Cleanup PDF resources
@@ -251,11 +243,6 @@ InkCanvas::~InkCanvas() {
     selectedTextBoxes.clear();  // References to cached text boxes, don't delete
     
     // ✅ Explicitly clean up window managers to prevent memory leaks
-    if (markdownManager) {
-        markdownManager->clearAllCachedWindows();
-        markdownManager->deleteLater();
-        markdownManager = nullptr;
-    }
     if (pictureManager) {
         pictureManager->clearAllCachedWindows();
         pictureManager->deleteLater();
@@ -353,6 +340,29 @@ static QImage invertPdfImage(const QImage &original) {
     inverted.invertPixels(QImage::InvertRgb);  // Invert RGB, keep alpha
     return inverted;
 }
+
+// Helper function to calculate contrasting text color for highlights
+// For normal mode: returns white or black based on highlight luminance
+// For inverted PDF mode: returns the inverted highlight color (original color)
+static QColor getContrastingTextColor(const QColor &highlightColor, bool isPdfInverted) {
+    if (isPdfInverted) {
+        // For inverted PDFs, use the original (non-inverted) color
+        // This means inverting the highlight color back
+        return QColor(255 - highlightColor.red(),
+                     255 - highlightColor.green(),
+                     255 - highlightColor.blue());
+    } else {
+        // For normal mode, calculate a contrasting color based on luminance
+        // Use standard luminance calculation (ITU-R BT.601)
+        int luminance = (highlightColor.red() * 299 + 
+                        highlightColor.green() * 587 + 
+                        highlightColor.blue() * 114) / 1000;
+        
+        // If highlight is dark, use white text; if light, use black text
+        return (luminance < 128) ? Qt::white : Qt::black;
+    }
+}
+
 
 void InkCanvas::setPdfInversionEnabled(bool enabled) {
     if (pdfInversionEnabled != enabled) {
@@ -940,22 +950,6 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
     // Reset clipping for overlay elements that should appear on top
     painter.setClipping(false);
     
-    // Draw markdown selection overlay
-    if (markdownSelectionMode && markdownSelecting) {
-        painter.save();
-        QPen selectionPen(Qt::DashLine);
-        selectionPen.setColor(Qt::green);
-        selectionPen.setWidthF(2.0);
-        painter.setPen(selectionPen);
-        
-        QBrush selectionBrush(QColor(0, 255, 0, 30)); // Semi-transparent green
-        painter.setBrush(selectionBrush);
-        
-        QRect selectionRect = QRect(markdownSelectionStart, markdownSelectionEnd).normalized();
-        painter.drawRect(selectionRect);
-        painter.restore();
-    }
-    
     // Draw PDF text selection overlay on top of everything
     if (pdfTextSelectionEnabled && isPdfLoaded) {
         painter.save(); // Save painter state for PDF text overlay
@@ -964,13 +958,30 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
         // Note: We no longer draw the selection rectangle during dragging
         // since text selection is row-based, not area-based
         
-        // Draw highlights for selected text boxes
+        // Note: Persistent highlights are now drawn directly onto cached PDF images during rendering
+        // for better performance. See drawHighlightsOnPageImage() and renderPdfPageToCacheThreadSafe()
+        
+        // Draw highlights for selected text boxes (temporary selection during text selection)
         if (!selectedTextBoxes.isEmpty()) {
-            QColor highlightColor = QColor(255, 255, 0, 100); // Semi-transparent yellow
+            // Use current pen color for highlight with semi-transparency
+            // The original PDF text will show through the transparent overlay
+            QColor highlightColor = penColor;
+            highlightColor.setAlpha(120); // Semi-transparent to let original text show through
+            
             painter.setBrush(highlightColor);
             painter.setPen(Qt::NoPen);
             
-            // Draw highlight rectangles for selected text boxes
+            // Group text boxes by row for connected highlighting
+            const qreal rowToleranceWidget = 10.0; // Widget coordinate pixels
+            
+            struct TextBoxWithCoords {
+                QRectF widgetRect;
+                qreal centerY;
+            };
+            
+            QList<TextBoxWithCoords> textBoxCoords;
+            
+            // Convert all text boxes to widget coordinates
             for (int i = 0; i < selectedTextBoxes.size(); ++i) {
                 const Poppler::TextBox* textBox = selectedTextBoxes[i];
                 if (textBox) {
@@ -991,8 +1002,59 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
                     QRectF widgetRect(topLeft, bottomRight);
                     widgetRect = widgetRect.normalized();
                     
-                    painter.drawRect(widgetRect);
+                    TextBoxWithCoords coords;
+                    coords.widgetRect = widgetRect;
+                    coords.centerY = (widgetRect.top() + widgetRect.bottom()) / 2.0;
+                    textBoxCoords.append(coords);
                 }
+            }
+            
+            // Group by row
+            QList<QList<QRectF>> rowGroups;
+            for (const TextBoxWithCoords &coords : textBoxCoords) {
+                bool addedToRow = false;
+                
+                // Try to add to existing row
+                for (QList<QRectF> &row : rowGroups) {
+                    if (!row.isEmpty()) {
+                        qreal avgY = (row.first().top() + row.first().bottom()) / 2.0;
+                        
+                        if (qAbs(avgY - coords.centerY) <= rowToleranceWidget) {
+                            row.append(coords.widgetRect);
+                            addedToRow = true;
+                            break;
+                        }
+                    }
+                }
+                
+                // Create new row if not added
+                if (!addedToRow) {
+                    QList<QRectF> newRow;
+                    newRow.append(coords.widgetRect);
+                    rowGroups.append(newRow);
+                }
+            }
+            
+            // Draw continuous rectangle for each row
+            for (const QList<QRectF> &row : rowGroups) {
+                if (row.isEmpty()) continue;
+                
+                // Find leftmost and rightmost bounds
+                qreal minX = row.first().left();
+                qreal maxX = row.first().right();
+                qreal minY = row.first().top();
+                qreal maxY = row.first().bottom();
+                
+                for (const QRectF &rect : row) {
+                    minX = qMin(minX, rect.left());
+                    maxX = qMax(maxX, rect.right());
+                    minY = qMin(minY, rect.top());
+                    maxY = qMax(maxY, rect.bottom());
+                }
+                
+                // Create continuous rectangle spanning the entire row
+                QRectF continuousRect(minX, minY, maxX - minX, maxY - minY);
+                painter.drawRect(continuousRect);
             }
         }
         
@@ -1602,15 +1664,6 @@ void InkCanvas::mousePressEvent(QMouseEvent *event) {
         }
     }
     
-    // Handle markdown selection when enabled
-    if (markdownSelectionMode && event->button() == Qt::LeftButton) {
-        markdownSelecting = true;
-        markdownSelectionStart = event->pos();
-        markdownSelectionEnd = markdownSelectionStart;
-        event->accept();
-        return;
-    }
-    
     // Handle picture selection when enabled
     if (pictureSelectionMode && event->button() == Qt::LeftButton) {
         // qDebug() << "InkCanvas::mousePressEvent() - Picture selection mode active!";
@@ -1784,14 +1837,6 @@ void InkCanvas::mouseMoveEvent(QMouseEvent *event) {
         return;
     }
     
-    // Handle markdown selection when enabled
-    if (markdownSelectionMode && markdownSelecting) {
-        markdownSelectionEnd = event->pos();
-        update(); // Refresh to show selection rectangle
-        event->accept();
-        return;
-    }
-    
     // Handle PDF text selection when enabled (mouse/touch fallback - stylus handled in tabletEvent)
     if (pdfTextSelectionEnabled && isPdfLoaded && pdfTextSelecting) {
         pdfSelectionEnd = event->position();
@@ -1822,31 +1867,6 @@ void InkCanvas::mouseReleaseEvent(QMouseEvent *event) {
     // Handle picture window drag/resize
     if ((pictureDragging || pictureResizing) && event->button() == Qt::LeftButton) {
         handlePictureMouseRelease(event);
-        return;
-    }
-    
-    // Handle markdown selection when enabled
-    if (markdownSelectionMode && markdownSelecting && event->button() == Qt::LeftButton) {
-        markdownSelecting = false;
-        
-        // Create markdown window if selection is valid
-        QRect selectionRect = QRect(markdownSelectionStart, markdownSelectionEnd).normalized();
-        if (selectionRect.width() > 50 && selectionRect.height() > 50 && markdownManager) {
-            markdownManager->createMarkdownWindow(selectionRect);
-
-            // ✅ COMBINED MODE FIX: Save immediately with combined-aware method
-            int currentPage = getLastActivePage();
-            saveCombinedWindowsForPage(currentPage);
-            setEdited(true);
-        }
-        
-        // Exit selection mode
-        setMarkdownSelectionMode(false);
-        
-        // Force screen update to clear the green selection overlay
-        update();
-        
-        event->accept();
         return;
     }
     
@@ -1887,6 +1907,44 @@ void InkCanvas::mouseReleaseEvent(QMouseEvent *event) {
 
     
     event->ignore();
+}
+
+void InkCanvas::mouseDoubleClickEvent(QMouseEvent *event) {
+    // Check if double-click is in text selection mode and on a highlight
+    if (pdfTextSelectionEnabled && isPdfLoaded && event->button() == Qt::LeftButton) {
+        QPointF clickPos = event->position();
+        
+        // Convert widget coordinates to PDF coordinates
+        QPointF pdfCoords = mapWidgetToPdfCoordinates(clickPos);
+        
+        // Get current page(s) to check
+        QList<int> pagesToCheck;
+        pagesToCheck.append(currentTextPageNumber);
+        if (currentTextPageNumberSecond >= 0) {
+            pagesToCheck.append(currentTextPageNumberSecond);
+        }
+        
+        // Check if click position intersects with any highlight on visible page(s)
+        for (int pageNum : pagesToCheck) {
+            if (pageNum < 0) continue; // Skip invalid pages
+            
+            // Check all highlights on this page
+            for (const TextHighlight &highlight : persistentHighlights) {
+                if (highlight.pageNumber == pageNum && highlight.boundingBox.contains(pdfCoords)) {
+                    // Found a highlight at click position!
+                    // If it has a linked markdown note, emit signal to open it
+                    if (!highlight.markdownWindowId.isEmpty()) {
+                        emit highlightDoubleClicked(highlight.id);
+                        event->accept();
+                        return;
+                    }
+                }
+            }
+        }
+    }
+    
+    // Default handling
+    QWidget::mouseDoubleClickEvent(event);
 }
 
 void InkCanvas::drawStroke(const QPointF &start, const QPointF &end, qreal pressure) {
@@ -2185,11 +2243,8 @@ void InkCanvas::saveToFile(int pageNumber) {
 void InkCanvas::loadPage(int pageNumber) {
     if (saveFolder.isEmpty()) return;
 
-    // Hide any markdown windows from the previous page BEFORE loading the new page content.
+    // Hide any picture windows from the previous page BEFORE loading the new page content.
     // This ensures the correct repaint area and stops the transparency timer.
-    if (markdownManager) {
-        markdownManager->hideAllWindows();
-    }
     if (pictureManager) {
         pictureManager->hideAllWindows();
     }
@@ -2465,11 +2520,6 @@ void InkCanvas::deletePage(int pageNumber) {
         noteCacheAccessOrder.removeAll(pageNumber);
     }
 
-    // Delete markdown windows for this page
-    if (markdownManager) {
-        markdownManager->deleteWindowsForPage(pageNumber);
-    }
-    
     // Delete picture windows for this page
     if (pictureManager) {
         pictureManager->deleteWindowsForPage(pageNumber);
@@ -2490,11 +2540,6 @@ void InkCanvas::clearCurrentPage() {
         initializeBuffer();
     } else {
         buffer.fill(Qt::transparent);
-    }
-    
-    // ✅ PERMANENTLY delete markdown windows for current page
-    if (markdownManager) {
-        markdownManager->clearCurrentPagePermanently(lastActivePage);
     }
     
     // Clear all picture windows from current page (already deletes files permanently)
@@ -3214,12 +3259,9 @@ void InkCanvas::onAutoSaveTimeout() {
         // This prevents continuous disk writes while idle
     }
     
-    // ✅ PERFORMANCE FIX: Also flush dirty markdown/picture windows to disk
+    // ✅ PERFORMANCE FIX: Also flush dirty picture windows to disk
     // This allows page switches to skip disk writes while still ensuring autosave works
     if (!saveFolder.isEmpty()) {
-        if (markdownManager) {
-            markdownManager->flushDirtyPagesToDisk();
-        }
         if (pictureManager) {
             pictureManager->flushDirtyPagesToDisk();
         }
@@ -3505,6 +3547,15 @@ void InkCanvas::loadPdfTextBoxes(int pageNumber) {
         currentPdfTextBoxes = entry->textBoxes;
         currentPdfTextBoxPageNumbers = entry->pageNumbers;
         currentTextBoxesLoadedForPage = pageNumber; // Track which page these text boxes belong to
+        
+        // Restore page number trackers for coordinate mapping (critical for selection overlay)
+        if (isCombinedCanvas) {
+            currentTextPageNumber = pageNumber;
+            currentTextPageNumberSecond = pageNumber + 1;
+        } else {
+            currentTextPageNumber = pageNumber;
+            currentTextPageNumberSecond = -1;
+        }
         
         // Update LRU access order
         pdfTextBoxCacheAccessOrder.removeAll(cacheKey);
@@ -4180,11 +4231,65 @@ void InkCanvas::showPdfTextSelectionMenu(const QPoint &position) {
     
     // Add Copy action
     QAction *copyAction = contextMenu->addAction(tr("Copy"));
-    copyAction->setIcon(QIcon(":/resources/icons/copy.png")); // You may need to add this icon
+    copyAction->setIcon(QIcon(":/resources/icons/copy.png"));
     connect(copyAction, &QAction::triggered, this, [selectedText]() {
         QClipboard *clipboard = QGuiApplication::clipboard();
         clipboard->setText(selectedText);
     });
+    
+    // Add separator
+    contextMenu->addSeparator();
+    
+    // Check if current selection is already highlighted
+    bool alreadyHighlighted = isSelectionHighlighted();
+    
+    if (alreadyHighlighted) {
+        // Already highlighted - show "Remove Highlight" and "Add Notes"
+        QAction *removeHighlightAction = contextMenu->addAction(tr("Remove Highlight"));
+        removeHighlightAction->setIcon(QIcon(":/resources/icons/cross.png"));
+        connect(removeHighlightAction, &QAction::triggered, this, [this]() {
+            removeHighlightAtSelection();
+            clearPdfTextSelection();
+        });
+        
+        // Add "Add Notes" option (links to existing highlight)
+        QAction *addNotesAction = contextMenu->addAction(tr("Add Notes"));
+        addNotesAction->setIcon(QIcon(":/resources/icons/edit.png"));
+        connect(addNotesAction, &QAction::triggered, this, [this]() {
+            QString noteId = addMarkdownNoteFromSelection();
+            clearPdfTextSelection();
+            if (!noteId.isEmpty()) {
+                // Note was created - emit signal to update UI and auto-open sidebar
+                emit markdownNotesUpdated();
+                qDebug() << "Markdown note linked to existing highlight:" << noteId;
+            } else {
+                qDebug() << "Failed to create markdown note - no highlight found?";
+            }
+        });
+    } else {
+        // Not highlighted yet - show combined "Highlight and Add Notes"
+        QAction *highlightAndNotesAction = contextMenu->addAction(tr("Highlight and Add Notes"));
+        highlightAndNotesAction->setIcon(QIcon(":/resources/icons/marker.png"));
+        connect(highlightAndNotesAction, &QAction::triggered, this, [this]() {
+            QString noteId = addMarkdownNoteFromSelection();
+            clearPdfTextSelection();
+            if (!noteId.isEmpty()) {
+                // Note was created - emit signal to update UI and auto-open sidebar
+                emit markdownNotesUpdated();
+                qDebug() << "Highlight and note created:" << noteId;
+            } else {
+                qDebug() << "Failed to create highlight and note - no selection?";
+            }
+        });
+        
+        // Also keep "Add Highlight" option for users who just want to highlight
+        QAction *addHighlightAction = contextMenu->addAction(tr("Add Highlight"));
+        addHighlightAction->setIcon(QIcon(":/resources/icons/marker.png"));
+        connect(addHighlightAction, &QAction::triggered, this, [this]() {
+            addHighlightFromSelection();
+            clearPdfTextSelection();
+        });
+    }
     
     // Add separator
     contextMenu->addSeparator();
@@ -4198,6 +4303,440 @@ void InkCanvas::showPdfTextSelectionMenu(const QPoint &position) {
     
     // Show the menu at the specified position
     contextMenu->popup(position);
+}
+
+// Add a persistent highlight from the current text selection
+void InkCanvas::addHighlightFromSelection() {
+    if (selectedTextBoxes.isEmpty()) {
+        return; // No selection to highlight
+    }
+    
+    // Create storage for individual text box rectangles and combined bounding box
+    QRectF combinedBoundingBox;
+    QList<QRectF> individualRects;
+    QString combinedText;
+    int highlightPage = -1;
+    
+    for (int i = 0; i < selectedTextBoxes.size(); ++i) {
+        const Poppler::TextBox* textBox = selectedTextBoxes[i];
+        if (textBox) {
+            // Get page number for this text box
+            int pageNumber = -1;
+            for (int j = 0; j < currentPdfTextBoxes.size(); ++j) {
+                if (currentPdfTextBoxes[j] == textBox) {
+                    pageNumber = (j < currentPdfTextBoxPageNumbers.size()) ? 
+                                currentPdfTextBoxPageNumbers[j] : -1;
+                    break;
+                }
+            }
+            
+            if (highlightPage == -1) {
+                highlightPage = pageNumber;
+            }
+            
+            // Store individual text box rectangle
+            QRectF bbox = textBox->boundingBox();
+            individualRects.append(bbox);
+            
+            // Also create combined bounding box for intersection checks
+            if (combinedBoundingBox.isNull()) {
+                combinedBoundingBox = bbox;
+            } else {
+                combinedBoundingBox = combinedBoundingBox.united(bbox);
+            }
+            
+            // Combine text
+            QString text = textBox->text();
+            if (!text.isEmpty()) {
+                if (!combinedText.isEmpty()) {
+                    combinedText += " ";
+                }
+                combinedText += text;
+            }
+        }
+    }
+    
+    if (highlightPage == -1 || combinedBoundingBox.isNull() || individualRects.isEmpty()) {
+        return; // Invalid highlight
+    }
+    
+    // Create the highlight
+    TextHighlight highlight;
+    highlight.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    highlight.pageNumber = highlightPage;
+    highlight.boundingBox = combinedBoundingBox; // For intersection checks
+    highlight.textBoxRects = individualRects; // For precise rendering
+    highlight.text = combinedText;
+    highlight.color = penColor; // Use current pen color
+    highlight.markdownWindowId = ""; // No markdown window yet (for Step 3)
+    
+    // Add to persistent highlights
+    persistentHighlights.append(highlight);
+    
+    // Save to metadata
+    saveHighlightsToMetadata();
+    
+    // Mark as edited
+    setEdited(true);
+    
+    // Clear PDF cache and refresh current page to show new highlight immediately
+    clearPdfCache();
+    refreshCurrentPdfPage();
+}
+
+// Remove highlight(s) that overlap with the current selection
+void InkCanvas::removeHighlightAtSelection() {
+    if (selectedTextBoxes.isEmpty()) {
+        return; // No selection
+    }
+    
+    // Get the combined bounding box of the selection
+    QRectF selectionBoundingBox;
+    int selectionPage = -1;
+    
+    for (int i = 0; i < selectedTextBoxes.size(); ++i) {
+        const Poppler::TextBox* textBox = selectedTextBoxes[i];
+        if (textBox) {
+            // Get page number for this text box
+            int pageNumber = -1;
+            for (int j = 0; j < currentPdfTextBoxes.size(); ++j) {
+                if (currentPdfTextBoxes[j] == textBox) {
+                    pageNumber = (j < currentPdfTextBoxPageNumbers.size()) ? 
+                                currentPdfTextBoxPageNumbers[j] : -1;
+                    break;
+                }
+            }
+            
+            if (selectionPage == -1) {
+                selectionPage = pageNumber;
+            }
+            
+            QRectF bbox = textBox->boundingBox();
+            if (selectionBoundingBox.isNull()) {
+                selectionBoundingBox = bbox;
+            } else {
+                selectionBoundingBox = selectionBoundingBox.united(bbox);
+            }
+        }
+    }
+    
+    if (selectionPage == -1) {
+        return;
+    }
+    
+    // Remove highlights that intersect with the selection
+    bool removed = false;
+    QStringList removedHighlightIds; // Track IDs for cascade deletion of notes
+    
+    for (int i = persistentHighlights.size() - 1; i >= 0; --i) {
+        const TextHighlight &highlight = persistentHighlights[i];
+        if (highlight.pageNumber == selectionPage && 
+            highlight.boundingBox.intersects(selectionBoundingBox)) {
+            // Track this highlight's ID for note cleanup
+            if (!highlight.markdownWindowId.isEmpty()) {
+                removedHighlightIds.append(highlight.id);
+            }
+            persistentHighlights.removeAt(i);
+            removed = true;
+        }
+    }
+    
+    // CASCADE DELETE: Remove notes linked to deleted highlights
+    for (const QString &highlightId : removedHighlightIds) {
+        for (int i = markdownNotes.size() - 1; i >= 0; --i) {
+            if (markdownNotes[i].highlightId == highlightId) {
+                qDebug() << "Cascade deleting orphaned note:" << markdownNotes[i].id;
+                markdownNotes.removeAt(i);
+            }
+        }
+    }
+    
+    if (removed) {
+        // Save to metadata (both highlights and notes)
+        saveNotebookMetadata();
+        
+        // Mark as edited
+        setEdited(true);
+        
+        // Clear PDF cache and refresh current page to remove highlight immediately
+        clearPdfCache();
+        refreshCurrentPdfPage();
+        
+        // Emit signal to update UI (note list needs to refresh)
+        if (!removedHighlightIds.isEmpty()) {
+            emit markdownNotesUpdated();
+        }
+    }
+}
+
+// Check if the current selection overlaps with any persistent highlight
+bool InkCanvas::isSelectionHighlighted() const {
+    if (selectedTextBoxes.isEmpty()) {
+        return false;
+    }
+    
+    // Get the combined bounding box of the selection
+    QRectF selectionBoundingBox;
+    int selectionPage = -1;
+    
+    for (int i = 0; i < selectedTextBoxes.size(); ++i) {
+        const Poppler::TextBox* textBox = selectedTextBoxes[i];
+        if (textBox) {
+            // Get page number for this text box
+            int pageNumber = -1;
+            for (int j = 0; j < currentPdfTextBoxes.size(); ++j) {
+                if (currentPdfTextBoxes[j] == textBox) {
+                    pageNumber = (j < currentPdfTextBoxPageNumbers.size()) ? 
+                                currentPdfTextBoxPageNumbers[j] : -1;
+                    break;
+                }
+            }
+            
+            if (selectionPage == -1) {
+                selectionPage = pageNumber;
+            }
+            
+            QRectF bbox = textBox->boundingBox();
+            if (selectionBoundingBox.isNull()) {
+                selectionBoundingBox = bbox;
+            } else {
+                selectionBoundingBox = selectionBoundingBox.united(bbox);
+            }
+        }
+    }
+    
+    if (selectionPage == -1) {
+        return false;
+    }
+    
+    // Check if any highlight intersects with the selection
+    for (const TextHighlight &highlight : persistentHighlights) {
+        if (highlight.pageNumber == selectionPage && 
+            highlight.boundingBox.intersects(selectionBoundingBox)) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+// Get all highlights for a specific page
+QList<TextHighlight> InkCanvas::getHighlightsForPage(int pageNumber) const {
+    QList<TextHighlight> pageHighlights;
+    for (const TextHighlight &highlight : persistentHighlights) {
+        if (highlight.pageNumber == pageNumber) {
+            pageHighlights.append(highlight);
+        }
+    }
+    return pageHighlights;
+}
+
+// Save highlights to metadata (standalone method for Step 3)
+void InkCanvas::saveHighlightsToMetadata() {
+    // Just call the main save function which now includes highlights
+    saveNotebookMetadata();
+}
+
+// Load highlights from metadata (standalone method for Step 3)
+void InkCanvas::loadHighlightsFromMetadata() {
+    // Just call the main load function which now includes highlights
+    loadNotebookMetadata();
+}
+
+// ============================================================================
+// Markdown Notes Management
+// ============================================================================
+
+// Add a markdown note from current text selection
+QString InkCanvas::addMarkdownNoteFromSelection() {
+    if (selectedTextBoxes.isEmpty()) {
+        return QString(); // No selection
+    }
+    
+    // Check if selection is already highlighted
+    TextHighlight *existingHighlight = nullptr;
+    
+    // Get the combined bounding box of the selection
+    QRectF selectionBoundingBox;
+    int selectionPage = -1;
+    
+    for (int i = 0; i < selectedTextBoxes.size(); ++i) {
+        const Poppler::TextBox* textBox = selectedTextBoxes[i];
+        if (textBox) {
+            // Get page number for this text box
+            int pageNumber = -1;
+            for (int j = 0; j < currentPdfTextBoxes.size(); ++j) {
+                if (currentPdfTextBoxes[j] == textBox) {
+                    pageNumber = (j < currentPdfTextBoxPageNumbers.size()) ? 
+                                currentPdfTextBoxPageNumbers[j] : -1;
+                    break;
+                }
+            }
+            
+            if (selectionPage == -1) {
+                selectionPage = pageNumber;
+            }
+            
+            QRectF bbox = textBox->boundingBox();
+            if (selectionBoundingBox.isNull()) {
+                selectionBoundingBox = bbox;
+            } else {
+                selectionBoundingBox = selectionBoundingBox.united(bbox);
+            }
+        }
+    }
+    
+    // Find existing highlight that intersects with the selection
+    if (selectionPage != -1) {
+        for (int i = 0; i < persistentHighlights.size(); ++i) {
+            if (persistentHighlights[i].pageNumber == selectionPage && 
+                persistentHighlights[i].boundingBox.intersects(selectionBoundingBox)) {
+                existingHighlight = &persistentHighlights[i];
+                break;
+            }
+        }
+    }
+    
+    // If no existing highlight, create a new one
+    if (!existingHighlight) {
+        addHighlightFromSelection();
+        
+        // Get the just-created highlight (it will be the last one added)
+        if (persistentHighlights.isEmpty()) {
+            return QString();
+        }
+        
+        existingHighlight = &persistentHighlights.last();
+    }
+    
+    // Create a new markdown note linked to the highlight (existing or new)
+    MarkdownNoteData note;
+    note.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    note.highlightId = existingHighlight->id;
+    note.pageNumber = existingHighlight->pageNumber;
+    note.title = "Note for: " + existingHighlight->text.left(30) + (existingHighlight->text.length() > 30 ? "..." : "");
+    note.content = "";
+    note.color = existingHighlight->color; // Use highlight's color, not current pen color
+    
+    // Link the highlight to this note
+    existingHighlight->markdownWindowId = note.id;
+    
+    // Add the note
+    markdownNotes.append(note);
+    
+    // Save metadata
+    saveNotebookMetadata();
+    setEdited(true);
+    
+    // Emit signal
+    emit markdownNotesUpdated();
+    
+    return note.id;
+}
+
+// Add a markdown note directly
+void InkCanvas::addMarkdownNote(const MarkdownNoteData &note) {
+    // Check if note already exists
+    for (int i = 0; i < markdownNotes.size(); ++i) {
+        if (markdownNotes[i].id == note.id) {
+            // Update existing note
+            markdownNotes[i] = note;
+            saveNotebookMetadata();
+            setEdited(true);
+            emit markdownNotesUpdated();
+            return;
+        }
+    }
+    
+    // Add new note
+    markdownNotes.append(note);
+    saveNotebookMetadata();
+    setEdited(true);
+    emit markdownNotesUpdated();
+}
+
+// Update an existing markdown note
+void InkCanvas::updateMarkdownNote(const MarkdownNoteData &note) {
+    for (int i = 0; i < markdownNotes.size(); ++i) {
+        if (markdownNotes[i].id == note.id) {
+            markdownNotes[i] = note;
+            saveNotebookMetadata();
+            setEdited(true);
+            // DON'T emit markdownNotesUpdated() here - that causes a feedback loop
+            // that reloads all notes and resets the editor on every keystroke!
+            // The signal is only needed when notes are added/removed, not updated.
+            return;
+        }
+    }
+}
+
+// Remove a markdown note
+void InkCanvas::removeMarkdownNote(const QString &noteId) {
+    for (int i = 0; i < markdownNotes.size(); ++i) {
+        if (markdownNotes[i].id == noteId) {
+            QString highlightId = markdownNotes[i].highlightId;
+            markdownNotes.removeAt(i);
+            
+            // Unlink from highlight if linked
+            if (!highlightId.isEmpty()) {
+                TextHighlight *highlight = findHighlightById(highlightId);
+                if (highlight) {
+                    highlight->markdownWindowId.clear();
+                }
+            }
+            
+            saveNotebookMetadata();
+            setEdited(true);
+            emit markdownNotesUpdated();
+            return;
+        }
+    }
+}
+
+// Find a markdown note by ID
+MarkdownNoteData* InkCanvas::findMarkdownNote(const QString &noteId) {
+    for (int i = 0; i < markdownNotes.size(); ++i) {
+        if (markdownNotes[i].id == noteId) {
+            return &markdownNotes[i];
+        }
+    }
+    return nullptr;
+}
+
+// Get markdown notes for specific page(s) - supports combined canvas
+QList<MarkdownNoteData> InkCanvas::getMarkdownNotesForPages(int page1, int page2) const {
+    QList<MarkdownNoteData> pageNotes;
+    for (const MarkdownNoteData &note : markdownNotes) {
+        if (note.pageNumber == page1 || (page2 >= 0 && note.pageNumber == page2)) {
+            pageNotes.append(note);
+        }
+    }
+    return pageNotes;
+}
+
+// Link a highlight to a markdown note
+void InkCanvas::linkHighlightToNote(const QString &highlightId, const QString &noteId) {
+    TextHighlight *highlight = findHighlightById(highlightId);
+    if (highlight) {
+        highlight->markdownWindowId = noteId;
+        saveNotebookMetadata();
+        setEdited(true);
+    }
+}
+
+// Find a highlight by ID
+TextHighlight* InkCanvas::findHighlightById(const QString &highlightId) {
+    for (int i = 0; i < persistentHighlights.size(); ++i) {
+        if (persistentHighlights[i].id == highlightId) {
+            return &persistentHighlights[i];
+        }
+    }
+    return nullptr;
+}
+
+// Handle double-click on a highlight
+void InkCanvas::handleHighlightDoubleClick(const QString &highlightId) {
+    emit highlightDoubleClicked(highlightId);
 }
 
 void InkCanvas::processPendingTextSelection() {
@@ -4214,6 +4753,144 @@ void InkCanvas::processPendingTextSelection() {
 
 bool InkCanvas::isValidPageNumber(int pageNumber) const {
     return (pageNumber >= 0 && pageNumber < totalPdfPages);
+}
+
+// Helper method to draw highlights onto a PDF page image during rendering/caching
+void InkCanvas::drawHighlightsOnPageImage(QImage &pageImage, int pageNumber, Poppler::Document* pdfDoc) {
+    if (pageImage.isNull() || !pdfDoc || persistentHighlights.isEmpty()) {
+        return;
+    }
+    
+    // Get page size in PDF coordinates
+    std::unique_ptr<Poppler::Page> pdfPage(pdfDoc->page(pageNumber));
+    if (!pdfPage) {
+        return;
+    }
+    QSizeF pdfPageSize = pdfPage->pageSizeF();
+    
+    // Find all highlights for this page
+    QList<TextHighlight> pageHighlights;
+    for (const TextHighlight &highlight : persistentHighlights) {
+        if (highlight.pageNumber == pageNumber) {
+            pageHighlights.append(highlight);
+        }
+    }
+    
+    if (pageHighlights.isEmpty()) {
+        return; // No highlights for this page
+    }
+    
+    // Create painter for the image
+    QPainter painter(&pageImage);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    
+    // Calculate scale from PDF coordinates to image coordinates
+    qreal scaleX = pageImage.width() / pdfPageSize.width();
+    qreal scaleY = pageImage.height() / pdfPageSize.height();
+    
+    // Draw each highlight
+    for (const TextHighlight &highlight : pageHighlights) {
+        // Use the stored highlight color with semi-transparency
+        QColor highlightColor = highlight.color;
+        highlightColor.setAlpha(120); // Semi-transparent
+        
+        painter.setBrush(highlightColor);
+        painter.setPen(Qt::NoPen);
+        
+        // Draw connected rectangles row by row
+        if (!highlight.textBoxRects.isEmpty()) {
+            // Group text boxes by row (using Y-coordinate tolerance)
+            const qreal rowTolerance = 5.0; // PDF coordinate units
+            
+            QList<QList<QRectF>> rowGroups;
+            for (const QRectF &rect : highlight.textBoxRects) {
+                bool addedToRow = false;
+                
+                // Try to add to existing row
+                for (QList<QRectF> &row : rowGroups) {
+                    if (!row.isEmpty()) {
+                        qreal avgY = (row.first().top() + row.first().bottom()) / 2.0;
+                        qreal rectY = (rect.top() + rect.bottom()) / 2.0;
+                        
+                        if (qAbs(avgY - rectY) <= rowTolerance) {
+                            row.append(rect);
+                            addedToRow = true;
+                            break;
+                        }
+                    }
+                }
+                
+                // Create new row if not added
+                if (!addedToRow) {
+                    QList<QRectF> newRow;
+                    newRow.append(rect);
+                    rowGroups.append(newRow);
+                }
+            }
+            
+            // Draw continuous rectangle for each row
+            for (const QList<QRectF> &row : rowGroups) {
+                if (row.isEmpty()) continue;
+                
+                // Find leftmost and rightmost bounds
+                qreal minX = row.first().left();
+                qreal maxX = row.first().right();
+                qreal minY = row.first().top();
+                qreal maxY = row.first().bottom();
+                
+                for (const QRectF &rect : row) {
+                    minX = qMin(minX, rect.left());
+                    maxX = qMax(maxX, rect.right());
+                    minY = qMin(minY, rect.top());
+                    maxY = qMax(maxY, rect.bottom());
+                }
+                
+                // Create continuous rectangle spanning the entire row
+                QRectF pdfRowRect(minX, minY, maxX - minX, maxY - minY);
+                QRectF imageRect(
+                    pdfRowRect.x() * scaleX,
+                    pdfRowRect.y() * scaleY,
+                    pdfRowRect.width() * scaleX,
+                    pdfRowRect.height() * scaleY
+                );
+                painter.drawRect(imageRect);
+            }
+        } else {
+            // Legacy format: draw combined bounding box (for backward compatibility)
+            QRectF pdfRect = highlight.boundingBox;
+            QRectF imageRect(
+                pdfRect.x() * scaleX,
+                pdfRect.y() * scaleY,
+                pdfRect.width() * scaleX,
+                pdfRect.height() * scaleY
+            );
+            painter.drawRect(imageRect);
+        }
+    }
+    
+    painter.end();
+}
+
+// Refresh the currently displayed PDF page (for highlight updates)
+// This re-renders and displays the current page without navigation
+void InkCanvas::refreshCurrentPdfPage() {
+    if (!pdfDocument || currentCachedPage < 0) {
+        return;
+    }
+    
+    // Re-render the current page (which is a combined canvas of current + next page)
+    renderPdfPageToCache(currentCachedPage);
+    
+    // Update the backgroundImage with the newly rendered cached page
+    {
+        QMutexLocker locker(&pdfCacheMutex);
+        if (pdfCache.contains(currentCachedPage)) {
+            backgroundImage = *pdfCache.object(currentCachedPage);
+        }
+    }
+    
+    // Refresh display
+    update();
 }
 
 void InkCanvas::renderPdfPageToCache(int pageNumber) {
@@ -4267,6 +4944,9 @@ void InkCanvas::renderPdfPageToCacheThreadSafe(int pageNumber, Poppler::Document
         currentPageImage = invertPdfImage(currentPageImage);
     }
     
+    // Draw highlights on the current page image
+    drawHighlightsOnPageImage(currentPageImage, pageNumber, sharedDocument);
+    
     // Try to render next page for combination
     QImage nextPageImage;
     int nextPageNumber = pageNumber + 1;
@@ -4279,6 +4959,9 @@ void InkCanvas::renderPdfPageToCacheThreadSafe(int pageNumber, Poppler::Document
             if (pdfInversionEnabled) {
                 nextPageImage = invertPdfImage(nextPageImage);
             }
+            
+            // Draw highlights on the next page image
+            drawHighlightsOnPageImage(nextPageImage, nextPageNumber, sharedDocument);
         }
     }
     
@@ -4652,15 +5335,6 @@ void InkCanvas::invalidateBothPagesCache(int pageNumber) {
     noteCacheAccessOrder.removeAll(pageNumber + 1);
 }
 
-QList<MarkdownWindow*> InkCanvas::loadMarkdownWindowsForPage(int pageNumber) {
-    if (!markdownManager) {
-        return QList<MarkdownWindow*>();
-    }
-    
-    // Load windows for the specified page without affecting current windows
-    return markdownManager->loadWindowsForPageSeparately(pageNumber);
-}
-
 QList<PictureWindow*> InkCanvas::loadPictureWindowsForPage(int pageNumber) {
     if (!pictureManager) {
         return QList<PictureWindow*>();
@@ -4670,8 +5344,9 @@ QList<PictureWindow*> InkCanvas::loadPictureWindowsForPage(int pageNumber) {
     return pictureManager->loadWindowsForPageSeparately(pageNumber);
 }
 
+// Load picture windows for combined canvas (markdown windows removed)
 void InkCanvas::loadCombinedWindowsForPage(int pageNumber) {
-    if (!markdownManager && !pictureManager) {
+    if (!pictureManager) {
         return;
     }
     
@@ -4688,97 +5363,34 @@ void InkCanvas::loadCombinedWindowsForPage(int pageNumber) {
     }
     
     if (isCombinedCanvas) {
-        // ✅ PERFORMANCE: Check if we're already viewing these pages - skip reload if so
-        int nextPageNumber = pageNumber + 1;
-        bool alreadyLoaded = false;
-        
-        if (markdownManager) {
-            // Check if markdown manager is already displaying these exact pages
-            int mdFirst = markdownManager->getCombinedFirstPage();
-            int mdSecond = markdownManager->getCombinedSecondPage();
-            if (mdFirst == pageNumber && mdSecond == nextPageNumber) {
-                alreadyLoaded = true;
-            }
-        }
-        
-        if (alreadyLoaded) {
-            // Already displaying these exact pages, no need to reload
-            return;
-        }
-        
         // For combined canvas, we need to load and merge windows from both current and next page
+        int nextPageNumber = pageNumber + 1;
         
-        
-        // For combined canvas showing pages N and N+1:
-        // - Top half shows page N
-        // - Bottom half shows page N+1
-        
-        // CORRECTED LOGIC: For page "N-(N+1)" view, we need:
-        // - Top half: Page N windows (no adjustment needed - they were saved with top-half coordinates)  
-        // - Bottom half: Page N+1 windows (adjust by +singlePageHeight)
-        
-        // Load page N windows for top half using separate method to avoid interference
-        QList<MarkdownWindow*> topHalfMarkdownWindows;
-        QList<PictureWindow*> topHalfPictureWindows;
-        
-        if (markdownManager) {
-            topHalfMarkdownWindows = loadMarkdownWindowsForPage(pageNumber);
-            // These windows were saved with their original coordinates and appear in top half as-is
-        }
-        
-        if (pictureManager) {
-            topHalfPictureWindows = loadPictureWindowsForPage(pageNumber);
-            // These windows were saved with their original coordinates and appear in top half as-is
-        }
+        // Load page N windows for top half
+        QList<PictureWindow*> topHalfPictureWindows = loadPictureWindowsForPage(pageNumber);
         
         // Load page N+1 windows for bottom half and adjust their coordinates
-        QList<MarkdownWindow*> bottomHalfMarkdownWindows;
-        QList<PictureWindow*> bottomHalfPictureWindows;
+        QList<PictureWindow*> bottomHalfPictureWindows = loadPictureWindowsForPage(nextPageNumber);
         
-        if (markdownManager) {
-            bottomHalfMarkdownWindows = loadMarkdownWindowsForPage(nextPageNumber);
-            // Move page N+1 windows to bottom half by adding singlePageHeight
-            for (MarkdownWindow* window : bottomHalfMarkdownWindows) {
-                QRect rect = window->getCanvasRect();
-                rect.moveTop(rect.y() + singlePageHeight);
-                window->setCanvasRect(rect);
-            }
-        }
-        
-        if (pictureManager) {
-            bottomHalfPictureWindows = loadPictureWindowsForPage(nextPageNumber);
-            // Move page N+1 windows to bottom half by adding singlePageHeight
-            for (PictureWindow* window : bottomHalfPictureWindows) {
-                QRect rect = window->getCanvasRect();
-                rect.moveTop(rect.y() + singlePageHeight);
-                window->setCanvasRect(rect);
-            }
+        // Move page N+1 windows to bottom half by adding singlePageHeight
+        for (PictureWindow* window : bottomHalfPictureWindows) {
+            QRect rect = window->getCanvasRect();
+            rect.moveTop(rect.y() + singlePageHeight);
+            window->setCanvasRect(rect);
         }
         
         // Combine both sets of windows and set as current
-        if (markdownManager) {
-            QList<MarkdownWindow*> combinedMarkdownWindows = topHalfMarkdownWindows + bottomHalfMarkdownWindows;
-            markdownManager->setCombinedWindows(combinedMarkdownWindows, pageNumber, nextPageNumber);
-        }
-        
-        if (pictureManager) {
-            QList<PictureWindow*> combinedPictureWindows = topHalfPictureWindows + bottomHalfPictureWindows;
-            pictureManager->setCombinedWindows(combinedPictureWindows);
-        }
-        
+        QList<PictureWindow*> combinedPictureWindows = topHalfPictureWindows + bottomHalfPictureWindows;
+        pictureManager->setCombinedWindows(combinedPictureWindows);
     } else {
         // Standard single page window loading
-        if (markdownManager) {
-            markdownManager->loadWindowsForPage(pageNumber);
-        }
-        if (pictureManager) {
-            pictureManager->loadWindowsForPage(pageNumber);
-        }
+        pictureManager->loadWindowsForPage(pageNumber);
     }
 }
 
+// Save picture windows for combined canvas (markdown windows removed)
 void InkCanvas::saveCombinedWindowsForPage(int pageNumber) {
-    if (!markdownManager && !pictureManager) {
+    if (!pictureManager) {
         return;
     }
     
@@ -4799,26 +5411,11 @@ void InkCanvas::saveCombinedWindowsForPage(int pageNumber) {
         // Windows in the top half belong to current page, bottom half to next page
         
         // Get all current windows
-        QList<MarkdownWindow*> allMarkdownWindows = markdownManager ? markdownManager->getCurrentPageWindows() : QList<MarkdownWindow*>();
-        QList<PictureWindow*> allPictureWindows = pictureManager ? pictureManager->getCurrentPageWindows() : QList<PictureWindow*>();
+        QList<PictureWindow*> allPictureWindows = pictureManager->getCurrentPageWindows();
         
         // Separate windows by position
-        QList<MarkdownWindow*> currentPageMarkdownWindows;
-        QList<MarkdownWindow*> nextPageMarkdownWindows;
         QList<PictureWindow*> currentPagePictureWindows;
         QList<PictureWindow*> nextPagePictureWindows;
-        
-        // Separate markdown windows by position
-        for (MarkdownWindow* window : allMarkdownWindows) {
-            QRect rect = window->getCanvasRect();
-            if (rect.top() < singlePageHeight) {
-                // Window starts in top half (current page)
-                currentPageMarkdownWindows.append(window);
-            } else {
-                // Window starts in bottom half (next page)
-                nextPageMarkdownWindows.append(window);
-            }
-        }
         
         // Separate picture windows by position  
         for (PictureWindow* window : allPictureWindows) {
@@ -4833,31 +5430,10 @@ void InkCanvas::saveCombinedWindowsForPage(int pageNumber) {
         }
         
         // Save current page windows (top half)
-        if (markdownManager) {
-            markdownManager->saveWindowsForPageSeparately(pageNumber, currentPageMarkdownWindows);
-        }
-        if (pictureManager) {
-            pictureManager->saveWindowsForPageSeparately(pageNumber, currentPagePictureWindows);
-        }
+        pictureManager->saveWindowsForPageSeparately(pageNumber, currentPagePictureWindows);
         
         // Save next page windows (bottom half, with adjusted coordinates)
-        if (!nextPageMarkdownWindows.isEmpty() && markdownManager) {
-            // Temporarily adjust coordinates for saving
-            for (MarkdownWindow* window : nextPageMarkdownWindows) {
-                QRect rect = window->getCanvasRect();
-                rect.moveTop(rect.y() - singlePageHeight); // Move to top half coordinates
-                window->setCanvasRect(rect);
-            }
-            markdownManager->saveWindowsForPageSeparately(pageNumber + 1, nextPageMarkdownWindows);
-            // Restore original coordinates
-            for (MarkdownWindow* window : nextPageMarkdownWindows) {
-                QRect rect = window->getCanvasRect();
-                rect.moveTop(rect.y() + singlePageHeight); // Move back to bottom half
-                window->setCanvasRect(rect);
-            }
-        }
-        
-        if (!nextPagePictureWindows.isEmpty() && pictureManager) {
+        if (!nextPagePictureWindows.isEmpty()) {
             // Temporarily adjust coordinates for saving
             for (PictureWindow* window : nextPagePictureWindows) {
                 QRect rect = window->getCanvasRect();
@@ -4872,39 +5448,10 @@ void InkCanvas::saveCombinedWindowsForPage(int pageNumber) {
                 window->setCanvasRect(rect);
             }
         }
-        
     } else {
         // Standard single page window saving
-        if (markdownManager) {
-            markdownManager->saveWindowsForPage(pageNumber);
-        }
-        if (pictureManager) {
-            pictureManager->saveWindowsForPage(pageNumber);
-        }
+        pictureManager->saveWindowsForPage(pageNumber);
     }
-}
-
-// Markdown integration methods
-void InkCanvas::setMarkdownSelectionMode(bool enabled) {
-    markdownSelectionMode = enabled;
-    
-    if (markdownManager) {
-        markdownManager->setSelectionMode(enabled);
-    }
-    
-    if (!enabled) {
-        markdownSelecting = false;
-    }
-    
-    // Update cursor
-    setCursor(enabled ? Qt::CrossCursor : Qt::ArrowCursor);
-    
-    // Notify signal
-    emit markdownSelectionModeChanged(enabled);
-}
-
-bool InkCanvas::isMarkdownSelectionMode() const {
-    return markdownSelectionMode;
 }
 
 void InkCanvas::setPictureSelectionMode(bool enabled) {
@@ -5050,6 +5597,26 @@ void InkCanvas::loadNotebookMetadata() {
         bookmarks.append(value.toString());
     }
     
+    // Load persistent text highlights (backward compatible - defaults to empty array)
+    persistentHighlights.clear();
+    QJsonArray highlightsArray = obj["text_highlights"].toArray();
+    for (const QJsonValue &value : highlightsArray) {
+        if (value.isObject()) {
+            TextHighlight highlight = TextHighlight::fromJson(value.toObject());
+            persistentHighlights.append(highlight);
+        }
+    }
+    
+    // Load markdown notes (backward compatible - defaults to empty array)
+    markdownNotes.clear();
+    QJsonArray notesArray = obj["markdown_notes"].toArray();
+    for (const QJsonValue &value : notesArray) {
+        if (value.isObject()) {
+            MarkdownNoteData note = MarkdownNoteData::fromJson(value.toObject());
+            markdownNotes.append(note);
+        }
+    }
+    
     // If we have a PDF path, try to load it (missing PDF will be handled later)
     if (!pdfPath.isEmpty()) {
         if (QFile::exists(pdfPath)) {
@@ -5089,6 +5656,20 @@ void InkCanvas::saveNotebookMetadata() {
         bookmarkArray.append(bookmark);
     }
     obj["bookmarks"] = bookmarkArray;
+    
+    // Save persistent text highlights
+    QJsonArray highlightsArray;
+    for (const TextHighlight &highlight : persistentHighlights) {
+        highlightsArray.append(highlight.toJson());
+    }
+    obj["text_highlights"] = highlightsArray;
+    
+    // Save markdown notes
+    QJsonArray notesArray;
+    for (const MarkdownNoteData &note : markdownNotes) {
+        notesArray.append(note.toJson());
+    }
+    obj["markdown_notes"] = notesArray;
     
     QJsonDocument doc(obj);
     

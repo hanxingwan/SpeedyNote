@@ -18,16 +18,17 @@
 #include <QClipboard>
 #include <QFutureWatcher>
 #include <QMutex>
-#include "MarkdownWindowManager.h"
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QUuid>
 #include "PictureWindowManager.h"
+#include "MarkdownNoteEntry.h"
 #include "ToolType.h"
 #include "ButtonMappingTypes.h"
 #include "SpnPackageManager.h"
 #include "PdfRelinkDialog.h"
 
-class MarkdownWindowManager;
 class PictureWindowManager;
-class MarkdownWindow;
 class PictureWindow;
 
 enum class TouchGestureMode {
@@ -42,6 +43,75 @@ enum class BackgroundStyle {
     Lines
 };
 
+// Structure to store a persistent text highlight
+struct TextHighlight {
+    QString id;              // Unique ID for this highlight (for linking to markdown windows)
+    int pageNumber;          // Page number (0-based)
+    QRectF boundingBox;      // Combined bounding box in PDF coordinates (for quick intersection checks)
+    QList<QRectF> textBoxRects; // Individual text box rectangles for precise rendering
+    QString text;            // The highlighted text content
+    QColor color;            // Highlight color
+    QString markdownWindowId; // ID of associated markdown window (empty if none) - for Step 3
+    
+    // Serialization helpers
+    QJsonObject toJson() const {
+        QJsonObject obj;
+        obj["id"] = id;
+        obj["pageNumber"] = pageNumber;
+        obj["boundingBox"] = QString("%1,%2,%3,%4")
+            .arg(boundingBox.x()).arg(boundingBox.y())
+            .arg(boundingBox.width()).arg(boundingBox.height());
+        
+        // Serialize individual text box rectangles
+        QJsonArray rectsArray;
+        for (const QRectF &rect : textBoxRects) {
+            rectsArray.append(QString("%1,%2,%3,%4")
+                .arg(rect.x()).arg(rect.y())
+                .arg(rect.width()).arg(rect.height()));
+        }
+        obj["textBoxRects"] = rectsArray;
+        
+        obj["text"] = text;
+        obj["color"] = color.name(QColor::HexArgb);
+        obj["markdownWindowId"] = markdownWindowId;
+        return obj;
+    }
+    
+    static TextHighlight fromJson(const QJsonObject &obj) {
+        TextHighlight highlight;
+        highlight.id = obj["id"].toString();
+        highlight.pageNumber = obj["pageNumber"].toInt();
+        
+        // Parse combined bounding box
+        QString bbox = obj["boundingBox"].toString();
+        QStringList parts = bbox.split(',');
+        if (parts.size() == 4) {
+            highlight.boundingBox = QRectF(
+                parts[0].toDouble(), parts[1].toDouble(),
+                parts[2].toDouble(), parts[3].toDouble()
+            );
+        }
+        
+        // Parse individual text box rectangles
+        QJsonArray rectsArray = obj["textBoxRects"].toArray();
+        for (const QJsonValue &value : rectsArray) {
+            QString rectStr = value.toString();
+            QStringList rectParts = rectStr.split(',');
+            if (rectParts.size() == 4) {
+                highlight.textBoxRects.append(QRectF(
+                    rectParts[0].toDouble(), rectParts[1].toDouble(),
+                    rectParts[2].toDouble(), rectParts[3].toDouble()
+                ));
+            }
+        }
+        
+        highlight.text = obj["text"].toString();
+        highlight.color = QColor(obj["color"].toString());
+        highlight.markdownWindowId = obj["markdownWindowId"].toString();
+        return highlight;
+    }
+};
+
 class InkCanvas : public QWidget {
     Q_OBJECT
 
@@ -54,9 +124,10 @@ signals:
     void pdfLinkClicked(int targetPage); // Signal emitted when a PDF link is clicked
     void pdfTextSelected(const QString &text); // Signal emitted when PDF text is selected
     void pdfLoaded(); // Signal emitted when a PDF is loaded
-    void markdownSelectionModeChanged(bool enabled); // Signal emitted when markdown selection mode changes
     void autoScrollRequested(int direction); // Signal for autoscrolling to next/prev page
     void earlySaveRequested(); // Signal for proactive save before autoscroll threshold
+    void markdownNotesUpdated(); // Signal emitted when markdown notes are added/updated/removed
+    void highlightDoubleClicked(const QString &highlightId); // Signal emitted when a highlight is double-clicked
 
 public:
     explicit InkCanvas(QWidget *parent = nullptr);
@@ -191,11 +262,7 @@ public:
     void copyRopeSelection(); // Copy the current rope tool selection
     void copyRopeSelectionToClipboard(); // Copy the current rope tool selection to clipboard
     
-    // Markdown integration
-    MarkdownWindowManager* getMarkdownManager() const { return markdownManager; }
     PictureWindowManager* getPictureManager() const { return pictureManager; }
-    void setMarkdownSelectionMode(bool enabled);
-    bool isMarkdownSelectionMode() const;
     
     // Picture integration
     void setPictureSelectionMode(bool enabled);
@@ -226,6 +293,25 @@ public:
     bool isPdfTextSelectionEnabled() const { return pdfTextSelectionEnabled; }
     void clearPdfTextSelection(); // Clear current PDF text selection
     QString getSelectedPdfText() const; // Get currently selected PDF text
+    
+    // Persistent text highlight management
+    void addHighlightFromSelection(); // Add a persistent highlight from current selection
+    void removeHighlightAtSelection(); // Remove highlight(s) that overlap with current selection
+    bool isSelectionHighlighted() const; // Check if current selection overlaps with any persistent highlight
+    QList<TextHighlight> getHighlightsForPage(int pageNumber) const; // Get all highlights for a specific page
+    void loadHighlightsFromMetadata(); // Load highlights from JSON metadata
+    void saveHighlightsToMetadata(); // Save highlights to JSON metadata
+    
+    // Markdown notes management
+    QString addMarkdownNoteFromSelection(); // Add a markdown note linked to current selection, returns note ID
+    void addMarkdownNote(const MarkdownNoteData &note); // Add a markdown note directly
+    void updateMarkdownNote(const MarkdownNoteData &note); // Update an existing markdown note
+    void removeMarkdownNote(const QString &noteId); // Remove a markdown note
+    MarkdownNoteData* findMarkdownNote(const QString &noteId); // Find a note by ID
+    QList<MarkdownNoteData> getMarkdownNotesForPages(int page1, int page2 = -1) const; // Get notes for page(s) in combined canvas
+    void linkHighlightToNote(const QString &highlightId, const QString &noteId); // Link a highlight to a note
+    TextHighlight* findHighlightById(const QString &highlightId); // Find a highlight by ID
+    void handleHighlightDoubleClick(const QString &highlightId); // Handle double-click on highlight
 
     // Canvas coordinate system support
     QSize getCanvasSize() const { return buffer.size(); }
@@ -251,6 +337,7 @@ protected:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
+    void mouseDoubleClickEvent(QMouseEvent *event) override;
     void resizeEvent(QResizeEvent *event) override; // Handle resizing
     
     // Touch event handling
@@ -355,8 +442,9 @@ public:
     // ✅ Metadata management
     void loadNotebookId();
     
-    // Combined canvas window management
-    void saveCombinedWindowsForPage(int pageNumber); // Save windows for combined canvas pages
+    // Combined canvas window management (picture windows only)
+    void saveCombinedWindowsForPage(int pageNumber); // Save picture windows for combined canvas pages
+    void loadCombinedWindowsForPage(int pageNumber); // Load picture windows for combined canvas pages
     
     // Autoscroll threshold detection (for touch gestures and external pan changes)
     void checkAutoscrollThreshold(int oldPanY, int newPanY);
@@ -380,8 +468,6 @@ public:
     
 private:
     // Combined canvas window management
-    void loadCombinedWindowsForPage(int pageNumber); // Load windows for combined canvas pages
-    QList<MarkdownWindow*> loadMarkdownWindowsForPage(int pageNumber); // Load markdown windows without affecting current
     QList<PictureWindow*> loadPictureWindowsForPage(int pageNumber); // Load picture windows without affecting current
     
     // PDF text selection helpers for combined canvas
@@ -445,8 +531,15 @@ private:
     QPointF pdfSelectionStart; // Start point of text selection (logical widget coordinates)
     QPointF pdfSelectionEnd; // End point of text selection (logical widget coordinates)
     QList<Poppler::TextBox*> currentPdfTextBoxes; // Text boxes for current page(s)
-    QList<Poppler::TextBox*> selectedTextBoxes; // Currently selected text boxes
+    QList<Poppler::TextBox*> selectedTextBoxes; // Currently selected text boxes (temporary selection)
     QList<int> currentPdfTextBoxPageNumbers; // Page number for each text box (for combined canvas)
+    
+    // Persistent text highlights storage
+    QList<TextHighlight> persistentHighlights; // All saved highlights for this notebook
+    
+    // Markdown notes storage
+    QList<MarkdownNoteData> markdownNotes; // All saved markdown notes for this notebook
+    
     // ✅ MEMORY LEAK FIX: Cache only page sizes instead of full Page objects
     QMap<int, QSizeF> pdfPageSizeCache; // Maps page number -> page size
     int currentTextPageNumber = -1; // Track which page we're displaying text for
@@ -474,13 +567,7 @@ private:
     int pendingNoteCacheTargetPage = -1; // Target page for pending note cache operation (to validate timer relevance)
     QList<QFutureWatcher<void>*> activeNoteWatchers; // Track active note cache watchers for cleanup
     
-    // Markdown integration
-    MarkdownWindowManager* markdownManager = nullptr;
     PictureWindowManager* pictureManager = nullptr;
-    bool markdownSelectionMode = false;
-    QPoint markdownSelectionStart;
-    QPoint markdownSelectionEnd;
-    bool markdownSelecting = false;
     
     // Picture selection state
     bool pictureSelectionMode = false;
@@ -516,6 +603,8 @@ private:
     void renderPdfPageToCacheThreadSafe(int pageNumber, Poppler::Document* sharedDocument); // Thread-safe render with separate document instance
     void checkAndCacheAdjacentPages(int targetPage); // Check and cache adjacent pages if needed
     bool isValidPageNumber(int pageNumber) const; // Check if page number is valid
+    void drawHighlightsOnPageImage(QImage &pageImage, int pageNumber, Poppler::Document* pdfDoc); // Draw highlights on a PDF page image during rendering
+    void refreshCurrentPdfPage(); // Refresh the currently displayed PDF page (for highlight updates)
     
     // Intelligent note cache helper methods
     void loadSingleNotePageToCache(int pageNumber); // Load a single note page and add to cache
