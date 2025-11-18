@@ -4513,18 +4513,34 @@ void InkCanvas::removeHighlightAtSelection() {
     
     // Remove highlights that intersect with the selection
     bool removed = false;
+    QStringList removedHighlightIds; // Track IDs for cascade deletion of notes
+    
     for (int i = persistentHighlights.size() - 1; i >= 0; --i) {
         const TextHighlight &highlight = persistentHighlights[i];
         if (highlight.pageNumber == selectionPage && 
             highlight.boundingBox.intersects(selectionBoundingBox)) {
+            // Track this highlight's ID for note cleanup
+            if (!highlight.markdownWindowId.isEmpty()) {
+                removedHighlightIds.append(highlight.id);
+            }
             persistentHighlights.removeAt(i);
             removed = true;
         }
     }
     
+    // CASCADE DELETE: Remove notes linked to deleted highlights
+    for (const QString &highlightId : removedHighlightIds) {
+        for (int i = markdownNotes.size() - 1; i >= 0; --i) {
+            if (markdownNotes[i].highlightId == highlightId) {
+                qDebug() << "Cascade deleting orphaned note:" << markdownNotes[i].id;
+                markdownNotes.removeAt(i);
+            }
+        }
+    }
+    
     if (removed) {
-        // Save to metadata
-        saveHighlightsToMetadata();
+        // Save to metadata (both highlights and notes)
+        saveNotebookMetadata();
         
         // Mark as edited
         setEdited(true);
@@ -4532,6 +4548,11 @@ void InkCanvas::removeHighlightAtSelection() {
         // Clear PDF cache and refresh current page to remove highlight immediately
         clearPdfCache();
         refreshCurrentPdfPage();
+        
+        // Emit signal to update UI (note list needs to refresh)
+        if (!removedHighlightIds.isEmpty()) {
+            emit markdownNotesUpdated();
+        }
     }
 }
 

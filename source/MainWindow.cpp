@@ -7614,19 +7614,22 @@ void MainWindow::onHighlightLinkClicked(const QString &highlightId) {
     
     // After navigation, pan to the highlight position
     // Need to wait for page to load before panning
-    QTimer::singleShot(100, this, [this, highlightId]() {
-        if (!currentCanvas() || !panYSlider) return;
+    QPointer<MainWindow> mainWindowPtr(this); // Safe pointer for lambda
+    QTimer::singleShot(100, this, [mainWindowPtr, highlightId]() {
+        if (!mainWindowPtr || !mainWindowPtr->currentCanvas() || !mainWindowPtr->panYSlider) return;
+        
+        InkCanvas *canvas = mainWindowPtr->currentCanvas();
         
         // Find highlight again after page switch
-        TextHighlight *highlight = currentCanvas()->findHighlightById(highlightId);
+        TextHighlight *highlight = canvas->findHighlightById(highlightId);
         if (!highlight) return;
         
         // Get the Y position of the highlight in PDF coordinates
         qreal highlightY = highlight->boundingBox.center().y();
         
         // Check if we're in combined canvas mode
-        QPixmap backgroundImage = currentCanvas()->getBackgroundImage();
-        QPixmap buffer = currentCanvas()->getBuffer();
+        QPixmap backgroundImage = canvas->getBackgroundImage();
+        QPixmap buffer = canvas->getBuffer();
         bool isCombinedCanvas = false;
         int singlePageHeight = buffer.height();
         
@@ -7639,7 +7642,7 @@ void MainWindow::onHighlightLinkClicked(const QString &highlightId) {
         }
         
         // Get current page from canvas
-        int canvasFirstPage = currentCanvas()->getLastActivePage();
+        int canvasFirstPage = canvas->getLastActivePage();
         int highlightPage = highlight->pageNumber;
         
         // Calculate Y offset for combined canvas
@@ -7662,14 +7665,14 @@ void MainWindow::onHighlightLinkClicked(const QString &highlightId) {
         imageY += yOffset;
         
         // Center the highlight vertically in the viewport
-        qreal viewportHeight = currentCanvas()->height();
+        qreal viewportHeight = canvas->height();
         qreal targetPanY = imageY - (viewportHeight / 2.0);
         
         // Clamp to valid range
-        targetPanY = qMax(0.0, qMin(targetPanY, (qreal)panYSlider->maximum()));
+        targetPanY = qMax(0.0, qMin(targetPanY, (qreal)mainWindowPtr->panYSlider->maximum()));
         
         // Set pan position
-        panYSlider->setValue((int)targetPanY);
+        mainWindowPtr->panYSlider->setValue((int)targetPanY);
     });
 }
 
