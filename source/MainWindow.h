@@ -198,6 +198,7 @@ public:
     void setScrollOnTopEnabled(bool enabled);
 
     TouchGestureMode touchGestureMode = TouchGestureMode::Full;
+    TouchGestureMode previousTouchGestureMode = TouchGestureMode::Full; // Store state before text selection
     TouchGestureMode getTouchGestureMode() const;
     void setTouchGestureMode(TouchGestureMode mode);
     void cycleTouchGestureMode(); // Cycle through: Disabled -> YAxisOnly -> Full -> Disabled

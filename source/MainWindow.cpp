@@ -245,6 +245,30 @@ void MainWindow::setupUi() {
         updatePdfTextSelectButtonState();
         updateBookmarkButtonState();
         
+        // Temporarily disable touch gestures when text selection is enabled
+        if (newMode) {
+            // Save current touch gesture mode and disable it
+            previousTouchGestureMode = touchGestureMode;
+            if (touchGestureMode != TouchGestureMode::Disabled) {
+                setTouchGestureMode(TouchGestureMode::Disabled);
+                touchGesturesButton->setProperty("selected", false);
+                touchGesturesButton->setProperty("yAxisOnly", false);
+                updateButtonIcon(touchGesturesButton, "hand");
+                touchGesturesButton->style()->unpolish(touchGesturesButton);
+                touchGesturesButton->style()->polish(touchGesturesButton);
+            }
+        } else {
+            // Restore previous touch gesture mode
+            if (previousTouchGestureMode != touchGestureMode) {
+                setTouchGestureMode(previousTouchGestureMode);
+                touchGesturesButton->setProperty("selected", previousTouchGestureMode != TouchGestureMode::Disabled);
+                touchGesturesButton->setProperty("yAxisOnly", previousTouchGestureMode == TouchGestureMode::YAxisOnly);
+                updateButtonIcon(touchGesturesButton, "hand");
+                touchGesturesButton->style()->unpolish(touchGesturesButton);
+                touchGesturesButton->style()->polish(touchGesturesButton);
+            }
+        }
+        
         // Clear any existing selection when toggling
         if (!newMode) {
             currentCanvas()->clearPdfTextSelection();
@@ -2068,18 +2092,24 @@ void MainWindow::exportAnnotatedPdf() {
                 copyProgress->setMinimumDuration(0);
                 copyProgress->show();
                 
+                // Use QPointer to safely check if MainWindow still exists
+                QPointer<MainWindow> mainWindowPtr(this);
+                
                 connect(copyProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
                     this, [=](int exitCode, QProcess::ExitStatus exitStatus) {
                         copyProgress->close();
                         copyProgress->deleteLater();
                         
-                        if (exitCode == 0 && exitStatus == QProcess::NormalExit) {
-                            QMessageBox::information(this, tr("Export Complete"), 
-                                tr("PDF copied successfully (no annotations to add)."));
-                        } else {
-                            QMessageBox::critical(this, tr("Export Failed"), 
-                                tr("Failed to copy PDF.\n\nError: %1")
-                                .arg(QString::fromUtf8(copyProcess->readAllStandardError())));
+                        // Only show message boxes if MainWindow still exists
+                        if (!mainWindowPtr.isNull()) {
+                            if (exitCode == 0 && exitStatus == QProcess::NormalExit) {
+                                QMessageBox::information(mainWindowPtr, tr("Export Complete"), 
+                                    tr("PDF copied successfully (no annotations to add)."));
+                            } else {
+                                QMessageBox::critical(mainWindowPtr, tr("Export Failed"), 
+                                    tr("Failed to copy PDF.\n\nError: %1")
+                                    .arg(QString::fromUtf8(copyProcess->readAllStandardError())));
+                            }
                         }
                         copyProcess->deleteLater();
                     });
@@ -2134,24 +2164,30 @@ void MainWindow::exportAnnotatedPdf() {
             extractProgress->setMinimumDuration(0);
             extractProgress->show();
             
+            // Use QPointer to safely check if MainWindow still exists
+            QPointer<MainWindow> mainWindowPtr(this);
+            
             connect(extractProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
                 this, [=](int exitCode, QProcess::ExitStatus exitStatus) {
                     extractProgress->close();
                     extractProgress->deleteLater();
                     
-                    if (exitCode == 0 && exitStatus == QProcess::NormalExit) {
-                        // Apply the pre-extracted outline if we have one
-                        if (!filteredOutline.isEmpty()) {
-                            applyOutlineToPdf(exportPath, filteredOutline);
+                    // Only process results if MainWindow still exists
+                    if (!mainWindowPtr.isNull()) {
+                        if (exitCode == 0 && exitStatus == QProcess::NormalExit) {
+                            // Apply the pre-extracted outline if we have one
+                            if (!filteredOutline.isEmpty()) {
+                                mainWindowPtr->applyOutlineToPdf(exportPath, filteredOutline);
+                            }
+                            
+                            QMessageBox::information(mainWindowPtr, tr("Export Complete"), 
+                                tr("Pages %1-%2 exported successfully (no annotations found in this range).")
+                                .arg(exportStartPage + 1).arg(exportEndPage + 1));
+                        } else {
+                            QMessageBox::critical(mainWindowPtr, tr("Export Failed"), 
+                                tr("Failed to extract page range from PDF.\n\nError: %1")
+                                .arg(QString::fromUtf8(extractProcess->readAllStandardError())));
                         }
-                        
-                        QMessageBox::information(this, tr("Export Complete"), 
-                            tr("Pages %1-%2 exported successfully (no annotations found in this range).")
-                            .arg(exportStartPage + 1).arg(exportEndPage + 1));
-                    } else {
-                        QMessageBox::critical(this, tr("Export Failed"), 
-                            tr("Failed to extract page range from PDF.\n\nError: %1")
-                            .arg(QString::fromUtf8(extractProcess->readAllStandardError())));
                     }
                     extractProcess->deleteLater();
                 });
