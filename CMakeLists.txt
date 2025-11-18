@@ -314,6 +314,8 @@ add_executable(${PROJECT_NAME}
         source/ControllerMappingDialog.cpp
         source/MarkdownWindow.cpp
         source/MarkdownWindowManager.cpp
+        source/MarkdownNoteEntry.cpp
+        source/MarkdownNotesSidebar.cpp
 	  source/PictureWindow.cpp
     	  source/PictureWindowManager.cpp
         source/PdfOpenDialog.cpp

@@ -23,6 +23,7 @@
 #include <QUuid>
 #include "MarkdownWindowManager.h"
 #include "PictureWindowManager.h"
+#include "MarkdownNoteEntry.h"
 #include "ToolType.h"
 #include "ButtonMappingTypes.h"
 #include "SpnPackageManager.h"
@@ -129,6 +130,8 @@ signals:
     void markdownSelectionModeChanged(bool enabled); // Signal emitted when markdown selection mode changes
     void autoScrollRequested(int direction); // Signal for autoscrolling to next/prev page
     void earlySaveRequested(); // Signal for proactive save before autoscroll threshold
+    void markdownNotesUpdated(); // Signal emitted when markdown notes are added/updated/removed
+    void highlightDoubleClicked(const QString &highlightId); // Signal emitted when a highlight is double-clicked
 
 public:
     explicit InkCanvas(QWidget *parent = nullptr);
@@ -306,6 +309,17 @@ public:
     QList<TextHighlight> getHighlightsForPage(int pageNumber) const; // Get all highlights for a specific page
     void loadHighlightsFromMetadata(); // Load highlights from JSON metadata
     void saveHighlightsToMetadata(); // Save highlights to JSON metadata
+    
+    // Markdown notes management
+    QString addMarkdownNoteFromSelection(); // Add a markdown note linked to current selection, returns note ID
+    void addMarkdownNote(const MarkdownNoteData &note); // Add a markdown note directly
+    void updateMarkdownNote(const MarkdownNoteData &note); // Update an existing markdown note
+    void removeMarkdownNote(const QString &noteId); // Remove a markdown note
+    MarkdownNoteData* findMarkdownNote(const QString &noteId); // Find a note by ID
+    QList<MarkdownNoteData> getMarkdownNotesForPages(int page1, int page2 = -1) const; // Get notes for page(s) in combined canvas
+    void linkHighlightToNote(const QString &highlightId, const QString &noteId); // Link a highlight to a note
+    TextHighlight* findHighlightById(const QString &highlightId); // Find a highlight by ID
+    void handleHighlightDoubleClick(const QString &highlightId); // Handle double-click on highlight
 
     // Canvas coordinate system support
     QSize getCanvasSize() const { return buffer.size(); }
@@ -331,6 +345,7 @@ protected:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
+    void mouseDoubleClickEvent(QMouseEvent *event) override;
     void resizeEvent(QResizeEvent *event) override; // Handle resizing
     
     // Touch event handling
@@ -530,6 +545,10 @@ private:
     
     // Persistent text highlights storage
     QList<TextHighlight> persistentHighlights; // All saved highlights for this notebook
+    
+    // Markdown notes storage
+    QList<MarkdownNoteData> markdownNotes; // All saved markdown notes for this notebook
+    
     // ✅ MEMORY LEAK FIX: Cache only page sizes instead of full Page objects
     QMap<int, QSizeF> pdfPageSizeCache; // Maps page number -> page size
     int currentTextPageNumber = -1; // Track which page we're displaying text for

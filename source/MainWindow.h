@@ -3,6 +3,7 @@
 
 #include <QMainWindow>
 #include "InkCanvas.h"
+#include "MarkdownNotesSidebar.h"
 #include <QPushButton>
 #include <QLabel>
 #include <QTimer>
@@ -443,6 +444,14 @@ private:
     void saveBookmarks();            // Save bookmarks to file
     void toggleCurrentPageBookmark(); // Add/remove current page from bookmarks
     
+    // Markdown notes sidebar functionality
+    void toggleMarkdownNotesSidebar();  // Toggle markdown notes sidebar
+    void onMarkdownNotesUpdated();      // Handle markdown notes updates
+    void onMarkdownNoteContentChanged(const QString &noteId, const MarkdownNoteData &data); // Handle note content changes
+    void onMarkdownNoteDeleted(const QString &noteId); // Handle note deletion
+    void onHighlightLinkClicked(const QString &highlightId); // Handle highlight link clicks
+    void onHighlightDoubleClicked(const QString &highlightId); // Handle highlight double-clicks
+    void loadMarkdownNotesForCurrentPage(); // Load notes for currently visible page(s)
 
 private:
     InkCanvas *canvas;
@@ -522,6 +531,11 @@ private:
     bool bookmarksSidebarVisible = false;
     QMap<int, QString> bookmarks;  // Map of page number to bookmark title
     QPushButton *jumpToPageButton; // Button to jump to a specific page
+    
+    // Markdown Notes Sidebar
+    MarkdownNotesSidebar *markdownNotesSidebar;  // Sidebar for markdown notes
+    QPushButton *toggleMarkdownNotesButton; // Button to toggle markdown notes sidebar
+    bool markdownNotesSidebarVisible = false;
 
     QWidget *dialContainer = nullptr;  // ✅ Floating dial container
     QDial *pageDial = nullptr;  // ✅ The dial itself

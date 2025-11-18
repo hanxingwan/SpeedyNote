@@ -1980,6 +1980,44 @@ void InkCanvas::mouseReleaseEvent(QMouseEvent *event) {
     event->ignore();
 }
 
+void InkCanvas::mouseDoubleClickEvent(QMouseEvent *event) {
+    // Check if double-click is in text selection mode and on a highlight
+    if (pdfTextSelectionEnabled && isPdfLoaded && event->button() == Qt::LeftButton) {
+        QPointF clickPos = event->position();
+        
+        // Convert widget coordinates to PDF coordinates
+        QPointF pdfCoords = mapWidgetToPdfCoordinates(clickPos);
+        
+        // Get current page(s) to check
+        QList<int> pagesToCheck;
+        pagesToCheck.append(currentTextPageNumber);
+        if (currentTextPageNumberSecond >= 0) {
+            pagesToCheck.append(currentTextPageNumberSecond);
+        }
+        
+        // Check if click position intersects with any highlight on visible page(s)
+        for (int pageNum : pagesToCheck) {
+            if (pageNum < 0) continue; // Skip invalid pages
+            
+            // Check all highlights on this page
+            for (const TextHighlight &highlight : persistentHighlights) {
+                if (highlight.pageNumber == pageNum && highlight.boundingBox.contains(pdfCoords)) {
+                    // Found a highlight at click position!
+                    // If it has a linked markdown note, emit signal to open it
+                    if (!highlight.markdownWindowId.isEmpty()) {
+                        emit highlightDoubleClicked(highlight.id);
+                        event->accept();
+                        return;
+                    }
+                }
+            }
+        }
+    }
+    
+    // Default handling
+    QWidget::mouseDoubleClickEvent(event);
+}
+
 void InkCanvas::drawStroke(const QPointF &start, const QPointF &end, qreal pressure) {
     if (buffer.isNull()) {
         initializeBuffer();
@@ -4293,15 +4331,45 @@ void InkCanvas::showPdfTextSelectionMenu(const QPoint &position) {
     bool alreadyHighlighted = isSelectionHighlighted();
     
     if (alreadyHighlighted) {
-        // Add "Remove Highlight" option
+        // Already highlighted - show "Remove Highlight" and "Add Notes"
         QAction *removeHighlightAction = contextMenu->addAction(tr("Remove Highlight"));
         removeHighlightAction->setIcon(QIcon(":/resources/icons/cross.png"));
         connect(removeHighlightAction, &QAction::triggered, this, [this]() {
             removeHighlightAtSelection();
             clearPdfTextSelection();
         });
+        
+        // Add "Add Notes" option (links to existing highlight)
+        QAction *addNotesAction = contextMenu->addAction(tr("Add Notes"));
+        addNotesAction->setIcon(QIcon(":/resources/icons/edit.png"));
+        connect(addNotesAction, &QAction::triggered, this, [this]() {
+            QString noteId = addMarkdownNoteFromSelection();
+            clearPdfTextSelection();
+            if (!noteId.isEmpty()) {
+                // Note was created - emit signal to update UI and auto-open sidebar
+                emit markdownNotesUpdated();
+                qDebug() << "Markdown note linked to existing highlight:" << noteId;
+            } else {
+                qDebug() << "Failed to create markdown note - no highlight found?";
+            }
+        });
     } else {
-        // Add "Add Highlight" option
+        // Not highlighted yet - show combined "Highlight and Add Notes"
+        QAction *highlightAndNotesAction = contextMenu->addAction(tr("Highlight and Add Notes"));
+        highlightAndNotesAction->setIcon(QIcon(":/resources/icons/marker.png"));
+        connect(highlightAndNotesAction, &QAction::triggered, this, [this]() {
+            QString noteId = addMarkdownNoteFromSelection();
+            clearPdfTextSelection();
+            if (!noteId.isEmpty()) {
+                // Note was created - emit signal to update UI and auto-open sidebar
+                emit markdownNotesUpdated();
+                qDebug() << "Highlight and note created:" << noteId;
+            } else {
+                qDebug() << "Failed to create highlight and note - no selection?";
+            }
+        });
+        
+        // Also keep "Add Highlight" option for users who just want to highlight
         QAction *addHighlightAction = contextMenu->addAction(tr("Add Highlight"));
         addHighlightAction->setIcon(QIcon(":/resources/icons/marker.png"));
         connect(addHighlightAction, &QAction::triggered, this, [this]() {
@@ -4539,6 +4607,202 @@ void InkCanvas::saveHighlightsToMetadata() {
 void InkCanvas::loadHighlightsFromMetadata() {
     // Just call the main load function which now includes highlights
     loadNotebookMetadata();
+}
+
+// ============================================================================
+// Markdown Notes Management
+// ============================================================================
+
+// Add a markdown note from current text selection
+QString InkCanvas::addMarkdownNoteFromSelection() {
+    if (selectedTextBoxes.isEmpty()) {
+        return QString(); // No selection
+    }
+    
+    // Check if selection is already highlighted
+    TextHighlight *existingHighlight = nullptr;
+    
+    // Get the combined bounding box of the selection
+    QRectF selectionBoundingBox;
+    int selectionPage = -1;
+    
+    for (int i = 0; i < selectedTextBoxes.size(); ++i) {
+        const Poppler::TextBox* textBox = selectedTextBoxes[i];
+        if (textBox) {
+            // Get page number for this text box
+            int pageNumber = -1;
+            for (int j = 0; j < currentPdfTextBoxes.size(); ++j) {
+                if (currentPdfTextBoxes[j] == textBox) {
+                    pageNumber = (j < currentPdfTextBoxPageNumbers.size()) ? 
+                                currentPdfTextBoxPageNumbers[j] : -1;
+                    break;
+                }
+            }
+            
+            if (selectionPage == -1) {
+                selectionPage = pageNumber;
+            }
+            
+            QRectF bbox = textBox->boundingBox();
+            if (selectionBoundingBox.isNull()) {
+                selectionBoundingBox = bbox;
+            } else {
+                selectionBoundingBox = selectionBoundingBox.united(bbox);
+            }
+        }
+    }
+    
+    // Find existing highlight that intersects with the selection
+    if (selectionPage != -1) {
+        for (int i = 0; i < persistentHighlights.size(); ++i) {
+            if (persistentHighlights[i].pageNumber == selectionPage && 
+                persistentHighlights[i].boundingBox.intersects(selectionBoundingBox)) {
+                existingHighlight = &persistentHighlights[i];
+                break;
+            }
+        }
+    }
+    
+    // If no existing highlight, create a new one
+    if (!existingHighlight) {
+        addHighlightFromSelection();
+        
+        // Get the just-created highlight (it will be the last one added)
+        if (persistentHighlights.isEmpty()) {
+            return QString();
+        }
+        
+        existingHighlight = &persistentHighlights.last();
+    }
+    
+    // Create a new markdown note linked to the highlight (existing or new)
+    MarkdownNoteData note;
+    note.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    note.highlightId = existingHighlight->id;
+    note.pageNumber = existingHighlight->pageNumber;
+    note.title = "Note for: " + existingHighlight->text.left(30) + (existingHighlight->text.length() > 30 ? "..." : "");
+    note.content = "";
+    note.color = existingHighlight->color; // Use highlight's color, not current pen color
+    
+    // Link the highlight to this note
+    existingHighlight->markdownWindowId = note.id;
+    
+    // Add the note
+    markdownNotes.append(note);
+    
+    // Save metadata
+    saveNotebookMetadata();
+    setEdited(true);
+    
+    // Emit signal
+    emit markdownNotesUpdated();
+    
+    return note.id;
+}
+
+// Add a markdown note directly
+void InkCanvas::addMarkdownNote(const MarkdownNoteData &note) {
+    // Check if note already exists
+    for (int i = 0; i < markdownNotes.size(); ++i) {
+        if (markdownNotes[i].id == note.id) {
+            // Update existing note
+            markdownNotes[i] = note;
+            saveNotebookMetadata();
+            setEdited(true);
+            emit markdownNotesUpdated();
+            return;
+        }
+    }
+    
+    // Add new note
+    markdownNotes.append(note);
+    saveNotebookMetadata();
+    setEdited(true);
+    emit markdownNotesUpdated();
+}
+
+// Update an existing markdown note
+void InkCanvas::updateMarkdownNote(const MarkdownNoteData &note) {
+    for (int i = 0; i < markdownNotes.size(); ++i) {
+        if (markdownNotes[i].id == note.id) {
+            markdownNotes[i] = note;
+            saveNotebookMetadata();
+            setEdited(true);
+            // DON'T emit markdownNotesUpdated() here - that causes a feedback loop
+            // that reloads all notes and resets the editor on every keystroke!
+            // The signal is only needed when notes are added/removed, not updated.
+            return;
+        }
+    }
+}
+
+// Remove a markdown note
+void InkCanvas::removeMarkdownNote(const QString &noteId) {
+    for (int i = 0; i < markdownNotes.size(); ++i) {
+        if (markdownNotes[i].id == noteId) {
+            QString highlightId = markdownNotes[i].highlightId;
+            markdownNotes.removeAt(i);
+            
+            // Unlink from highlight if linked
+            if (!highlightId.isEmpty()) {
+                TextHighlight *highlight = findHighlightById(highlightId);
+                if (highlight) {
+                    highlight->markdownWindowId.clear();
+                }
+            }
+            
+            saveNotebookMetadata();
+            setEdited(true);
+            emit markdownNotesUpdated();
+            return;
+        }
+    }
+}
+
+// Find a markdown note by ID
+MarkdownNoteData* InkCanvas::findMarkdownNote(const QString &noteId) {
+    for (int i = 0; i < markdownNotes.size(); ++i) {
+        if (markdownNotes[i].id == noteId) {
+            return &markdownNotes[i];
+        }
+    }
+    return nullptr;
+}
+
+// Get markdown notes for specific page(s) - supports combined canvas
+QList<MarkdownNoteData> InkCanvas::getMarkdownNotesForPages(int page1, int page2) const {
+    QList<MarkdownNoteData> pageNotes;
+    for (const MarkdownNoteData &note : markdownNotes) {
+        if (note.pageNumber == page1 || (page2 >= 0 && note.pageNumber == page2)) {
+            pageNotes.append(note);
+        }
+    }
+    return pageNotes;
+}
+
+// Link a highlight to a markdown note
+void InkCanvas::linkHighlightToNote(const QString &highlightId, const QString &noteId) {
+    TextHighlight *highlight = findHighlightById(highlightId);
+    if (highlight) {
+        highlight->markdownWindowId = noteId;
+        saveNotebookMetadata();
+        setEdited(true);
+    }
+}
+
+// Find a highlight by ID
+TextHighlight* InkCanvas::findHighlightById(const QString &highlightId) {
+    for (int i = 0; i < persistentHighlights.size(); ++i) {
+        if (persistentHighlights[i].id == highlightId) {
+            return &persistentHighlights[i];
+        }
+    }
+    return nullptr;
+}
+
+// Handle double-click on a highlight
+void InkCanvas::handleHighlightDoubleClick(const QString &highlightId) {
+    emit highlightDoubleClicked(highlightId);
 }
 
 void InkCanvas::processPendingTextSelection() {
@@ -5545,6 +5809,16 @@ void InkCanvas::loadNotebookMetadata() {
         }
     }
     
+    // Load markdown notes (backward compatible - defaults to empty array)
+    markdownNotes.clear();
+    QJsonArray notesArray = obj["markdown_notes"].toArray();
+    for (const QJsonValue &value : notesArray) {
+        if (value.isObject()) {
+            MarkdownNoteData note = MarkdownNoteData::fromJson(value.toObject());
+            markdownNotes.append(note);
+        }
+    }
+    
     // If we have a PDF path, try to load it (missing PDF will be handled later)
     if (!pdfPath.isEmpty()) {
         if (QFile::exists(pdfPath)) {
@@ -5591,6 +5865,13 @@ void InkCanvas::saveNotebookMetadata() {
         highlightsArray.append(highlight.toJson());
     }
     obj["text_highlights"] = highlightsArray;
+    
+    // Save markdown notes
+    QJsonArray notesArray;
+    for (const MarkdownNoteData &note : markdownNotes) {
+        notesArray.append(note.toJson());
+    }
+    obj["markdown_notes"] = notesArray;
     
     QJsonDocument doc(obj);
     

@@ -292,6 +292,16 @@ void MainWindow::setupUi() {
     toggleBookmarkButton->setStyleSheet(buttonStyle);
     toggleBookmarkButton->setProperty("selected", false); // For toggle state styling
     updateButtonIcon(toggleBookmarkButton, "star");
+    
+    // Markdown Notes Toggle Button
+    toggleMarkdownNotesButton = new QPushButton(this);
+    toggleMarkdownNotesButton->setToolTip(tr("Show/Hide Markdown Notes"));
+    toggleMarkdownNotesButton->setFixedSize(26, 30);
+    toggleMarkdownNotesButton->setStyleSheet(buttonStyle);
+    toggleMarkdownNotesButton->setProperty("selected", false); // Initially hidden
+    // Try "note" icon, fallback to text if icon doesn't exist
+    updateButtonIcon(toggleMarkdownNotesButton, "markdown");
+
 
     // Touch Gestures Toggle Button
     touchGesturesButton = new QPushButton(this);
@@ -754,6 +764,17 @@ void MainWindow::setupUi() {
     bookmarksLayout->addWidget(bookmarksTree);
     // Connect bookmarks tree item clicks
     connect(bookmarksTree, &QTreeWidget::itemClicked, this, &MainWindow::onBookmarkItemClicked);
+    
+    // 🌟 Markdown Notes Sidebar
+    markdownNotesSidebar = new MarkdownNotesSidebar(this);
+    markdownNotesSidebar->setFixedWidth(300);
+    markdownNotesSidebar->setVisible(false); // Hidden by default
+    
+    // Connect markdown notes signals
+    connect(markdownNotesSidebar, &MarkdownNotesSidebar::noteContentChanged, this, &MainWindow::onMarkdownNoteContentChanged);
+    connect(markdownNotesSidebar, &MarkdownNotesSidebar::noteDeleted, this, &MainWindow::onMarkdownNoteDeleted);
+    connect(markdownNotesSidebar, &MarkdownNotesSidebar::highlightLinkClicked, this, &MainWindow::onHighlightLinkClicked);
+    
     // 🌟 Horizontal Tab Bar (like modern web browsers)
     tabList = new QListWidget(this);
     tabList->setFlow(QListView::LeftToRight);  // Make it horizontal
@@ -837,6 +858,7 @@ void MainWindow::setupUi() {
     connect(toggleOutlineButton, &QPushButton::clicked, this, &MainWindow::toggleOutlineSidebar);
     connect(toggleBookmarksButton, &QPushButton::clicked, this, &MainWindow::toggleBookmarksSidebar);
     connect(toggleBookmarkButton, &QPushButton::clicked, this, &MainWindow::toggleCurrentPageBookmark);
+    connect(toggleMarkdownNotesButton, &QPushButton::clicked, this, &MainWindow::toggleMarkdownNotesSidebar);
     connect(touchGesturesButton, &QPushButton::clicked, this, [this]() {
         cycleTouchGestureMode();
         touchGesturesButton->setProperty("selected", touchGestureMode != TouchGestureMode::Disabled);
@@ -1042,6 +1064,7 @@ void MainWindow::setupUi() {
     controlLayout->addWidget(toggleOutlineButton);
     controlLayout->addWidget(toggleBookmarksButton);
     controlLayout->addWidget(toggleBookmarkButton);
+    controlLayout->addWidget(toggleMarkdownNotesButton);
     controlLayout->addWidget(touchGesturesButton);
     controlLayout->addWidget(toggleTabBarButton);
     controlLayout->addWidget(selectFolderButton);
@@ -1162,6 +1185,7 @@ void MainWindow::setupUi() {
     contentLayout->addWidget(outlineSidebar, 0); // Fixed width outline sidebar
     contentLayout->addWidget(bookmarksSidebar, 0); // Fixed width bookmarks sidebar
     contentLayout->addWidget(canvasContainer, 1); // Canvas takes remaining space
+    contentLayout->addWidget(markdownNotesSidebar, 0); // Fixed width markdown notes sidebar
     
     QWidget *contentWidget = new QWidget;
     contentWidget->setLayout(contentLayout);
@@ -1544,6 +1568,11 @@ void MainWindow::switchPage(int pageNumber) {
     
     // ✅ Update outline selection to match the new page
     updateOutlineSelection(pageNumber);
+    
+    // Load markdown notes for the new page
+    if (markdownNotesSidebarVisible) {
+        loadMarkdownNotesForCurrentPage();
+    }
 }
 void MainWindow::switchPageWithDirection(int pageNumber, int direction) {
     InkCanvas *canvas = currentCanvas();
@@ -1612,6 +1641,11 @@ void MainWindow::switchPageWithDirection(int pageNumber, int direction) {
     
     // ✅ Update outline selection to match the new page
     updateOutlineSelection(pageNumber);
+    
+    // Load markdown notes for the new page
+    if (markdownNotesSidebarVisible) {
+        loadMarkdownNotesForCurrentPage();
+    }
 }
 
 void MainWindow::deleteCurrentPage() {
@@ -3076,6 +3110,21 @@ void MainWindow::switchTab(int index) {
                 loadBookmarks();
             }
             
+            // ✅ Refresh markdown notes if sidebar is visible
+            if (markdownNotesSidebarVisible) {
+                loadMarkdownNotesForCurrentPage();
+            }
+            
+            // Force layout refresh when switching tabs with sidebar visible
+            if (markdownNotesSidebarVisible || outlineSidebarVisible || bookmarksSidebarVisible) {
+                if (centralWidget() && centralWidget()->layout()) {
+                    centralWidget()->layout()->invalidate();
+                    centralWidget()->layout()->activate();
+                }
+                QApplication::processEvents();
+                updatePanRange();
+            }
+            
             // ✅ Update recent notebooks when switching to a tab to bump it to the top
             QString folderPath = canvas->getSaveFolder();
             QString tempDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/temp_session";
@@ -3309,6 +3358,8 @@ void MainWindow::addNewTab() {
     connect(newCanvas, &InkCanvas::markdownSelectionModeChanged, this, &MainWindow::updateMarkdownButtonState);
     connect(newCanvas, &InkCanvas::autoScrollRequested, this, &MainWindow::onAutoScrollRequested);
     connect(newCanvas, &InkCanvas::earlySaveRequested, this, &MainWindow::onEarlySaveRequested);
+    connect(newCanvas, &InkCanvas::markdownNotesUpdated, this, &MainWindow::onMarkdownNotesUpdated);
+    connect(newCanvas, &InkCanvas::highlightDoubleClicked, this, &MainWindow::onHighlightDoubleClicked);
     
     // Install event filter to detect mouse movement for scrollbar visibility
     newCanvas->setMouseTracking(true);
@@ -3786,18 +3837,33 @@ void MainWindow::positionDialContainer() {
     // Define margins from edges
     int rightMargin = 20;  // Distance from right edge
     int topMargin = 20;    // Distance from top edge (below tab bar and toolbar)
+    
+    // Calculate total width of visible right-side sidebars
+    int rightSidebarWidth = 0;
+    if (markdownNotesSidebar && markdownNotesSidebar->isVisible()) {
+        rightSidebarWidth += markdownNotesSidebar->width();
+    }
+    
+    // Calculate total width of visible left-side sidebars
+    int leftSidebarWidth = 0;
+    if (outlineSidebar && outlineSidebar->isVisible()) {
+        leftSidebarWidth += outlineSidebar->width();
+    }
+    if (bookmarksSidebar && bookmarksSidebar->isVisible()) {
+        leftSidebarWidth += bookmarksSidebar->width();
+    }
 
-    // Calculate ideal position (top-right corner with margins)
-    int idealX = windowWidth - dialWidth - rightMargin;
+    // Calculate ideal position (top-right corner with margins, accounting for sidebars)
+    int idealX = windowWidth - dialWidth - rightMargin - rightSidebarWidth;
     int idealY = tabBarHeight + toolbarHeight + topMargin;
     
     // Ensure dial stays within window bounds with minimum margins
     int minMargin = 10;
-    int maxX = windowWidth - dialWidth - minMargin;
+    int maxX = windowWidth - dialWidth - minMargin - rightSidebarWidth;
     int maxY = windowHeight - dialHeight - minMargin;
     
-    // Clamp position to stay within bounds
-    int finalX = qBound(minMargin, idealX, maxX);
+    // Clamp position to stay within bounds (accounting for left sidebars too)
+    int finalX = qBound(leftSidebarWidth + minMargin, idealX, maxX);
     int finalY = qBound(tabBarHeight + toolbarHeight + minMargin, idealY, maxY);
     
     // Move the dial to the calculated position
@@ -6568,6 +6634,7 @@ void MainWindow::createSingleRowLayout() {
             newLayout->addWidget(toggleOutlineButton);
         newLayout->addWidget(toggleBookmarksButton);
         newLayout->addWidget(toggleBookmarkButton);
+        newLayout->addWidget(toggleMarkdownNotesButton);
         newLayout->addWidget(touchGesturesButton);
         newLayout->addWidget(selectFolderButton);
     
@@ -6661,6 +6728,7 @@ void MainWindow::createTwoRowLayout() {
             newFirstRowLayout->addWidget(toggleOutlineButton);
         newFirstRowLayout->addWidget(toggleBookmarksButton);
         newFirstRowLayout->addWidget(toggleBookmarkButton);
+        newFirstRowLayout->addWidget(toggleMarkdownNotesButton);
         newFirstRowLayout->addWidget(touchGesturesButton);
         newFirstRowLayout->addWidget(selectFolderButton);
     
@@ -7435,6 +7503,218 @@ void MainWindow::loadBookmarks() {
     }
     
     updateBookmarkButtonState(); // Update button state after loading
+}
+
+// Markdown Notes Sidebar functionality
+void MainWindow::toggleMarkdownNotesSidebar() {
+    if (!markdownNotesSidebar) return;
+    
+    bool isVisible = markdownNotesSidebar->isVisible();
+    
+    // Hide other sidebars if showing markdown notes
+    if (!isVisible) {
+        if (outlineSidebar && outlineSidebar->isVisible()) {
+            outlineSidebar->setVisible(false);
+            outlineSidebarVisible = false;
+            if (toggleOutlineButton) {
+                toggleOutlineButton->setProperty("selected", false);
+                updateButtonIcon(toggleOutlineButton, "outline");
+                toggleOutlineButton->style()->unpolish(toggleOutlineButton);
+                toggleOutlineButton->style()->polish(toggleOutlineButton);
+            }
+        }
+        if (bookmarksSidebar && bookmarksSidebar->isVisible()) {
+            bookmarksSidebar->setVisible(false);
+            bookmarksSidebarVisible = false;
+            if (toggleBookmarksButton) {
+                toggleBookmarksButton->setProperty("selected", false);
+                updateButtonIcon(toggleBookmarksButton, "bookmark");
+                toggleBookmarksButton->style()->unpolish(toggleBookmarksButton);
+                toggleBookmarksButton->style()->polish(toggleBookmarksButton);
+            }
+        }
+    }
+    
+    markdownNotesSidebar->setVisible(!isVisible);
+    markdownNotesSidebarVisible = !isVisible;
+    
+    // Update button toggle state
+    if (toggleMarkdownNotesButton) {
+        toggleMarkdownNotesButton->setProperty("selected", markdownNotesSidebarVisible);
+        updateButtonIcon(toggleMarkdownNotesButton, "markdown");
+        toggleMarkdownNotesButton->style()->unpolish(toggleMarkdownNotesButton);
+        toggleMarkdownNotesButton->style()->polish(toggleMarkdownNotesButton);
+    }
+    
+    if (markdownNotesSidebarVisible) {
+        loadMarkdownNotesForCurrentPage(); // Load notes when opening
+    }
+    
+    // Force immediate layout update so canvas repositions correctly
+    if (centralWidget() && centralWidget()->layout()) {
+        centralWidget()->layout()->invalidate();
+        centralWidget()->layout()->activate();
+    }
+    QApplication::processEvents(); // Process layout changes immediately
+    
+    // Update canvas position and scrollbars
+    updatePanRange();
+    if (currentCanvas()) {
+        currentCanvas()->update();
+    }
+    
+    // Reposition dial container if it's visible (so it doesn't get covered by sidebar)
+    if (dialContainer && dialContainer->isVisible()) {
+        positionDialContainer();
+    }
+}
+
+void MainWindow::onMarkdownNotesUpdated() {
+    // Auto-open the sidebar if it's not visible (so user sees the note they just created)
+    if (!markdownNotesSidebarVisible) {
+        toggleMarkdownNotesSidebar();
+    } else {
+        // Just reload if already open
+        loadMarkdownNotesForCurrentPage();
+    }
+}
+
+void MainWindow::onMarkdownNoteContentChanged(const QString &noteId, const MarkdownNoteData &data) {
+    Q_UNUSED(noteId);
+    if (!currentCanvas()) return;
+    
+    // Update the note in the canvas WITHOUT triggering a reload
+    // (avoids feedback loop that resets the editor on every keystroke)
+    currentCanvas()->updateMarkdownNote(data);
+    
+    // Don't reload notes here - that would reset the editor!
+    // The sidebar already has the updated content.
+}
+
+void MainWindow::onMarkdownNoteDeleted(const QString &noteId) {
+    if (!currentCanvas()) return;
+    
+    // Remove the note from the canvas
+    currentCanvas()->removeMarkdownNote(noteId);
+}
+
+void MainWindow::onHighlightLinkClicked(const QString &highlightId) {
+    if (!currentCanvas()) return;
+    
+    // Find the highlight and navigate to its page
+    TextHighlight *highlight = currentCanvas()->findHighlightById(highlightId);
+    if (!highlight) return;
+    
+    int targetPage = highlight->pageNumber + 1; // Convert to 1-based
+    int currentPage = getCurrentPageForCanvas(currentCanvas()) + 1;
+    
+    // Navigate to the page first
+    switchPageWithDirection(targetPage, (targetPage > currentPage) ? 1 : -1);
+    pageInput->setValue(targetPage);
+    
+    // After navigation, pan to the highlight position
+    // Need to wait for page to load before panning
+    QTimer::singleShot(100, this, [this, highlightId]() {
+        if (!currentCanvas() || !panYSlider) return;
+        
+        // Find highlight again after page switch
+        TextHighlight *highlight = currentCanvas()->findHighlightById(highlightId);
+        if (!highlight) return;
+        
+        // Get the Y position of the highlight in PDF coordinates
+        qreal highlightY = highlight->boundingBox.center().y();
+        
+        // Check if we're in combined canvas mode
+        QPixmap backgroundImage = currentCanvas()->getBackgroundImage();
+        QPixmap buffer = currentCanvas()->getBuffer();
+        bool isCombinedCanvas = false;
+        int singlePageHeight = buffer.height();
+        
+        if (!backgroundImage.isNull() && buffer.height() >= backgroundImage.height() * 1.8) {
+            isCombinedCanvas = true;
+            singlePageHeight = backgroundImage.height() / 2;
+        } else if (buffer.height() > 1400) {
+            isCombinedCanvas = true;
+            singlePageHeight = buffer.height() / 2;
+        }
+        
+        // Get current page from canvas
+        int canvasFirstPage = currentCanvas()->getLastActivePage();
+        int highlightPage = highlight->pageNumber;
+        
+        // Calculate Y offset for combined canvas
+        qreal yOffset = 0;
+        if (isCombinedCanvas && highlightPage > canvasFirstPage) {
+            // Highlight is on the second page of combined canvas
+            yOffset = singlePageHeight;
+        }
+        
+        // Convert PDF Y coordinate to image/widget coordinate
+        // Get PDF page size (assuming standard letter size if not cached)
+        qreal pdfPageHeight = 792.0; // Standard letter height in points
+        qreal imageHeight = isCombinedCanvas ? singlePageHeight : backgroundImage.height();
+        
+        // Scale from PDF to image coordinates
+        qreal scaleY = imageHeight / pdfPageHeight;
+        qreal imageY = highlightY * scaleY;
+        
+        // Add offset for second page in combined canvas
+        imageY += yOffset;
+        
+        // Center the highlight vertically in the viewport
+        qreal viewportHeight = currentCanvas()->height();
+        qreal targetPanY = imageY - (viewportHeight / 2.0);
+        
+        // Clamp to valid range
+        targetPanY = qMax(0.0, qMin(targetPanY, (qreal)panYSlider->maximum()));
+        
+        // Set pan position
+        panYSlider->setValue((int)targetPanY);
+    });
+}
+
+void MainWindow::onHighlightDoubleClicked(const QString &highlightId) {
+    if (!currentCanvas()) return;
+    
+    // Find the highlight
+    TextHighlight *highlight = currentCanvas()->findHighlightById(highlightId);
+    if (!highlight) return;
+    
+    // Check if it has a linked note
+    if (!highlight->markdownWindowId.isEmpty()) {
+        // Open the markdown notes sidebar if not already open
+        if (!markdownNotesSidebarVisible) {
+            toggleMarkdownNotesSidebar();
+        }
+        
+        // Find and expand the note entry
+        MarkdownNoteEntry *noteEntry = markdownNotesSidebar->findNoteEntry(highlight->markdownWindowId);
+        if (noteEntry) {
+            noteEntry->setPreviewMode(false); // Switch to edit mode
+        }
+    }
+}
+
+void MainWindow::loadMarkdownNotesForCurrentPage() {
+    if (!currentCanvas() || !markdownNotesSidebar) return;
+    
+    int currentPage = getCurrentPageForCanvas(currentCanvas());
+    int secondPage = -1;
+    
+    // Check if combined canvas is active (second page visible)
+    if (currentCanvas()->isPdfLoadedFunc()) {
+        // Get the second page if in combined mode
+        // For now, we'll just check currentPage + 1
+        if (currentPage + 1 < currentCanvas()->getTotalPdfPages()) {
+            secondPage = currentPage + 1;
+        }
+    }
+    
+    // Get notes for the current page(s)
+    QList<MarkdownNoteData> notes = currentCanvas()->getMarkdownNotesForPages(currentPage, secondPage);
+    
+    // Load notes into sidebar
+    markdownNotesSidebar->loadNotesForPages(notes);
 }
 
 void MainWindow::saveBookmarks() {
