@@ -4614,7 +4614,7 @@ QString InkCanvas::addMarkdownNoteFromSelection() {
     note.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     note.highlightId = existingHighlight->id;
     note.pageNumber = existingHighlight->pageNumber;
-    note.title = "Note for: " + existingHighlight->text.left(30) + (existingHighlight->text.length() > 30 ? "..." : "");
+    note.title = tr("Note for: ") + existingHighlight->text.left(30) + (existingHighlight->text.length() > 30 ? "..." : "");
     note.content = "";
     note.color = existingHighlight->color; // Use highlight's color, not current pen color
     
