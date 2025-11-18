@@ -2079,6 +2079,15 @@ void MainWindow::exportAnnotatedPdf() {
                 return;
             }
             
+            // Preserve PDF outline/bookmarks for the extracted range
+            QString outlineData;
+            if (extractPdfOutlineData(originalPdfPath, outlineData)) {
+                QString filteredOutline = filterAndAdjustOutline(outlineData, exportStartPage, exportEndPage, 0);
+                if (!filteredOutline.isEmpty()) {
+                    applyOutlineToPdf(exportPath, filteredOutline);
+                }
+            }
+            
             QMessageBox::information(this, tr("Export Complete"), 
                 tr("Pages %1-%2 exported successfully (no annotations found in this range).").arg(exportStartPage + 1).arg(exportEndPage + 1));
             return;
@@ -2125,8 +2134,8 @@ void MainWindow::exportAnnotatedPdf() {
             return;
         }
         
-        // Fall back to rendering all pages
-        exportAnnotatedPdfFullRender(exportPath, annotatedPages);
+        // Fall back to rendering all pages (or selected range)
+        exportAnnotatedPdfFullRender(exportPath, annotatedPages, exportWholeDocument, exportStartPage, exportEndPage);
         return;
     }
 
@@ -2421,23 +2430,30 @@ void MainWindow::exportCanvasOnlyNotebook(const QString &saveFolder, const QStri
 }
 
 // Helper function for full render fallback
-void MainWindow::exportAnnotatedPdfFullRender(const QString &exportPath, const QSet<int> &annotatedPages) {
+void MainWindow::exportAnnotatedPdfFullRender(const QString &exportPath, const QSet<int> &annotatedPages, 
+                                               bool exportWholeDocument, int exportStartPage, int exportEndPage) {
     InkCanvas *canvas = currentCanvas();
     if (!canvas) return;
     
     Poppler::Document* pdfDoc = canvas->getPdfDocument();
     QString saveFolder = canvas->getSaveFolder();
     QString notebookId = canvas->getNotebookId();
+    QString originalPdfPath = canvas->getPdfPath();
     int totalPages = canvas->getTotalPdfPages();
+    
+    // Determine the range to export
+    int startPage = exportWholeDocument ? 0 : exportStartPage;
+    int endPage = exportWholeDocument ? (totalPages - 1) : exportEndPage;
+    int pageCount = endPage - startPage + 1;
 
-    QProgressDialog progress(tr("Exporting annotated PDF..."), tr("Cancel"), 0, totalPages, this);
+    QProgressDialog progress(tr("Exporting annotated PDF..."), tr("Cancel"), 0, pageCount, this);
     progress.setWindowModality(Qt::WindowModal);
     progress.setMinimumDuration(0);
 
     QPdfWriter pdfWriter(exportPath);
     pdfWriter.setResolution(pdfRenderDPI);
     
-    std::unique_ptr<Poppler::Page> firstPage(pdfDoc->page(0));
+    std::unique_ptr<Poppler::Page> firstPage(pdfDoc->page(startPage));
     if (!firstPage) return;
     
     QSizeF pageSize = firstPage->pageSizeF();
@@ -2451,30 +2467,39 @@ void MainWindow::exportAnnotatedPdfFullRender(const QString &exportPath, const Q
         return;
     }
 
-    for (int pageNum = 0; pageNum < totalPages; ++pageNum) {
+    bool firstPageWritten = false;
+    int exportedPageIndex = 0;
+    for (int pageNum = startPage; pageNum <= endPage; ++pageNum) {
         if (progress.wasCanceled()) {
             painter.end();
             QFile::remove(exportPath);
             return;
         }
 
-        progress.setValue(pageNum);
+        progress.setValue(exportedPageIndex);
         if (annotatedPages.contains(pageNum)) {
-            progress.setLabelText(tr("Rendering page %1 of %2 (annotated)...").arg(pageNum + 1).arg(totalPages));
+            progress.setLabelText(tr("Rendering page %1 of %2 (annotated)...").arg(exportedPageIndex + 1).arg(pageCount));
         } else {
-            progress.setLabelText(tr("Rendering page %1 of %2...").arg(pageNum + 1).arg(totalPages));
+            progress.setLabelText(tr("Rendering page %1 of %2...").arg(exportedPageIndex + 1).arg(pageCount));
         }
         QCoreApplication::processEvents();
 
-        if (pageNum > 0) {
+        if (firstPageWritten) {
             pdfWriter.newPage();
         }
+        firstPageWritten = true;
 
         std::unique_ptr<Poppler::Page> pdfPage(pdfDoc->page(pageNum));
-        if (!pdfPage) continue;
+        if (!pdfPage) {
+            exportedPageIndex++;
+            continue;
+        }
 
         QImage pdfImage = pdfPage->renderToImage(pdfRenderDPI, pdfRenderDPI);
-        if (pdfImage.isNull()) continue;
+        if (pdfImage.isNull()) {
+            exportedPageIndex++;
+            continue;
+        }
 
         QSizeF targetSize = pdfWriter.pageLayout().paintRectPixels(pdfRenderDPI).size();
         QRectF targetRect(0, 0, targetSize.width(), targetSize.height());
@@ -2494,10 +2519,12 @@ void MainWindow::exportAnnotatedPdfFullRender(const QString &exportPath, const Q
                 }
             }
         }
+        
+        exportedPageIndex++;
     }
 
     painter.end();
-    progress.setValue(totalPages);
+    progress.setValue(pageCount);
 
     QMessageBox::information(this, tr("Export Complete"), 
         tr("Annotated PDF exported to:\n%1").arg(exportPath));
@@ -2645,6 +2672,20 @@ bool MainWindow::mergePdfWithPdftk(const QString &originalPdf, const QString &an
         return false;
     }
     
+    // Preserve PDF outline/bookmarks
+    QString outlineData;
+    if (extractPdfOutlineData(originalPdf, outlineData)) {
+        // Filter and adjust outline for the exported page range
+        QString filteredOutline = filterAndAdjustOutline(outlineData, startPage, endPage, 0);
+        
+        // Apply the filtered outline to the output PDF
+        if (!filteredOutline.isEmpty()) {
+            applyOutlineToPdf(outputPdf, filteredOutline);
+            // Note: We don't treat outline application failure as a critical error
+            // The PDF is still valid without the outline
+        }
+    }
+    
     return true;
 }
 
@@ -2721,6 +2762,134 @@ bool MainWindow::mergePdfWithQpdf(const QString &originalPdf, const QString &ann
     }
     
     return true;
+}
+
+// Extract PDF metadata including outline/bookmarks using pdftk
+bool MainWindow::extractPdfOutlineData(const QString &pdfPath, QString &outlineData) {
+    QProcess process;
+    process.start("pdftk", QStringList() << pdfPath << "dump_data");
+    
+    if (!process.waitForFinished(10000)) {
+        return false;
+    }
+    
+    if (process.exitCode() != 0) {
+        return false;
+    }
+    
+    outlineData = QString::fromUtf8(process.readAllStandardOutput());
+    return !outlineData.isEmpty();
+}
+
+// Filter outline entries to only include those pointing to pages in the export range,
+// and adjust page numbers to match the new PDF (0-indexed)
+QString MainWindow::filterAndAdjustOutline(const QString &metadataContent, int startPage, int endPage, int pageOffset) {
+    QStringList lines = metadataContent.split('\n');
+    QStringList filteredLines;
+    
+    bool inBookmark = false;
+    QStringList currentBookmark;
+    int bookmarkPage = -1;
+    
+    // Lambda to process a completed bookmark
+    auto processBookmark = [&]() {
+        if (bookmarkPage >= startPage + 1 && bookmarkPage <= endPage + 1) {  // pdftk uses 1-based pages
+            // Adjust the page number
+            int newPageNumber = bookmarkPage - startPage;  // Convert to new PDF's page numbers (1-based)
+            
+            // Add the bookmark with adjusted page number
+            for (const QString &bmLine : currentBookmark) {
+                if (bmLine.startsWith("BookmarkPageNumber: ")) {
+                    filteredLines.append(QString("BookmarkPageNumber: %1").arg(newPageNumber));
+                } else {
+                    filteredLines.append(bmLine);
+                }
+            }
+        }
+    };
+    
+    for (int i = 0; i < lines.size(); ++i) {
+        const QString &line = lines[i];
+        
+        // Check if this is the start of a NEW bookmark entry
+        if (line.startsWith("BookmarkBegin")) {
+            // Process the previous bookmark if we were in one
+            if (inBookmark && bookmarkPage > 0) {
+                processBookmark();
+            }
+            
+            // Start collecting the new bookmark
+            inBookmark = true;
+            currentBookmark.clear();
+            currentBookmark.append(line);
+            bookmarkPage = -1;
+        }
+        // If we're in a bookmark, collect its lines
+        else if (inBookmark) {
+            // Extract page number if this is the PageNumber line
+            if (line.startsWith("BookmarkPageNumber: ")) {
+                QString pageStr = line.mid(20).trimmed();
+                bookmarkPage = pageStr.toInt();
+            }
+            currentBookmark.append(line);
+        }
+        // Copy non-bookmark metadata (like NumberOfPages, etc.)
+        else if (!line.startsWith("NumberOfPages:")) {
+            // Skip NumberOfPages as it will be wrong after extraction
+            if (line.startsWith("InfoBegin") || line.startsWith("InfoKey:") || line.startsWith("InfoValue:") ||
+                line.startsWith("PdfID0:") || line.startsWith("PdfID1:")) {
+                filteredLines.append(line);
+            }
+        }
+    }
+    
+    // Process the last bookmark if we ended while in one
+    if (inBookmark && bookmarkPage > 0) {
+        processBookmark();
+    }
+    
+    return filteredLines.join('\n');
+}
+
+// Apply outline metadata to an existing PDF using pdftk update_info
+bool MainWindow::applyOutlineToPdf(const QString &pdfPath, const QString &outlineData) {
+    if (outlineData.isEmpty()) {
+        return true;  // Nothing to apply, not an error
+    }
+    
+    // Create temporary file for metadata
+    QString tempMetadataFile = QDir::temp().filePath("speedynote_outline_temp.txt");
+    QFile metaFile(tempMetadataFile);
+    if (!metaFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        return false;
+    }
+    
+    QTextStream out(&metaFile);
+    out << outlineData;
+    metaFile.close();
+    
+    // Create temporary output file
+    QString tempOutputFile = QDir::temp().filePath("speedynote_with_outline_temp.pdf");
+    
+    // Use pdftk to apply metadata
+    QProcess process;
+    process.start("pdftk", QStringList() << pdfPath << "update_info" << tempMetadataFile << "output" << tempOutputFile);
+    
+    bool success = false;
+    if (process.waitForFinished(30000) && process.exitCode() == 0) {
+        // Replace original with the one that has outline
+        QFile::remove(pdfPath);
+        if (QFile::copy(tempOutputFile, pdfPath)) {
+            QFile::setPermissions(pdfPath, QFile::WriteOwner | QFile::ReadOwner | QFile::ReadGroup | QFile::ReadOther);
+            success = true;
+        }
+    }
+    
+    // Cleanup
+    QFile::remove(tempMetadataFile);
+    QFile::remove(tempOutputFile);
+    
+    return success;
 }
 
 
