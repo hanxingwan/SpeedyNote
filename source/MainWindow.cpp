@@ -549,21 +549,6 @@ void MainWindow::setupUi() {
         updateRopeToolButtonState();
     });
     
-    markdownButton = new QPushButton(this);
-    markdownButton->setFixedSize(26, 30);
-    markdownButton->setStyleSheet(buttonStyle);
-    markdownButton->setToolTip(tr("Add Markdown Window"));
-    markdownButton->setProperty("selected", false); // Initially disabled
-    updateButtonIcon(markdownButton, "markdown");
-    connect(markdownButton, &QPushButton::clicked, this, [this]() {
-        if (!currentCanvas()) return;
-        
-        // Toggle markdown selection mode
-        bool newMode = !currentCanvas()->isMarkdownSelectionMode();
-        currentCanvas()->setMarkdownSelectionMode(newMode);
-        updateMarkdownButtonState();
-    });
-    
     // Insert Picture Button
     insertPictureButton = new QPushButton(this);
     insertPictureButton->setFixedSize(26, 30);
@@ -1087,7 +1072,6 @@ void MainWindow::setupUi() {
     controlLayout->addWidget(customColorButton);
     controlLayout->addWidget(straightLineToggleButton);
     controlLayout->addWidget(ropeToolButton); // Add rope tool button to layout
-    controlLayout->addWidget(markdownButton); // Add markdown button to layout
     controlLayout->addWidget(insertPictureButton); // Add picture button to layout
     controlLayout->addWidget(thicknessButton);
     controlLayout->addWidget(jumpToPageButton);
@@ -1761,10 +1745,7 @@ void MainWindow::saveCurrentPageConcurrent() {
         // Use combined window saving logic for cross-page coordinate adjustments
         canvas->saveCombinedWindowsForPage(pageNumber);
     } else {
-        // Use standard single-page window saving
-        if (canvas->getMarkdownManager()) {
-            canvas->getMarkdownManager()->saveWindowsForPage(pageNumber);
-        }
+        // Use standard single-page window saving (pictures only)
         if (canvas->getPictureManager()) {
             canvas->getPictureManager()->saveWindowsForPage(pageNumber);
         }
@@ -3086,7 +3067,6 @@ void MainWindow::switchTab(int index) {
             updateColorButtonStates();  // Update button states when switching tabs
             updateStraightLineButtonState();  // Update straight line button state when switching tabs
             updateRopeToolButtonState(); // Update rope tool button state when switching tabs
-            updateMarkdownButtonState(); // Update markdown button state when switching tabs
             updatePictureButtonState(); // Update picture button state when switching tabs
             updatePdfTextSelectButtonState(); // Update PDF text selection button state when switching tabs
             updateBookmarkButtonState(); // Update bookmark button state when switching tabs
@@ -3355,7 +3335,6 @@ void MainWindow::addNewTab() {
             loadPdfOutline();
         }
     });
-    connect(newCanvas, &InkCanvas::markdownSelectionModeChanged, this, &MainWindow::updateMarkdownButtonState);
     connect(newCanvas, &InkCanvas::autoScrollRequested, this, &MainWindow::onAutoScrollRequested);
     connect(newCanvas, &InkCanvas::earlySaveRequested, this, &MainWindow::onEarlySaveRequested);
     connect(newCanvas, &InkCanvas::markdownNotesUpdated, this, &MainWindow::onMarkdownNotesUpdated);
@@ -3392,7 +3371,6 @@ void MainWindow::addNewTab() {
     updateRopeToolButtonState(); // Initialize rope tool button state for the new tab
     updatePdfTextSelectButtonState(); // Initialize PDF text selection button state for the new tab
     updateBookmarkButtonState(); // Initialize bookmark button state for the new tab
-    updateMarkdownButtonState(); // Initialize markdown button state for the new tab
     updatePictureButtonState(); // Initialize picture button state for the new tab
     updateDialButtonState();     // Initialize dial button state for the new tab
     updateFastForwardButtonState(); // Initialize fast forward button state for the new tab
@@ -5110,7 +5088,6 @@ void MainWindow::updateTheme() {
     // if (backgroundButton) backgroundButton->setIcon(loadThemedIcon("background"));
     updateButtonIcon(straightLineToggleButton, "straightLine");
     updateButtonIcon(ropeToolButton, "rope");
-    updateButtonIcon(markdownButton, "markdown");
     if (deletePageButton) deletePageButton->setIcon(loadThemedIcon("trash"));
     if (zoomButton) zoomButton->setIcon(loadThemedIcon("zoom"));
     updateButtonIcon(dialToggleButton, "dial");
@@ -5166,7 +5143,6 @@ void MainWindow::updateTheme() {
     // if (backgroundButton) backgroundButton->setStyleSheet(newButtonStyle);
     if (straightLineToggleButton) straightLineToggleButton->setStyleSheet(newButtonStyle);
     if (ropeToolButton) ropeToolButton->setStyleSheet(newButtonStyle);
-    if (markdownButton) markdownButton->setStyleSheet(newButtonStyle);
     if (insertPictureButton) insertPictureButton->setStyleSheet(newButtonStyle);
     if (deletePageButton) deletePageButton->setStyleSheet(newButtonStyle);
     if (zoomButton) zoomButton->setStyleSheet(newButtonStyle);
@@ -6252,23 +6228,16 @@ void MainWindow::handleTouchPanningChanged(bool active) {
     InkCanvas* canvas = currentCanvas();
     if (!canvas) return;
     
-    MarkdownWindowManager* markdownMgr = canvas->getMarkdownManager();
     PictureWindowManager* pictureMgr = canvas->getPictureManager();
     
     if (active) {
         // Touch panning started - enable frame-only mode for performance
         // This stays enabled during inertia scrolling (until velocity drops to zero)
-        if (markdownMgr) {
-            markdownMgr->setWindowsFrameOnlyMode(true);
-        }
         if (pictureMgr) {
             pictureMgr->setWindowsFrameOnlyMode(true);
         }
     } else {
         // Touch panning AND inertia scrolling ended - restore full window display
-        if (markdownMgr) {
-            markdownMgr->setWindowsFrameOnlyMode(false);
-        }
         if (pictureMgr) {
             pictureMgr->setWindowsFrameOnlyMode(false);
         }
@@ -6400,24 +6369,6 @@ void MainWindow::updateRopeToolButtonState() {
         // Force style update
         ropeToolButton->style()->unpolish(ropeToolButton);
         ropeToolButton->style()->polish(ropeToolButton);
-    }
-}
-
-void MainWindow::updateMarkdownButtonState() {
-    // Check if there's a current canvas
-    if (!currentCanvas()) return;
-
-    // Update the button state to match the canvas markdown selection mode
-    bool isEnabled = currentCanvas()->isMarkdownSelectionMode();
-
-    // Set visual indicator that the button is active/inactive
-    if (markdownButton) {
-        markdownButton->setProperty("selected", isEnabled);
-        updateButtonIcon(markdownButton, "markdown");
-
-        // Force style update
-        markdownButton->style()->unpolish(markdownButton);
-        markdownButton->style()->polish(markdownButton);
     }
 }
 
@@ -6658,7 +6609,6 @@ void MainWindow::createSingleRowLayout() {
     newLayout->addWidget(eraserToolButton);
     newLayout->addWidget(straightLineToggleButton);
     newLayout->addWidget(ropeToolButton);
-    newLayout->addWidget(markdownButton);
     newLayout->addWidget(insertPictureButton);
     newLayout->addWidget(dialToggleButton);
     newLayout->addWidget(fastForwardButton);
@@ -6764,7 +6714,6 @@ void MainWindow::createTwoRowLayout() {
     // Second row: everything after customColorButton
     newSecondRowLayout->addWidget(straightLineToggleButton);
     newSecondRowLayout->addWidget(ropeToolButton);
-    newSecondRowLayout->addWidget(markdownButton);
     newSecondRowLayout->addWidget(insertPictureButton);
     newSecondRowLayout->addWidget(dialToggleButton);
     newSecondRowLayout->addWidget(fastForwardButton);
@@ -7956,11 +7905,8 @@ void MainWindow::closeEvent(QCloseEvent *event) {
                     canvas->saveCombinedWindowsForPage(pageNumber);
                 }
                 
-                // ✅ PERFORMANCE FIX: Flush all dirty markdown/picture pages to disk
+                // ✅ PERFORMANCE FIX: Flush all dirty picture pages to disk
                 // This ensures any pages modified during page switches are saved
-                if (canvas->getMarkdownManager()) {
-                    canvas->getMarkdownManager()->flushDirtyPagesToDisk();
-                }
                 if (canvas->getPictureManager()) {
                     canvas->getPictureManager()->flushDirtyPagesToDisk();
                 }

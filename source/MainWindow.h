@@ -34,7 +34,6 @@
 #include <QMenu>
 #include <QCloseEvent>
 #include "ControlPanelDialog.h"
-#include "MarkdownWindowManager.h"
 #include "PictureWindowManager.h"
 #include "SpnPackageManager.h"
 #include <QLocalServer>
@@ -405,7 +404,6 @@ private slots:
     void selectColorButton(QPushButton* selectedButton);
     void updateStraightLineButtonState();
     void updateRopeToolButtonState(); // New slot for rope tool button
-    void updateMarkdownButtonState();
     
     
     
@@ -496,7 +494,6 @@ private:
     QPushButton *backgroundButton; // New button to set background
     QPushButton *straightLineToggleButton; // Button to toggle straight line mode
     QPushButton *ropeToolButton; // Button to toggle rope tool mode
-    QPushButton *markdownButton; // Button to toggle markdown mode
     QPushButton *insertPictureButton; // Button to insert pictures
 
     QSlider *zoomSlider;

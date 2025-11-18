@@ -105,13 +105,8 @@ InkCanvas::InkCanvas(QWidget *parent)
     noteCacheTimer = nullptr;
     currentCachedNotePage = -1;
     
-    // Initialize markdown manager
-    markdownManager = new MarkdownWindowManager(this, this);
+    // Initialize picture manager
     pictureManager = new PictureWindowManager(this, this);
-    
-    // Connect pan/zoom signals to update markdown window positions
-    connect(this, &InkCanvas::panChanged, markdownManager, &MarkdownWindowManager::updateAllWindowPositions);
-    connect(this, &InkCanvas::zoomChanged, markdownManager, &MarkdownWindowManager::updateAllWindowPositions);
     
     // Connect pan/zoom signals to update picture window positions
     connect(this, &InkCanvas::panChanged, pictureManager, &PictureWindowManager::updateAllWindowPositions);
@@ -134,9 +129,6 @@ InkCanvas::~InkCanvas() {
     if (edited && !saveFolder.isEmpty()) {
         // Save the current page using existing logic
         saveToFile(lastActivePage);
-        
-        // ✅ COMBINED MODE FIX: Use combined-aware save for markdown/picture windows
-        saveCombinedWindowsForPage(lastActivePage);
     }
     
     // ✅ Cleanup PDF resources
@@ -251,11 +243,6 @@ InkCanvas::~InkCanvas() {
     selectedTextBoxes.clear();  // References to cached text boxes, don't delete
     
     // ✅ Explicitly clean up window managers to prevent memory leaks
-    if (markdownManager) {
-        markdownManager->clearAllCachedWindows();
-        markdownManager->deleteLater();
-        markdownManager = nullptr;
-    }
     if (pictureManager) {
         pictureManager->clearAllCachedWindows();
         pictureManager->deleteLater();
@@ -962,22 +949,6 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
     
     // Reset clipping for overlay elements that should appear on top
     painter.setClipping(false);
-    
-    // Draw markdown selection overlay
-    if (markdownSelectionMode && markdownSelecting) {
-        painter.save();
-        QPen selectionPen(Qt::DashLine);
-        selectionPen.setColor(Qt::green);
-        selectionPen.setWidthF(2.0);
-        painter.setPen(selectionPen);
-        
-        QBrush selectionBrush(QColor(0, 255, 0, 30)); // Semi-transparent green
-        painter.setBrush(selectionBrush);
-        
-        QRect selectionRect = QRect(markdownSelectionStart, markdownSelectionEnd).normalized();
-        painter.drawRect(selectionRect);
-        painter.restore();
-    }
     
     // Draw PDF text selection overlay on top of everything
     if (pdfTextSelectionEnabled && isPdfLoaded) {
@@ -1693,15 +1664,6 @@ void InkCanvas::mousePressEvent(QMouseEvent *event) {
         }
     }
     
-    // Handle markdown selection when enabled
-    if (markdownSelectionMode && event->button() == Qt::LeftButton) {
-        markdownSelecting = true;
-        markdownSelectionStart = event->pos();
-        markdownSelectionEnd = markdownSelectionStart;
-        event->accept();
-        return;
-    }
-    
     // Handle picture selection when enabled
     if (pictureSelectionMode && event->button() == Qt::LeftButton) {
         // qDebug() << "InkCanvas::mousePressEvent() - Picture selection mode active!";
@@ -1875,14 +1837,6 @@ void InkCanvas::mouseMoveEvent(QMouseEvent *event) {
         return;
     }
     
-    // Handle markdown selection when enabled
-    if (markdownSelectionMode && markdownSelecting) {
-        markdownSelectionEnd = event->pos();
-        update(); // Refresh to show selection rectangle
-        event->accept();
-        return;
-    }
-    
     // Handle PDF text selection when enabled (mouse/touch fallback - stylus handled in tabletEvent)
     if (pdfTextSelectionEnabled && isPdfLoaded && pdfTextSelecting) {
         pdfSelectionEnd = event->position();
@@ -1913,31 +1867,6 @@ void InkCanvas::mouseReleaseEvent(QMouseEvent *event) {
     // Handle picture window drag/resize
     if ((pictureDragging || pictureResizing) && event->button() == Qt::LeftButton) {
         handlePictureMouseRelease(event);
-        return;
-    }
-    
-    // Handle markdown selection when enabled
-    if (markdownSelectionMode && markdownSelecting && event->button() == Qt::LeftButton) {
-        markdownSelecting = false;
-        
-        // Create markdown window if selection is valid
-        QRect selectionRect = QRect(markdownSelectionStart, markdownSelectionEnd).normalized();
-        if (selectionRect.width() > 50 && selectionRect.height() > 50 && markdownManager) {
-            markdownManager->createMarkdownWindow(selectionRect);
-
-            // ✅ COMBINED MODE FIX: Save immediately with combined-aware method
-            int currentPage = getLastActivePage();
-            saveCombinedWindowsForPage(currentPage);
-            setEdited(true);
-        }
-        
-        // Exit selection mode
-        setMarkdownSelectionMode(false);
-        
-        // Force screen update to clear the green selection overlay
-        update();
-        
-        event->accept();
         return;
     }
     
@@ -2314,11 +2243,8 @@ void InkCanvas::saveToFile(int pageNumber) {
 void InkCanvas::loadPage(int pageNumber) {
     if (saveFolder.isEmpty()) return;
 
-    // Hide any markdown windows from the previous page BEFORE loading the new page content.
+    // Hide any picture windows from the previous page BEFORE loading the new page content.
     // This ensures the correct repaint area and stops the transparency timer.
-    if (markdownManager) {
-        markdownManager->hideAllWindows();
-    }
     if (pictureManager) {
         pictureManager->hideAllWindows();
     }
@@ -2594,11 +2520,6 @@ void InkCanvas::deletePage(int pageNumber) {
         noteCacheAccessOrder.removeAll(pageNumber);
     }
 
-    // Delete markdown windows for this page
-    if (markdownManager) {
-        markdownManager->deleteWindowsForPage(pageNumber);
-    }
-    
     // Delete picture windows for this page
     if (pictureManager) {
         pictureManager->deleteWindowsForPage(pageNumber);
@@ -2619,11 +2540,6 @@ void InkCanvas::clearCurrentPage() {
         initializeBuffer();
     } else {
         buffer.fill(Qt::transparent);
-    }
-    
-    // ✅ PERMANENTLY delete markdown windows for current page
-    if (markdownManager) {
-        markdownManager->clearCurrentPagePermanently(lastActivePage);
     }
     
     // Clear all picture windows from current page (already deletes files permanently)
@@ -3343,12 +3259,9 @@ void InkCanvas::onAutoSaveTimeout() {
         // This prevents continuous disk writes while idle
     }
     
-    // ✅ PERFORMANCE FIX: Also flush dirty markdown/picture windows to disk
+    // ✅ PERFORMANCE FIX: Also flush dirty picture windows to disk
     // This allows page switches to skip disk writes while still ensuring autosave works
     if (!saveFolder.isEmpty()) {
-        if (markdownManager) {
-            markdownManager->flushDirtyPagesToDisk();
-        }
         if (pictureManager) {
             pictureManager->flushDirtyPagesToDisk();
         }
@@ -5422,15 +5335,6 @@ void InkCanvas::invalidateBothPagesCache(int pageNumber) {
     noteCacheAccessOrder.removeAll(pageNumber + 1);
 }
 
-QList<MarkdownWindow*> InkCanvas::loadMarkdownWindowsForPage(int pageNumber) {
-    if (!markdownManager) {
-        return QList<MarkdownWindow*>();
-    }
-    
-    // Load windows for the specified page without affecting current windows
-    return markdownManager->loadWindowsForPageSeparately(pageNumber);
-}
-
 QList<PictureWindow*> InkCanvas::loadPictureWindowsForPage(int pageNumber) {
     if (!pictureManager) {
         return QList<PictureWindow*>();
@@ -5440,8 +5344,9 @@ QList<PictureWindow*> InkCanvas::loadPictureWindowsForPage(int pageNumber) {
     return pictureManager->loadWindowsForPageSeparately(pageNumber);
 }
 
+// Load picture windows for combined canvas (markdown windows removed)
 void InkCanvas::loadCombinedWindowsForPage(int pageNumber) {
-    if (!markdownManager && !pictureManager) {
+    if (!pictureManager) {
         return;
     }
     
@@ -5458,97 +5363,34 @@ void InkCanvas::loadCombinedWindowsForPage(int pageNumber) {
     }
     
     if (isCombinedCanvas) {
-        // ✅ PERFORMANCE: Check if we're already viewing these pages - skip reload if so
-        int nextPageNumber = pageNumber + 1;
-        bool alreadyLoaded = false;
-        
-        if (markdownManager) {
-            // Check if markdown manager is already displaying these exact pages
-            int mdFirst = markdownManager->getCombinedFirstPage();
-            int mdSecond = markdownManager->getCombinedSecondPage();
-            if (mdFirst == pageNumber && mdSecond == nextPageNumber) {
-                alreadyLoaded = true;
-            }
-        }
-        
-        if (alreadyLoaded) {
-            // Already displaying these exact pages, no need to reload
-            return;
-        }
-        
         // For combined canvas, we need to load and merge windows from both current and next page
+        int nextPageNumber = pageNumber + 1;
         
-        
-        // For combined canvas showing pages N and N+1:
-        // - Top half shows page N
-        // - Bottom half shows page N+1
-        
-        // CORRECTED LOGIC: For page "N-(N+1)" view, we need:
-        // - Top half: Page N windows (no adjustment needed - they were saved with top-half coordinates)  
-        // - Bottom half: Page N+1 windows (adjust by +singlePageHeight)
-        
-        // Load page N windows for top half using separate method to avoid interference
-        QList<MarkdownWindow*> topHalfMarkdownWindows;
-        QList<PictureWindow*> topHalfPictureWindows;
-        
-        if (markdownManager) {
-            topHalfMarkdownWindows = loadMarkdownWindowsForPage(pageNumber);
-            // These windows were saved with their original coordinates and appear in top half as-is
-        }
-        
-        if (pictureManager) {
-            topHalfPictureWindows = loadPictureWindowsForPage(pageNumber);
-            // These windows were saved with their original coordinates and appear in top half as-is
-        }
+        // Load page N windows for top half
+        QList<PictureWindow*> topHalfPictureWindows = loadPictureWindowsForPage(pageNumber);
         
         // Load page N+1 windows for bottom half and adjust their coordinates
-        QList<MarkdownWindow*> bottomHalfMarkdownWindows;
-        QList<PictureWindow*> bottomHalfPictureWindows;
+        QList<PictureWindow*> bottomHalfPictureWindows = loadPictureWindowsForPage(nextPageNumber);
         
-        if (markdownManager) {
-            bottomHalfMarkdownWindows = loadMarkdownWindowsForPage(nextPageNumber);
-            // Move page N+1 windows to bottom half by adding singlePageHeight
-            for (MarkdownWindow* window : bottomHalfMarkdownWindows) {
-                QRect rect = window->getCanvasRect();
-                rect.moveTop(rect.y() + singlePageHeight);
-                window->setCanvasRect(rect);
-            }
-        }
-        
-        if (pictureManager) {
-            bottomHalfPictureWindows = loadPictureWindowsForPage(nextPageNumber);
-            // Move page N+1 windows to bottom half by adding singlePageHeight
-            for (PictureWindow* window : bottomHalfPictureWindows) {
-                QRect rect = window->getCanvasRect();
-                rect.moveTop(rect.y() + singlePageHeight);
-                window->setCanvasRect(rect);
-            }
+        // Move page N+1 windows to bottom half by adding singlePageHeight
+        for (PictureWindow* window : bottomHalfPictureWindows) {
+            QRect rect = window->getCanvasRect();
+            rect.moveTop(rect.y() + singlePageHeight);
+            window->setCanvasRect(rect);
         }
         
         // Combine both sets of windows and set as current
-        if (markdownManager) {
-            QList<MarkdownWindow*> combinedMarkdownWindows = topHalfMarkdownWindows + bottomHalfMarkdownWindows;
-            markdownManager->setCombinedWindows(combinedMarkdownWindows, pageNumber, nextPageNumber);
-        }
-        
-        if (pictureManager) {
-            QList<PictureWindow*> combinedPictureWindows = topHalfPictureWindows + bottomHalfPictureWindows;
-            pictureManager->setCombinedWindows(combinedPictureWindows);
-        }
-        
+        QList<PictureWindow*> combinedPictureWindows = topHalfPictureWindows + bottomHalfPictureWindows;
+        pictureManager->setCombinedWindows(combinedPictureWindows);
     } else {
         // Standard single page window loading
-        if (markdownManager) {
-            markdownManager->loadWindowsForPage(pageNumber);
-        }
-        if (pictureManager) {
-            pictureManager->loadWindowsForPage(pageNumber);
-        }
+        pictureManager->loadWindowsForPage(pageNumber);
     }
 }
 
+// Save picture windows for combined canvas (markdown windows removed)
 void InkCanvas::saveCombinedWindowsForPage(int pageNumber) {
-    if (!markdownManager && !pictureManager) {
+    if (!pictureManager) {
         return;
     }
     
@@ -5569,26 +5411,11 @@ void InkCanvas::saveCombinedWindowsForPage(int pageNumber) {
         // Windows in the top half belong to current page, bottom half to next page
         
         // Get all current windows
-        QList<MarkdownWindow*> allMarkdownWindows = markdownManager ? markdownManager->getCurrentPageWindows() : QList<MarkdownWindow*>();
-        QList<PictureWindow*> allPictureWindows = pictureManager ? pictureManager->getCurrentPageWindows() : QList<PictureWindow*>();
+        QList<PictureWindow*> allPictureWindows = pictureManager->getCurrentPageWindows();
         
         // Separate windows by position
-        QList<MarkdownWindow*> currentPageMarkdownWindows;
-        QList<MarkdownWindow*> nextPageMarkdownWindows;
         QList<PictureWindow*> currentPagePictureWindows;
         QList<PictureWindow*> nextPagePictureWindows;
-        
-        // Separate markdown windows by position
-        for (MarkdownWindow* window : allMarkdownWindows) {
-            QRect rect = window->getCanvasRect();
-            if (rect.top() < singlePageHeight) {
-                // Window starts in top half (current page)
-                currentPageMarkdownWindows.append(window);
-            } else {
-                // Window starts in bottom half (next page)
-                nextPageMarkdownWindows.append(window);
-            }
-        }
         
         // Separate picture windows by position  
         for (PictureWindow* window : allPictureWindows) {
@@ -5603,31 +5430,10 @@ void InkCanvas::saveCombinedWindowsForPage(int pageNumber) {
         }
         
         // Save current page windows (top half)
-        if (markdownManager) {
-            markdownManager->saveWindowsForPageSeparately(pageNumber, currentPageMarkdownWindows);
-        }
-        if (pictureManager) {
-            pictureManager->saveWindowsForPageSeparately(pageNumber, currentPagePictureWindows);
-        }
+        pictureManager->saveWindowsForPageSeparately(pageNumber, currentPagePictureWindows);
         
         // Save next page windows (bottom half, with adjusted coordinates)
-        if (!nextPageMarkdownWindows.isEmpty() && markdownManager) {
-            // Temporarily adjust coordinates for saving
-            for (MarkdownWindow* window : nextPageMarkdownWindows) {
-                QRect rect = window->getCanvasRect();
-                rect.moveTop(rect.y() - singlePageHeight); // Move to top half coordinates
-                window->setCanvasRect(rect);
-            }
-            markdownManager->saveWindowsForPageSeparately(pageNumber + 1, nextPageMarkdownWindows);
-            // Restore original coordinates
-            for (MarkdownWindow* window : nextPageMarkdownWindows) {
-                QRect rect = window->getCanvasRect();
-                rect.moveTop(rect.y() + singlePageHeight); // Move back to bottom half
-                window->setCanvasRect(rect);
-            }
-        }
-        
-        if (!nextPagePictureWindows.isEmpty() && pictureManager) {
+        if (!nextPagePictureWindows.isEmpty()) {
             // Temporarily adjust coordinates for saving
             for (PictureWindow* window : nextPagePictureWindows) {
                 QRect rect = window->getCanvasRect();
@@ -5642,39 +5448,10 @@ void InkCanvas::saveCombinedWindowsForPage(int pageNumber) {
                 window->setCanvasRect(rect);
             }
         }
-        
     } else {
         // Standard single page window saving
-        if (markdownManager) {
-            markdownManager->saveWindowsForPage(pageNumber);
-        }
-        if (pictureManager) {
-            pictureManager->saveWindowsForPage(pageNumber);
-        }
+        pictureManager->saveWindowsForPage(pageNumber);
     }
-}
-
-// Markdown integration methods
-void InkCanvas::setMarkdownSelectionMode(bool enabled) {
-    markdownSelectionMode = enabled;
-    
-    if (markdownManager) {
-        markdownManager->setSelectionMode(enabled);
-    }
-    
-    if (!enabled) {
-        markdownSelecting = false;
-    }
-    
-    // Update cursor
-    setCursor(enabled ? Qt::CrossCursor : Qt::ArrowCursor);
-    
-    // Notify signal
-    emit markdownSelectionModeChanged(enabled);
-}
-
-bool InkCanvas::isMarkdownSelectionMode() const {
-    return markdownSelectionMode;
 }
 
 void InkCanvas::setPictureSelectionMode(bool enabled) {

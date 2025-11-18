@@ -312,8 +312,6 @@ add_executable(${PROJECT_NAME}
         source/RecentNotebooksManager.cpp
         source/KeyCaptureDialog.cpp
         source/ControllerMappingDialog.cpp
-        source/MarkdownWindow.cpp
-        source/MarkdownWindowManager.cpp
         source/MarkdownNoteEntry.cpp
         source/MarkdownNotesSidebar.cpp
 	  source/PictureWindow.cpp

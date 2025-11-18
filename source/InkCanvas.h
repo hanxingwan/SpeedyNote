@@ -21,7 +21,6 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QUuid>
-#include "MarkdownWindowManager.h"
 #include "PictureWindowManager.h"
 #include "MarkdownNoteEntry.h"
 #include "ToolType.h"
@@ -29,9 +28,7 @@
 #include "SpnPackageManager.h"
 #include "PdfRelinkDialog.h"
 
-class MarkdownWindowManager;
 class PictureWindowManager;
-class MarkdownWindow;
 class PictureWindow;
 
 enum class TouchGestureMode {
@@ -127,7 +124,6 @@ signals:
     void pdfLinkClicked(int targetPage); // Signal emitted when a PDF link is clicked
     void pdfTextSelected(const QString &text); // Signal emitted when PDF text is selected
     void pdfLoaded(); // Signal emitted when a PDF is loaded
-    void markdownSelectionModeChanged(bool enabled); // Signal emitted when markdown selection mode changes
     void autoScrollRequested(int direction); // Signal for autoscrolling to next/prev page
     void earlySaveRequested(); // Signal for proactive save before autoscroll threshold
     void markdownNotesUpdated(); // Signal emitted when markdown notes are added/updated/removed
@@ -266,11 +262,7 @@ public:
     void copyRopeSelection(); // Copy the current rope tool selection
     void copyRopeSelectionToClipboard(); // Copy the current rope tool selection to clipboard
     
-    // Markdown integration
-    MarkdownWindowManager* getMarkdownManager() const { return markdownManager; }
     PictureWindowManager* getPictureManager() const { return pictureManager; }
-    void setMarkdownSelectionMode(bool enabled);
-    bool isMarkdownSelectionMode() const;
     
     // Picture integration
     void setPictureSelectionMode(bool enabled);
@@ -450,8 +442,9 @@ public:
     // ✅ Metadata management
     void loadNotebookId();
     
-    // Combined canvas window management
-    void saveCombinedWindowsForPage(int pageNumber); // Save windows for combined canvas pages
+    // Combined canvas window management (picture windows only)
+    void saveCombinedWindowsForPage(int pageNumber); // Save picture windows for combined canvas pages
+    void loadCombinedWindowsForPage(int pageNumber); // Load picture windows for combined canvas pages
     
     // Autoscroll threshold detection (for touch gestures and external pan changes)
     void checkAutoscrollThreshold(int oldPanY, int newPanY);
@@ -475,8 +468,6 @@ public:
     
 private:
     // Combined canvas window management
-    void loadCombinedWindowsForPage(int pageNumber); // Load windows for combined canvas pages
-    QList<MarkdownWindow*> loadMarkdownWindowsForPage(int pageNumber); // Load markdown windows without affecting current
     QList<PictureWindow*> loadPictureWindowsForPage(int pageNumber); // Load picture windows without affecting current
     
     // PDF text selection helpers for combined canvas
@@ -576,13 +567,7 @@ private:
     int pendingNoteCacheTargetPage = -1; // Target page for pending note cache operation (to validate timer relevance)
     QList<QFutureWatcher<void>*> activeNoteWatchers; // Track active note cache watchers for cleanup
     
-    // Markdown integration
-    MarkdownWindowManager* markdownManager = nullptr;
     PictureWindowManager* pictureManager = nullptr;
-    bool markdownSelectionMode = false;
-    QPoint markdownSelectionStart;
-    QPoint markdownSelectionEnd;
-    bool markdownSelecting = false;
     
     // Picture selection state
     bool pictureSelectionMode = false;
