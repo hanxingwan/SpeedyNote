@@ -33,7 +33,7 @@ void MarkdownNotesSidebar::setupUI() {
     scrollArea->setWidget(scrollContent);
     
     // Empty state label
-    emptyLabel = new QLabel("No notes on this page", this);
+    emptyLabel = new QLabel(tr("No notes on this page"), this);
     emptyLabel->setAlignment(Qt::AlignCenter);
     emptyLabel->setStyleSheet("color: gray; font-style: italic; padding: 20px;");
     emptyLabel->setWordWrap(true);

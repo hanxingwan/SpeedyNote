@@ -34,7 +34,7 @@ void MarkdownNoteEntry::setupUI() {
                                   .arg(noteData.color.name()));
     
     // Title edit
-    titleEdit = new QLineEdit(noteData.title.isEmpty() ? "Untitled Note" : noteData.title, this);
+    titleEdit = new QLineEdit(noteData.title.isEmpty() ? tr("Untitled Note") : noteData.title, this);
     titleEdit->setFrame(false);
     titleEdit->setStyleSheet("font-weight: bold; background: transparent; padding-left: 2px;");
     titleEdit->setAlignment(Qt::AlignLeft | Qt::AlignVCenter); // Left-align title text
@@ -46,7 +46,7 @@ void MarkdownNoteEntry::setupUI() {
     // Highlight link button (if linked to a highlight)
     highlightLinkButton = new QPushButton("🔗", this);
     highlightLinkButton->setFixedSize(20, 20);
-    highlightLinkButton->setToolTip("Jump to linked highlight");
+    highlightLinkButton->setToolTip(tr("Jump to linked highlight"));
     highlightLinkButton->setVisible(!noteData.highlightId.isEmpty());
     highlightLinkButton->setStyleSheet(R"(
         QPushButton {
@@ -64,7 +64,7 @@ void MarkdownNoteEntry::setupUI() {
     // Delete button
     deleteButton = new QPushButton("×", this);
     deleteButton->setFixedSize(20, 20);
-    deleteButton->setToolTip("Delete note");
+    deleteButton->setToolTip(tr("Delete note"));
     deleteButton->setStyleSheet(R"(
         QPushButton {
             background-color: #ff4444;
@@ -130,7 +130,7 @@ void MarkdownNoteEntry::applyStyle() {
 
 void MarkdownNoteEntry::updatePreview() {
     if (noteData.content.isEmpty()) {
-        previewLabel->setText("(empty note)");
+        previewLabel->setText(tr("(empty note)"));
         previewLabel->setStyleSheet("padding: 4px; color: gray; font-style: italic;");
     } else {
         // Show first 100 characters of content
@@ -145,7 +145,7 @@ void MarkdownNoteEntry::updatePreview() {
 
 void MarkdownNoteEntry::setNoteData(const MarkdownNoteData &data) {
     noteData = data;
-    titleEdit->setText(data.title.isEmpty() ? "Untitled Note" : data.title);
+    titleEdit->setText(data.title.isEmpty() ? tr("Untitled Note") : data.title);
     // Ensure cursor starts at beginning to show the start of text
     titleEdit->setCursorPosition(0);
     titleEdit->deselect();
