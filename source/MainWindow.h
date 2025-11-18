@@ -198,6 +198,7 @@ public:
     void setScrollOnTopEnabled(bool enabled);
 
     TouchGestureMode touchGestureMode = TouchGestureMode::Full;
+    TouchGestureMode previousTouchGestureMode = TouchGestureMode::Full; // Store state before text selection
     TouchGestureMode getTouchGestureMode() const;
     void setTouchGestureMode(TouchGestureMode mode);
     void cycleTouchGestureMode(); // Cycle through: Disabled -> YAxisOnly -> Full -> Disabled
@@ -327,10 +328,14 @@ private slots:
     void handleSmartPdfButton(); // ✅ Smart PDF button that handles all PDF operations
     void exportAnnotatedPdf(); // Export PDF with all annotations overlaid
     void exportCanvasOnlyNotebook(const QString &saveFolder, const QString &notebookId); // Export canvas-only notebook (no PDF)
-    void exportAnnotatedPdfFullRender(const QString &exportPath, const QSet<int> &annotatedPages); // Full render fallback
+    void exportAnnotatedPdfFullRender(const QString &exportPath, const QSet<int> &annotatedPages, bool exportWholeDocument = true, int exportStartPage = 0, int exportEndPage = -1); // Full render fallback
     bool createAnnotatedPagesPdf(const QString &outputPath, const QList<int> &pages, QProgressDialog &progress); // Create temp PDF
     bool mergePdfWithPdftk(const QString &originalPdf, const QString &annotatedPagesPdf, const QString &outputPdf, const QList<int> &annotatedPageNumbers, QString *errorMsg = nullptr, bool exportWholeDocument = true, int exportStartPage = 0, int exportEndPage = -1); // Merge using pdftk
-    bool mergePdfWithQpdf(const QString &originalPdf, const QString &annotatedPagesPdf, const QString &outputPdf, const QList<int> &annotatedPageNumbers, QString *errorMsg = nullptr); // Merge using qpdf
+    
+    // PDF outline preservation helpers
+    bool extractPdfOutlineData(const QString &pdfPath, QString &outlineData); // Extract PDF metadata including outline
+    QString filterAndAdjustOutline(const QString &metadataContent, int startPage, int endPage, int pageOffset); // Filter and adjust outline for page range
+    bool applyOutlineToPdf(const QString &pdfPath, const QString &outlineData); // Apply outline to PDF using pdftk
     
     // Helper function to show page range dialog (returns false if cancelled)
     bool showPageRangeDialog(int totalPages, bool &exportWholeDocument, int &startPage, int &endPage);

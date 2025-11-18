@@ -94,7 +94,7 @@ void setupLinuxSignalHandlers() {
 MainWindow::MainWindow(QWidget *parent) 
     : QMainWindow(parent), benchmarking(false), localServer(nullptr) {
 
-    setWindowTitle(tr("SpeedyNote Beta 0.11.0"));
+    setWindowTitle(tr("SpeedyNote Beta 0.11.1"));
 
 #ifdef Q_OS_LINUX
     // Setup signal handlers for proper cleanup on Linux
@@ -244,6 +244,30 @@ void MainWindow::setupUi() {
         currentCanvas()->setPdfTextSelectionEnabled(newMode);
         updatePdfTextSelectButtonState();
         updateBookmarkButtonState();
+        
+        // Temporarily disable touch gestures when text selection is enabled
+        if (newMode) {
+            // Save current touch gesture mode and disable it
+            previousTouchGestureMode = touchGestureMode;
+            if (touchGestureMode != TouchGestureMode::Disabled) {
+                setTouchGestureMode(TouchGestureMode::Disabled);
+                touchGesturesButton->setProperty("selected", false);
+                touchGesturesButton->setProperty("yAxisOnly", false);
+                updateButtonIcon(touchGesturesButton, "hand");
+                touchGesturesButton->style()->unpolish(touchGesturesButton);
+                touchGesturesButton->style()->polish(touchGesturesButton);
+            }
+        } else {
+            // Restore previous touch gesture mode
+            if (previousTouchGestureMode != touchGestureMode) {
+                setTouchGestureMode(previousTouchGestureMode);
+                touchGesturesButton->setProperty("selected", previousTouchGestureMode != TouchGestureMode::Disabled);
+                touchGesturesButton->setProperty("yAxisOnly", previousTouchGestureMode == TouchGestureMode::YAxisOnly);
+                updateButtonIcon(touchGesturesButton, "hand");
+                touchGesturesButton->style()->unpolish(touchGesturesButton);
+                touchGesturesButton->style()->polish(touchGesturesButton);
+            }
+        }
         
         // Clear any existing selection when toggling
         if (!newMode) {
@@ -2048,22 +2072,126 @@ void MainWindow::exportAnnotatedPdf() {
 
     if (annotatedPages.isEmpty()) {
         // No annotations found in selected page range
+        // Check if pdftk is available for fast export (even with no annotations)
+        QProcess testPdftk;
+        testPdftk.start("pdftk", QStringList() << "--version");
+        bool hasPdftk = testPdftk.waitForFinished(1000) && testPdftk.exitCode() == 0;
+        
         if (exportWholeDocument) {
+            // No annotations and exporting whole document
             QMessageBox::information(this, tr("No Annotations"), 
                 tr("No annotated pages found. The output will be identical to the original PDF."));
             
-            // Just copy the original PDF
-            if (QFile::copy(originalPdfPath, exportPath)) {
-                QMessageBox::information(this, tr("Export Complete"), 
-                    tr("PDF copied successfully (no annotations to add)."));
+            if (hasPdftk) {
+                // Use pdftk to copy (preserves metadata and outline better than QFile::copy)
+                // Run asynchronously to avoid UI freeze
+                QProcess *copyProcess = new QProcess(this);
+                QProgressDialog *copyProgress = new QProgressDialog(tr("Copying PDF..."), QString(), 0, 0, this);
+                copyProgress->setWindowModality(Qt::WindowModal);
+                copyProgress->setCancelButton(nullptr);
+                copyProgress->setMinimumDuration(0);
+                copyProgress->show();
+                
+                // Use QPointer to safely check if MainWindow still exists
+                QPointer<MainWindow> mainWindowPtr(this);
+                
+                connect(copyProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+                    this, [=](int exitCode, QProcess::ExitStatus exitStatus) {
+                        copyProgress->close();
+                        copyProgress->deleteLater();
+                        
+                        // Only show message boxes if MainWindow still exists
+                        if (!mainWindowPtr.isNull()) {
+                            if (exitCode == 0 && exitStatus == QProcess::NormalExit) {
+                                QMessageBox::information(mainWindowPtr, tr("Export Complete"), 
+                                    tr("PDF copied successfully (no annotations to add)."));
+                            } else {
+                                QMessageBox::critical(mainWindowPtr, tr("Export Failed"), 
+                                    tr("Failed to copy PDF.\n\nError: %1")
+                                    .arg(QString::fromUtf8(copyProcess->readAllStandardError())));
+                            }
+                        }
+                        copyProcess->deleteLater();
+                    });
+                
+                copyProcess->start("pdftk", QStringList() << originalPdfPath << "output" << exportPath);
             } else {
-                QMessageBox::critical(this, tr("Export Failed"), 
-                    tr("Failed to copy original PDF."));
+                // Fall back to simple file copy
+                if (QFile::copy(originalPdfPath, exportPath)) {
+                    QMessageBox::information(this, tr("Export Complete"), 
+                        tr("PDF copied successfully (no annotations to add)."));
+                } else {
+                    QMessageBox::critical(this, tr("Export Failed"), 
+                        tr("Failed to copy original PDF."));
+                }
             }
             return;
         } else {
             // User selected a page range, but no annotations - extract that range using pdftk
-            QProcess pdftkProcess;
+            if (!hasPdftk) {
+                QMessageBox::critical(this, tr("pdftk Required"), 
+                    tr("pdftk is required to export page ranges.\n\n"
+                       "Please install pdftk:\n"
+                       "  MSYS2: pacman -S mingw-w64-clang-x86_64-pdftk\n"
+                       "  Windows: Download from https://www.pdflabs.com/tools/pdftk-the-pdf-toolkit/"));
+                return;
+            }
+            
+            // Extract outline BEFORE starting the export (to avoid timeout in callback)
+            QProgressDialog outlineProgress(tr("Reading PDF outline..."), QString(), 0, 0, this);
+            outlineProgress.setWindowModality(Qt::WindowModal);
+            outlineProgress.setCancelButton(nullptr);
+            outlineProgress.setMinimumDuration(0);
+            outlineProgress.show();
+            QCoreApplication::processEvents();
+            
+            QString outlineData;
+            QString filteredOutline;
+            bool hasOutline = extractPdfOutlineData(originalPdfPath, outlineData);
+            if (hasOutline) {
+                filteredOutline = filterAndAdjustOutline(outlineData, exportStartPage, exportEndPage, 0);
+            }
+            
+            outlineProgress.close();
+            
+            // Now run pdftk extraction asynchronously to avoid UI freeze
+            QProcess *extractProcess = new QProcess(this);
+            QProgressDialog *extractProgress = new QProgressDialog(
+                tr("Extracting pages %1-%2...").arg(exportStartPage + 1).arg(exportEndPage + 1), 
+                QString(), 0, 0, this);
+            extractProgress->setWindowModality(Qt::WindowModal);
+            extractProgress->setCancelButton(nullptr);
+            extractProgress->setMinimumDuration(0);
+            extractProgress->show();
+            
+            // Use QPointer to safely check if MainWindow still exists
+            QPointer<MainWindow> mainWindowPtr(this);
+            
+            connect(extractProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+                this, [=](int exitCode, QProcess::ExitStatus exitStatus) {
+                    extractProgress->close();
+                    extractProgress->deleteLater();
+                    
+                    // Only process results if MainWindow still exists
+                    if (!mainWindowPtr.isNull()) {
+                        if (exitCode == 0 && exitStatus == QProcess::NormalExit) {
+                            // Apply the pre-extracted outline if we have one
+                            if (!filteredOutline.isEmpty()) {
+                                mainWindowPtr->applyOutlineToPdf(exportPath, filteredOutline);
+                            }
+                            
+                            QMessageBox::information(mainWindowPtr, tr("Export Complete"), 
+                                tr("Pages %1-%2 exported successfully (no annotations found in this range).")
+                                .arg(exportStartPage + 1).arg(exportEndPage + 1));
+                        } else {
+                            QMessageBox::critical(mainWindowPtr, tr("Export Failed"), 
+                                tr("Failed to extract page range from PDF.\n\nError: %1")
+                                .arg(QString::fromUtf8(extractProcess->readAllStandardError())));
+                        }
+                    }
+                    extractProcess->deleteLater();
+                });
+            
             QStringList args;
             args << originalPdfPath;
             args << "cat";
@@ -2071,51 +2199,37 @@ void MainWindow::exportAnnotatedPdf() {
             args << "output";
             args << exportPath;
             
-            pdftkProcess.start("pdftk", args);
-            if (!pdftkProcess.waitForFinished(30000) || pdftkProcess.exitCode() != 0) {
-                QMessageBox::critical(this, tr("Export Failed"), 
-                    tr("Failed to extract page range from PDF.\n\nError: %1")
-                    .arg(QString::fromUtf8(pdftkProcess.readAllStandardError())));
-                return;
-            }
-            
-            QMessageBox::information(this, tr("Export Complete"), 
-                tr("Pages %1-%2 exported successfully (no annotations found in this range).").arg(exportStartPage + 1).arg(exportEndPage + 1));
+            extractProcess->start("pdftk", args);
             return;
         }
     }
 
-    // Try to use pdftk or qpdf for efficient merging (only annotated pages need rendering)
+    // Try to use pdftk for efficient merging (only annotated pages need rendering)
     QString tempAnnotatedPdf = QDir::temp().filePath("speedynote_annotated_pages.pdf");
-    QString stampFile = QDir::temp().filePath("speedynote_stamp_pages.pdf");
     
     // Strategy: Create a PDF with only annotated pages (using original page numbers),
     // then use pdftk to merge and extract the desired range in one operation
-    // If those tools aren't available, fall back to full re-render (but inform user)
+    // If pdftk isn't available, fall back to full re-render (but inform user)
     
-    // Check if pdftk or qpdf is available
-    QString overlayTool;
+    // Check if pdftk is available
+    bool pdftkAvailable = false;
     QProcess testProcess;
     
     testProcess.start("pdftk", QStringList() << "--version");
     if (testProcess.waitForFinished(1000) && testProcess.exitCode() == 0) {
-        overlayTool = "pdftk";
-    } else {
-        testProcess.start("qpdf", QStringList() << "--version");
-        if (testProcess.waitForFinished(1000) && testProcess.exitCode() == 0) {
-            overlayTool = "qpdf";
-        }
+        pdftkAvailable = true;
     }
 
-    if (overlayTool.isEmpty()) {
-        // No external tool available - inform user and use slower method
+    if (!pdftkAvailable) {
+        // pdftk not available - inform user and use slower method
         int pageCount = exportWholeDocument ? totalPages : (exportEndPage - exportStartPage + 1);
         QMessageBox::StandardButton reply = QMessageBox::question(this, 
             tr("Optimization Not Available"),
             tr("Found %1 annotated pages out of %2 total pages in selected range.\n\n"
-               "For fast export, please install 'pdftk' or 'qpdf':\n"
-               "  MSYS2: pacman -S mingw-w64-clang-x86_64-pdftk\n\n"
-               "Without these tools, export requires re-rendering all %2 pages.\n"
+               "For fast export, please install 'pdftk':\n"
+               "  MSYS2: pacman -S mingw-w64-clang-x86_64-pdftk\n"
+               "  Windows: Download from https://www.pdflabs.com/tools/pdftk-the-pdf-toolkit/\n\n"
+               "Without pdftk, export requires re-rendering all %2 pages.\n"
                "On slow systems this may take over an hour.\n\n"
                "Continue with slow export anyway?")
             .arg(annotatedPages.size()).arg(pageCount),
@@ -2125,8 +2239,8 @@ void MainWindow::exportAnnotatedPdf() {
             return;
         }
         
-        // Fall back to rendering all pages
-        exportAnnotatedPdfFullRender(exportPath, annotatedPages);
+        // Fall back to rendering all pages (or selected range)
+        exportAnnotatedPdfFullRender(exportPath, annotatedPages, exportWholeDocument, exportStartPage, exportEndPage);
         return;
     }
 
@@ -2180,7 +2294,6 @@ void MainWindow::exportAnnotatedPdf() {
         
         // Cleanup temp files - always happens
         QFile::remove(tempAnnotatedPdf);
-        QFile::remove(stampFile);
 
         // Only show message boxes if MainWindow still exists
         if (!mainWindowPtr.isNull()) {
@@ -2226,14 +2339,9 @@ void MainWindow::exportAnnotatedPdf() {
     // Start the background task
     // Pass exportStartPage and exportEndPage to handle page range extraction during merge
     QFuture<bool> mergeFuture = QtConcurrent::run([=]() {
-        if (overlayTool == "pdftk") {
-            // mergePdfWithPdftk will handle extracting the range if needed
-            return mergePdfWithPdftk(originalPdfPath, tempAnnotatedPdf, exportPath, sortedPages, 
-                                     mergeError, exportWholeDocument, exportStartPage, exportEndPage);
-        } else if (overlayTool == "qpdf") {
-            return mergePdfWithQpdf(originalPdfPath, tempAnnotatedPdf, exportPath, sortedPages, mergeError);
-        }
-        return false;
+        // mergePdfWithPdftk will handle extracting the range if needed
+        return mergePdfWithPdftk(originalPdfPath, tempAnnotatedPdf, exportPath, sortedPages, 
+                                 mergeError, exportWholeDocument, exportStartPage, exportEndPage);
     });
     
     mergeWatcher->setFuture(mergeFuture);
@@ -2421,23 +2529,30 @@ void MainWindow::exportCanvasOnlyNotebook(const QString &saveFolder, const QStri
 }
 
 // Helper function for full render fallback
-void MainWindow::exportAnnotatedPdfFullRender(const QString &exportPath, const QSet<int> &annotatedPages) {
+void MainWindow::exportAnnotatedPdfFullRender(const QString &exportPath, const QSet<int> &annotatedPages, 
+                                               bool exportWholeDocument, int exportStartPage, int exportEndPage) {
     InkCanvas *canvas = currentCanvas();
     if (!canvas) return;
     
     Poppler::Document* pdfDoc = canvas->getPdfDocument();
     QString saveFolder = canvas->getSaveFolder();
     QString notebookId = canvas->getNotebookId();
+    QString originalPdfPath = canvas->getPdfPath();
     int totalPages = canvas->getTotalPdfPages();
+    
+    // Determine the range to export
+    int startPage = exportWholeDocument ? 0 : exportStartPage;
+    int endPage = exportWholeDocument ? (totalPages - 1) : exportEndPage;
+    int pageCount = endPage - startPage + 1;
 
-    QProgressDialog progress(tr("Exporting annotated PDF..."), tr("Cancel"), 0, totalPages, this);
+    QProgressDialog progress(tr("Exporting annotated PDF..."), tr("Cancel"), 0, pageCount, this);
     progress.setWindowModality(Qt::WindowModal);
     progress.setMinimumDuration(0);
 
     QPdfWriter pdfWriter(exportPath);
     pdfWriter.setResolution(pdfRenderDPI);
     
-    std::unique_ptr<Poppler::Page> firstPage(pdfDoc->page(0));
+    std::unique_ptr<Poppler::Page> firstPage(pdfDoc->page(startPage));
     if (!firstPage) return;
     
     QSizeF pageSize = firstPage->pageSizeF();
@@ -2451,30 +2566,39 @@ void MainWindow::exportAnnotatedPdfFullRender(const QString &exportPath, const Q
         return;
     }
 
-    for (int pageNum = 0; pageNum < totalPages; ++pageNum) {
+    bool firstPageWritten = false;
+    int exportedPageIndex = 0;
+    for (int pageNum = startPage; pageNum <= endPage; ++pageNum) {
         if (progress.wasCanceled()) {
             painter.end();
             QFile::remove(exportPath);
             return;
         }
 
-        progress.setValue(pageNum);
+        progress.setValue(exportedPageIndex);
         if (annotatedPages.contains(pageNum)) {
-            progress.setLabelText(tr("Rendering page %1 of %2 (annotated)...").arg(pageNum + 1).arg(totalPages));
+            progress.setLabelText(tr("Rendering page %1 of %2 (annotated)...").arg(exportedPageIndex + 1).arg(pageCount));
         } else {
-            progress.setLabelText(tr("Rendering page %1 of %2...").arg(pageNum + 1).arg(totalPages));
+            progress.setLabelText(tr("Rendering page %1 of %2...").arg(exportedPageIndex + 1).arg(pageCount));
         }
         QCoreApplication::processEvents();
 
-        if (pageNum > 0) {
+        if (firstPageWritten) {
             pdfWriter.newPage();
         }
+        firstPageWritten = true;
 
         std::unique_ptr<Poppler::Page> pdfPage(pdfDoc->page(pageNum));
-        if (!pdfPage) continue;
+        if (!pdfPage) {
+            exportedPageIndex++;
+            continue;
+        }
 
         QImage pdfImage = pdfPage->renderToImage(pdfRenderDPI, pdfRenderDPI);
-        if (pdfImage.isNull()) continue;
+        if (pdfImage.isNull()) {
+            exportedPageIndex++;
+            continue;
+        }
 
         QSizeF targetSize = pdfWriter.pageLayout().paintRectPixels(pdfRenderDPI).size();
         QRectF targetRect(0, 0, targetSize.width(), targetSize.height());
@@ -2494,10 +2618,12 @@ void MainWindow::exportAnnotatedPdfFullRender(const QString &exportPath, const Q
                 }
             }
         }
+        
+        exportedPageIndex++;
     }
 
     painter.end();
-    progress.setValue(totalPages);
+    progress.setValue(pageCount);
 
     QMessageBox::information(this, tr("Export Complete"), 
         tr("Annotated PDF exported to:\n%1").arg(exportPath));
@@ -2645,82 +2771,186 @@ bool MainWindow::mergePdfWithPdftk(const QString &originalPdf, const QString &an
         return false;
     }
     
+    // Preserve PDF outline/bookmarks
+    QString outlineData;
+    if (extractPdfOutlineData(originalPdf, outlineData)) {
+        // Filter and adjust outline for the exported page range
+        QString filteredOutline = filterAndAdjustOutline(outlineData, startPage, endPage, 0);
+        
+        // Apply the filtered outline to the output PDF
+        if (!filteredOutline.isEmpty()) {
+            applyOutlineToPdf(outputPdf, filteredOutline);
+            // Note: We don't treat outline application failure as a critical error
+            // The PDF is still valid without the outline
+        }
+    }
+    
     return true;
 }
 
-// Helper function to merge using qpdf  
-bool MainWindow::mergePdfWithQpdf(const QString &originalPdf, const QString &annotatedPagesPdf,
-                                   const QString &outputPdf, const QList<int> &annotatedPageNumbers,
-                                   QString *errorMsg) {
-    // Strategy: Replace individual pages in the original PDF with annotated versions
-    // This avoids command-line length issues with large PDFs
+// Extract PDF metadata including outline/bookmarks using pdftk
+bool MainWindow::extractPdfOutlineData(const QString &pdfPath, QString &outlineData) {
+    QProcess process;
+    process.start("pdftk", QStringList() << pdfPath << "dump_data");
     
-    QString tempDir = QDir::temp().path();
-    QString workingPdf = outputPdf;
-    
-    // Step 1: Copy original to output
-    if (!QFile::copy(originalPdf, workingPdf)) {
-        QFile::remove(workingPdf);
-        if (!QFile::copy(originalPdf, workingPdf)) {
-            return false;
-        }
+    // Increase timeout to 60 seconds for large PDFs
+    if (!process.waitForFinished(60000)) {
+        return false;
     }
-    QFile::setPermissions(workingPdf, QFile::WriteOwner | QFile::ReadOwner | QFile::ReadGroup | QFile::ReadOther);
     
-    // Step 2: For each annotated page, replace it in the working PDF
-    for (int i = 0; i < annotatedPageNumbers.size(); ++i) {
-        int pageNum = annotatedPageNumbers[i]; // 0-based
-        QString tempOut = tempDir + QString("/speedynote_working_%1.pdf").arg(i);
-        
-        // Use qpdf to replace page pageNum+1 with page i+1 from annotatedPagesPdf
-        // Strategy: Extract all pages except pageNum+1 from working, insert annotated page at that position
-        
-        // Build page ranges: 1-(pageNum), annotatedPage, (pageNum+2)-end
-        QProcess replaceProcess;
-        QStringList replaceArgs;
-        replaceArgs << "--empty" << "--pages";
-        
-        // Pages before the annotated page
-        if (pageNum > 0) {
-            replaceArgs << workingPdf << "1-" + QString::number(pageNum);
+    if (process.exitCode() != 0) {
+        return false;
+    }
+    
+    outlineData = QString::fromUtf8(process.readAllStandardOutput());
+    return !outlineData.isEmpty();
+}
+
+// Filter outline entries to only include those pointing to pages in the export range,
+// and adjust page numbers to match the new PDF (0-indexed)
+QString MainWindow::filterAndAdjustOutline(const QString &metadataContent, int startPage, int endPage, int pageOffset) {
+    QStringList lines = metadataContent.split('\n');
+    QStringList filteredLines;
+    
+    // First, extract and preserve non-bookmark metadata
+    QStringList metadataLines;
+    bool inMetadata = true;
+    
+    for (const QString &line : lines) {
+        if (line.startsWith("BookmarkBegin")) {
+            inMetadata = false;
+            break;
         }
-        
-        // The annotated page
-        replaceArgs << annotatedPagesPdf << QString::number(i + 1);
-        
-        // Pages after the annotated page
-        InkCanvas *canvas = currentCanvas();
-        if (canvas) {
-            int totalPages = canvas->getTotalPdfPages();
-            if (pageNum < totalPages - 1) {
-                replaceArgs << workingPdf << QString::number(pageNum + 2) + "-z";
+        // Collect metadata but skip NumberOfPages (it will be wrong after extraction)
+        if (inMetadata && !line.startsWith("NumberOfPages:")) {
+            if (line.startsWith("InfoBegin") || line.startsWith("InfoKey:") || line.startsWith("InfoValue:") ||
+                line.startsWith("PdfID0:") || line.startsWith("PdfID1:") || 
+                line.trimmed().isEmpty()) {
+                metadataLines.append(line);
             }
         }
-        
-        replaceArgs << "--" << tempOut;
-        
-        replaceProcess.start("qpdf", replaceArgs);
-        if (!replaceProcess.waitForFinished(30000) || replaceProcess.exitCode() != 0) {
-            QString errorMsg = QString("qpdf page replacement failed for page %1:\nCommand: qpdf %2\nStderr: %3")
-                .arg(pageNum + 1)
-                .arg(replaceArgs.join(" "))
-                .arg(QString(replaceProcess.readAllStandardError()));
-            QMessageBox::critical(nullptr, "qpdf Error", errorMsg);
-            QFile::remove(tempOut);
-            return false;
-        }
-        
-        // Replace working PDF with result
-        QFile::remove(workingPdf);
-        if (!QFile::copy(tempOut, workingPdf)) {
-            QFile::remove(tempOut);
-            return false;
-        }
-        QFile::setPermissions(workingPdf, QFile::WriteOwner | QFile::ReadOwner | QFile::ReadGroup | QFile::ReadOther);
-        QFile::remove(tempOut);
     }
     
-    return true;
+    // Add metadata to output
+    filteredLines.append(metadataLines);
+    
+    // Now process bookmarks
+    QStringList currentBookmark;
+    int bookmarkPage = -1;
+    bool inBookmark = false;
+    
+    // Lambda to process a completed bookmark
+    auto processBookmark = [&]() {
+        // Only include bookmarks that:
+        // 1. Have a valid page number
+        // 2. Point to a page within the export range
+        if (bookmarkPage > 0 && bookmarkPage >= startPage + 1 && bookmarkPage <= endPage + 1) {
+            // Adjust the page number (pdftk uses 1-based indexing)
+            int newPageNumber = bookmarkPage - startPage;  // Subtract the offset
+            
+            // Write out the bookmark with adjusted page number
+            for (const QString &bmLine : currentBookmark) {
+                if (bmLine.startsWith("BookmarkPageNumber: ")) {
+                    filteredLines.append(QString("BookmarkPageNumber: %1").arg(newPageNumber));
+                } else {
+                    filteredLines.append(bmLine);
+                }
+            }
+        }
+    };
+    
+    // Parse bookmark entries
+    for (int i = 0; i < lines.size(); ++i) {
+        const QString &line = lines[i];
+        
+        // Detect start of a new bookmark
+        if (line.startsWith("BookmarkBegin")) {
+            // Process the previous bookmark if we were in one
+            if (inBookmark) {
+                processBookmark();
+            }
+            
+            // Start a new bookmark
+            inBookmark = true;
+            currentBookmark.clear();
+            currentBookmark.append(line);
+            bookmarkPage = -1;
+        }
+        // If we're in a bookmark, collect its lines
+        else if (inBookmark) {
+            // Check for various bookmark fields
+            if (line.startsWith("BookmarkTitle:") || 
+                line.startsWith("BookmarkLevel:") || 
+                line.startsWith("BookmarkPageNumber:")) {
+                
+                // Extract page number if this is the PageNumber line
+                if (line.startsWith("BookmarkPageNumber: ")) {
+                    QString pageStr = line.mid(20).trimmed();
+                    bool ok = false;
+                    bookmarkPage = pageStr.toInt(&ok);
+                    if (!ok) {
+                        bookmarkPage = -1; // Invalid page number
+                    }
+                }
+                
+                currentBookmark.append(line);
+            }
+            // Empty line might indicate end of bookmark (some PDFs format this way)
+            else if (line.trimmed().isEmpty()) {
+                // Don't add empty lines to bookmark, but don't end it yet either
+                // We'll end on the next BookmarkBegin
+                continue;
+            }
+        }
+    }
+    
+    // Process the last bookmark if we ended while in one
+    if (inBookmark) {
+        processBookmark();
+    }
+    
+    return filteredLines.join('\n');
+}
+
+// Apply outline metadata to an existing PDF using pdftk update_info
+bool MainWindow::applyOutlineToPdf(const QString &pdfPath, const QString &outlineData) {
+    if (outlineData.isEmpty()) {
+        return true;  // Nothing to apply, not an error
+    }
+    
+    // Create temporary file for metadata
+    QString tempMetadataFile = QDir::temp().filePath("speedynote_outline_temp.txt");
+    QFile metaFile(tempMetadataFile);
+    if (!metaFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        return false;
+    }
+    
+    QTextStream out(&metaFile);
+    out << outlineData;
+    metaFile.close();
+    
+    // Create temporary output file
+    QString tempOutputFile = QDir::temp().filePath("speedynote_with_outline_temp.pdf");
+    
+    // Use pdftk to apply metadata
+    QProcess process;
+    process.start("pdftk", QStringList() << pdfPath << "update_info" << tempMetadataFile << "output" << tempOutputFile);
+    
+    bool success = false;
+    if (process.waitForFinished(30000) && process.exitCode() == 0) {
+        // Replace original with the one that has outline
+        QFile::remove(pdfPath);
+        if (QFile::copy(tempOutputFile, pdfPath)) {
+            QFile::setPermissions(pdfPath, QFile::WriteOwner | QFile::ReadOwner | QFile::ReadGroup | QFile::ReadOther);
+            success = true;
+        }
+    }
+    
+    // Cleanup
+    QFile::remove(tempMetadataFile);
+    QFile::remove(tempOutputFile);
+    
+    return success;
 }
 
 
